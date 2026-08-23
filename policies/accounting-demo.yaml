@@ -1,0 +1,16 @@
+risk:
+  invoice_prepare_demo: medium
+  invoice_submit_demo: high
+  notepad_write: low
+  document_check: low
+
+approval_required:
+  - invoice_submit_demo
+
+deny:
+  - credential_export
+  - disable_security
+  - arbitrary_remote_shell
+  - f24_submit
+  - payment
+  - pec_send

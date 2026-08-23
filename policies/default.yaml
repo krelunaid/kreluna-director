@@ -1,0 +1,42 @@
+risk:
+  notepad_write: low
+  document_check: low
+  email_draft: medium
+  invoice_prepare: medium
+  invoice_prepare_demo: medium
+  invoice_submit: high
+  invoice_submit_demo: high
+  f24_prepare: high
+  f24_submit: critical
+  payment: critical
+  email_send: high
+  pec_send: critical
+  destructive_delete: critical
+
+approval_required:
+  - invoice_submit
+  - invoice_submit_demo
+  - f24_submit
+  - payment
+  - pec_send
+  - email_send
+  - destructive_delete
+
+deny:
+  - credential_export
+  - disable_security
+  - arbitrary_remote_shell
+  - remote_shell
+  - eval_code
+  - bulk_delete_without_recovery_plan
+
+screenshot:
+  stream_to_model: false
+  encrypt_at_rest: true
+  retention_hours: 72
+  mask_sensitive_regions: true
+
+license:
+  suspended_blocks_new_operational_tasks: true
+  never_lock_customer_windows: true
+  never_seize_customer_data: true
