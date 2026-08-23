@@ -1,3 +1,0 @@
-agent
-app
-kreluna_shared
