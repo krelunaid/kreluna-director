@@ -24,13 +24,22 @@ Esempi che capisce già:
 - Nessuna licenza `paid=true` sul PC
 - Nessun sequestro di Windows o dei file del cliente se manca il pagamento
 
-## Avvio
+## Avvio sul computer (sviluppo)
 
 ```bash
 make demo
 ```
 
 Poi apri [http://127.0.0.1:5173](http://127.0.0.1:5173)
+
+## App scaricabile per Mac
+
+```bash
+make mac
+```
+
+Esce `dist-macos/Kreluna-Director-Mac.zip`. Sul Mac: apri lo zip, doppio clic su **Installa Kreluna.command**.  
+Istruzioni complete: `docs/MAC.md`.
 
 Login demo: `andrea@studio.demo` / `demo`
 

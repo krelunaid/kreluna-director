@@ -42,17 +42,59 @@ app.include_router(work_router)
 app.include_router(agent_io_router)
 app.include_router(ws_router)
 
-web_dist = ROOT / "apps" / "director-web" / "dist"
-if web_dist.exists():
-    assets = web_dist / "assets"
-    if assets.exists():
-        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+def _web_dist() -> Path:
+    return ROOT / "apps" / "director-web" / "dist"
 
-    @app.get("/")
-    async def spa_index():
-        return FileResponse(web_dist / "index.html")
-else:
 
-    @app.get("/")
-    async def root():
-        return {"ok": True, "service": "director-api", "ui": "not-built"}
+web_dist = _web_dist()
+if web_dist.exists() and (web_dist / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")
+
+
+@app.get("/")
+async def spa_index():
+    index = _web_dist() / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    return {"ok": True, "service": "director-api", "ui": "not-built"}
+
+
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    reserved = {
+        "health",
+        "auth",
+        "me",
+        "chat",
+        "tasks",
+        "agents",
+        "devices",
+        "approvals",
+        "evidence",
+        "audit",
+        "overview",
+        "kill-switch",
+        "policy",
+        "ws",
+        "agent",
+        "demo",
+        "docs",
+        "redoc",
+        "openapi.json",
+        "assets",
+    }
+    head = full_path.split("/", 1)[0]
+    if head in reserved:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Non trovato")
+    dist = _web_dist()
+    if not dist.exists():
+        return {"ok": False, "error": "ui-not-built", "path": full_path}
+    candidate = dist / full_path
+    if candidate.is_file():
+        return FileResponse(candidate)
+    index = dist / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    return {"ok": False, "error": "ui-not-built", "path": full_path}

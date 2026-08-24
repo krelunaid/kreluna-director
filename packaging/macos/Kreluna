@@ -1,0 +1,52 @@
+#!/bin/bash
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$APP_DIR/Resources/app"
+SUPPORT="$HOME/Library/Application Support/KrelunaDirector"
+LOG="$SUPPORT/kreluna.log"
+VENV="$SUPPORT/venv"
+
+mkdir -p "$SUPPORT"
+exec > >(tee -a "$LOG") 2>&1
+
+notify() {
+  osascript -e "display notification \"$1\" with title \"Kreluna Director\"" >/dev/null 2>&1 || true
+}
+
+fail() {
+  osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"Kreluna Director\"" >/dev/null 2>&1 || true
+  exit 1
+}
+
+PYTHON=""
+for candidate in /usr/local/bin/python3 /opt/homebrew/bin/python3 /usr/bin/python3 python3; do
+  if command -v "$candidate" >/dev/null 2>&1 || [[ -x "$candidate" ]]; then
+    if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+      PYTHON="$candidate"
+      break
+    fi
+  fi
+done
+
+if [[ -z "$PYTHON" ]]; then
+  fail "Serve Python 3.11 o più nuovo. Scaricalo da https://www.python.org/downloads/macos/ poi riapri Kreluna."
+fi
+
+if [[ ! -x "$VENV/bin/python" ]]; then
+  notify "Prima apertura: sto preparando Kreluna…"
+  "$PYTHON" -m venv "$VENV"
+  "$VENV/bin/python" -m pip install --upgrade pip
+  "$VENV/bin/python" -m pip install -e "$ROOT"
+fi
+
+export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/director-api:$ROOT/apps/kreluna-agent:$ROOT/apps/director-desktop"
+export DIRECTOR_DATABASE_URL="sqlite+aiosqlite:///$SUPPORT/data/kreluna.db"
+export DIRECTOR_EVIDENCE_DIR="$SUPPORT/data/evidence"
+export KRELUNA_AGENT_DATA_DIR="$SUPPORT/data/agent"
+export AGENT_DIRECTOR_URL="http://127.0.0.1:8080"
+export AGENT_DIRECTOR_WSS="ws://127.0.0.1:8080/ws/agent"
+export KRELUNA_ENROLLMENT_CODE="KRELUNA-DEV-ENROLL"
+
+cd "$ROOT"
+exec "$VENV/bin/python" "$ROOT/apps/director-desktop/kreluna_desktop.py"

@@ -16,4 +16,4 @@ apps/director-web/dist/
 *.db
 *.sqlite3
 .coverage
-htmlcov/
+dist-macos/
