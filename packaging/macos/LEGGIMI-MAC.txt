@@ -1,0 +1,15 @@
+KRELUNA DIRECTOR PER MAC
+========================
+
+SE DICE "SPOSTA NEL CESTINO":
+  clic DESTRO su Installa Kreluna.command → Apri → Apri
+  (non doppio clic)
+
+Poi:
+1. Kreluna va da sola in Applicazioni.
+2. Entra con andrea@studio.demo / demo
+
+Non serve installare Python. È già dentro Kreluna.
+
+Aggiornamenti: chiudi Kreluna e rilancia Installa Kreluna.command
+sullo zip nuovo. I dati restano.

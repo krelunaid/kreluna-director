@@ -38,45 +38,22 @@ draw.text((430, 720), "KRELUNA", fill=(244, 239, 228), font=font)
 img.save(path)
 PY
 
-cat > "$OUT/LEGGIMI-MAC.txt" <<'TXT'
-KRELUNA DIRECTOR PER MAC
-========================
-
-1. Fai doppio clic su "Installa Kreluna.command"
-   oppure trascina "Kreluna Director.app" nella cartella Applicazioni.
-
-2. Apri Kreluna Director (doppio clic).
-   La prima volta macOS può dire che l'app è di uno sviluppatore non identificato.
-   Allora: clic destro sull'app → Apri → Apri.
-
-3. Entra con:
-   email:    andrea@studio.demo
-   password: demo
-
-Non serve installare Python. È già dentro Kreluna.
-
-Questa è la demo: fattura finta, non F24 veri.
-
-Aggiornamenti: chiudi Kreluna e rilancia Installa Kreluna.command sullo zip nuovo.
-I dati restano.
-TXT
-
-cat > "$OUT/Installa Kreluna.command" <<'TXT'
-#!/bin/bash
-DIR="$(cd "$(dirname "$0")" && pwd)"
-osascript -e 'display notification "Aggiorno Kreluna. I dati dello studio restano." with title "Kreluna Director"'
-rm -rf "/Applications/Kreluna Director.app"
-cp -R "$DIR/Kreluna Director.app" "/Applications/"
-xattr -dr com.apple.quarantine "/Applications/Kreluna Director.app" >/dev/null 2>&1 || true
-open "/Applications/Kreluna Director.app"
-TXT
+cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$OUT/LEGGIMI-MAC.txt"
+cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$OUT/1-SE-DICE-CESTINO.txt"
+cp "$ROOT/packaging/macos/Apri-me.html" "$OUT/Apri-me.html"
+cp "$ROOT/packaging/macos/Installa Kreluna.command" "$OUT/Installa Kreluna.command"
 chmod +x "$OUT/Installa Kreluna.command"
 
 xattr -cr "$APP" >/dev/null 2>&1 || true
 
 (
   cd "$OUT"
-  zip -qry -y "Kreluna-Director-Mac.zip" "Kreluna Director.app" "Installa Kreluna.command" "LEGGIMI-MAC.txt"
+  zip -qry -y "Kreluna-Director-Mac.zip" \
+    "Kreluna Director.app" \
+    "Installa Kreluna.command" \
+    "1-SE-DICE-CESTINO.txt" \
+    "Apri-me.html" \
+    "LEGGIMI-MAC.txt"
 )
 
 python3 - "$OUT/Kreluna-Director-Mac.zip" <<'PY'

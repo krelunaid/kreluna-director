@@ -1,0 +1,15 @@
+SE MACOS DICE "SPOSTA NEL CESTINO"
+==================================
+
+Non è rotta. Apple blocca i programmi che non sono sull'App Store.
+
+NON fare doppio clic.
+
+1. Clic DESTRO su "Installa Kreluna.command"
+2. Scegli Apri
+3. Di nuovo Apri
+
+Poi Kreluna va in Applicazioni da sola.
+
+Login: andrea@studio.demo / demo
+Non serve Python.

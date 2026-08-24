@@ -8,9 +8,8 @@ Non è un sito da iPhone. È un’**app per computer Mac**.
 
 1. Scarica `Kreluna-Director-Mac.zip`
 2. Aprilo (doppio clic)
-3. Doppio clic su **Installa Kreluna.command**
-   - oppure trascina `Kreluna Director.app` in **Applicazioni**
-4. Se macOS blocca l’app: clic destro → **Apri** → **Apri**
+3. **Non doppio clic.** Clic **destro** su **Installa Kreluna.command** → **Apri** → **Apri**
+4. Se dice “Sposta nel Cestino”: è il blocco Apple, non è rotta. Stesso clic destro → Apri.
 
 ## Accesso
 
