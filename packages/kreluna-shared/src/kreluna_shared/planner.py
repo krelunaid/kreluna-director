@@ -71,16 +71,38 @@ def _money(text: str) -> float | None:
     return _parse_amount(match.group(1) or match.group(2))
 
 
+KNOWN_CLIENTS = (
+    ("andrea gadducci", "Andrea Gadducci"),
+    ("gadducci", "Andrea Gadducci"),
+    ("verdi luigi", "Verdi Luigi"),
+    ("mario rossi", "Mario Rossi"),
+)
+
+
 def _client_name(text: str) -> str | None:
+    lowered = text.lower()
+    for needle, name in KNOWN_CLIENTS:
+        if needle in lowered:
+            return name
     patterns = [
-        r"(?:fattura|invoice)(?:\s+demo)?\s+(?:ad|al cliente|a|to)\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+){0,3}?)(?=\s+(?:per|di|for|da|euro|eur|€|\d)|[,.]|$)",
+        r"(?:fattura|invoice)(?:\s+demo)?\s+(?:ad|al cliente|a|per|to)\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+){0,3}?)(?=\s+(?:per|di|for|da|euro|eur|€|\d)|[,.]|$)",
+        r"(?:per)\s+([A-Za-zÀ-ÿ']+)(?:\s+di\s+)",
         r"(?:cliente)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.I)
         if match:
             name = " ".join(match.group(1).split()).title()
-            if name.lower() in {"demo", "una", "la", "the"}:
+            if name.lower() in {
+                "demo",
+                "una",
+                "la",
+                "the",
+                "fattura",
+                "manodopera",
+                "consulenza",
+                "prestazione",
+            }:
                 continue
             return name
     return None
@@ -203,7 +225,7 @@ def plan_deterministic(text: str) -> PlanResult:
         )
 
     if "fattura" in lowered or re.search(r"\binvoice\b", lowered):
-        client = _client_name(raw) or _client_name(lowered) or "Mario Rossi"
+        client = _client_name(raw) or _client_name(lowered) or "Cliente"
         net = _money(raw) or _money(lowered) or 1500.0
         description = _description(raw)
         return PlanResult(

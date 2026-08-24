@@ -63,6 +63,15 @@ def test_planner_routes_invoice_to_pc_fatture_with_range():
     assert "Rossi" in invoice.tasks[0].args["client_name"]
 
 
+def test_planner_gadducci_spoken_italian():
+    plan = plan_deterministic("mi fai una fattura per gadducci di manodopera")
+    assert plan.ok
+    task = plan.tasks[0]
+    assert task.args["client_name"] == "Andrea Gadducci"
+    assert task.args["description"] == "Manodopera"
+    assert "Mario Rossi" not in plan.summary
+
+
 def test_planner_understands_italian_mail_as_draft():
     plan = plan_deterministic(
         "mi mandi una mail a andreagadducci dicendo di vedere l app"

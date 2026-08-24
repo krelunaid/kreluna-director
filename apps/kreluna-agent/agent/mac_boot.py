@@ -95,6 +95,23 @@ return text returned of answer
     return {"role": found.role, "display_name": found.display_name, "director_url": url}
 
 
+def confirm_existing(data: dict[str, str]) -> dict[str, str] | None:
+    if sys.platform != "darwin":
+        return data
+    name = data.get("display_name") or data.get("role") or "questo Mac"
+    script = f'''
+set picked to display dialog "Questo Mac è {name}. Per le fatture scegli PC-FATTURE." buttons {{"Cambia lavoro", "Avvia"}} default button "Avvia" with title "Kreluna Agent"
+if button returned of picked is "Cambia lavoro" then return "CHANGE"
+return "KEEP"
+'''
+    choice = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if choice.returncode != 0:
+        return None
+    if choice.stdout.strip() != "CHANGE":
+        return data
+    return ask_osascript() or data
+
+
 def ask_config() -> dict[str, str] | None:
     if sys.platform == "darwin":
         picked = ask_osascript()
@@ -120,6 +137,12 @@ def main() -> int:
             return 1
         save_config(asked)
         data = asked
+    else:
+        data = confirm_existing(data)
+        if not data:
+            print("Avvio annullato.", file=sys.stderr)
+            return 1
+        save_config(data)
     apply_config(data)
     import asyncio
 

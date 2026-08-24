@@ -38,7 +38,9 @@ class AgentApp:
         self.safety = SafetyState()
         self.server_pubkey: bytes | None = None
         self.used_nonces: set[str] = set()
-        self.role_caps = capabilities_for_role(self.identity.agent_id) or list(CAPABILITY_ALLOWLIST)
+        self.role_caps = capabilities_for_role(self.identity.agent_id)
+        if not self.role_caps:
+            self.role_caps = ["notepad_write"]
 
     async def start(self) -> None:
         async with httpx.AsyncClient() as client:

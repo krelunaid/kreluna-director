@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import json
+import subprocess
+import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -103,6 +106,33 @@ def render_invoice_window(
     return buf.getvalue()
 
 
+def show_invoice_on_this_mac(
+    *,
+    client_name: str,
+    description: str,
+    net_eur: float,
+) -> bool:
+    if sys.platform != "darwin":
+        return False
+    script = Path(__file__).resolve().parent / "mac_gestionale_ui.py"
+    if not script.exists():
+        return False
+    payload = json.dumps(
+        {"client_name": client_name, "description": description, "net_eur": net_eur},
+        ensure_ascii=False,
+    )
+    try:
+        subprocess.Popen(  # noqa: S603
+            [sys.executable, str(script), payload],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except OSError:
+        return False
+
+
 def fill_invoice_on_pc(
     *,
     client_name: str,
@@ -116,6 +146,11 @@ def fill_invoice_on_pc(
     net_label = f"€ {net_eur:,.2f}"
     vat_label = f"€ {vat:,.2f}"
     total_label = f"€ {total:,.2f}"
+    opened = show_invoice_on_this_mac(
+        client_name=client_name,
+        description=description,
+        net_eur=net_eur,
+    )
     frames = [
         {
             "typed_client": "",
@@ -183,6 +218,7 @@ def fill_invoice_on_pc(
                     "program": "gestionale-fatture-demo",
                     "mouse": True,
                     "typing": True,
+                    "live_window": opened,
                     "status": status if index == len(frames) else "draft",
                 },
             }

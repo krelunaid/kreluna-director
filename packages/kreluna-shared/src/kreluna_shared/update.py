@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any
 
-APP_VERSION = "0.5.2"
+APP_VERSION = "0.5.3"
 STAMP_NAME = "installed_version"
 
 

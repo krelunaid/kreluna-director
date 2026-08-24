@@ -26,7 +26,7 @@ export default function App() {
   const [chat, setChat] = useState<ChatItem[]>([
     {
       role: "director",
-      text: "Sono Kreluna Director. Parla solo con me. Per la fattura clicca Fattura Gadducci: la mando a PC-FATTURE e poi ti chiedo conferma.",
+      text: "Sono Kreluna Director, non ChatGPT. Per la fattura questo Mac deve essere PC-FATTURE: clicca Fattura Gadducci, poi Approva.",
     },
   ]);
   const [draft, setDraft] = useState("");

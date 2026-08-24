@@ -97,5 +97,10 @@ def score_agent(device: Device, capability: str) -> int:
     role = preferred_role(capability)
     if role and device.agent_id == role:
         score += 80
+    plat = (device.platform or "").lower()
+    if plat in {"macos", "darwin", "windows"}:
+        score += 50
+    elif plat == "linux":
+        score -= 80
     score -= device.recent_errors * 15
     return score
