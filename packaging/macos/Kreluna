@@ -33,12 +33,8 @@ if [[ -z "$PYTHON" ]]; then
   fail "Serve Python 3.11 o più nuovo. Scaricalo da https://www.python.org/downloads/macos/ poi riapri Kreluna."
 fi
 
-if [[ ! -x "$VENV/bin/python" ]]; then
-  notify "Prima apertura: sto preparando Kreluna…"
-  "$PYTHON" -m venv "$VENV"
-  "$VENV/bin/python" -m pip install --upgrade pip
-  "$VENV/bin/python" -m pip install -e "$ROOT"
-fi
+notify "Controllo Kreluna…"
+"$PYTHON" "$ROOT/apps/director-desktop/ensure_runtime.py" "$ROOT" "$SUPPORT" "$VENV"
 
 export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/director-api:$ROOT/apps/kreluna-agent:$ROOT/apps/director-desktop"
 export DIRECTOR_DATABASE_URL="sqlite+aiosqlite:///$SUPPORT/data/kreluna.db"

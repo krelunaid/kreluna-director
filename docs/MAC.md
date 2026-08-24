@@ -11,6 +11,10 @@ Non è un sito da iPhone. È un’**app per computer Mac** (macOS).
 4. Se macOS blocca l’app: clic destro → **Apri** → **Apri**
 5. La prima volta serve **Python 3.11+**: [python.org/downloads/macos](https://www.python.org/downloads/macos/)
 
+## Aggiornamento (già installata)
+
+Chiudi Kreluna, poi di nuovo **Installa Kreluna.command** sullo zip nuovo. Sostituisce l’app in Applicazioni. I dati restano in `~/Library/Application Support/KrelunaDirector`.
+
 ## Accesso
 
 - Indirizzo (si apre da sola): `http://127.0.0.1:8080`

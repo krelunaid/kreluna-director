@@ -47,7 +47,7 @@ Poi apri [http://127.0.0.1:5173](http://127.0.0.1:5173)
 
 ## Aggiornamenti
 
-Il programma legge `GET /update/manifest` (firma Ed25519) e avvisa se c’è una versione nuova. Non scarica zip da sola. Per collegare un canale pubblico: variabili `KRELUNA_UPDATE_*` in `.env.example`.
+Il programma legge `GET /update/manifest` e avvisa se c’è una versione nuova. Per applicarla: chiudi Kreluna e reinstalla lo zip nuovo (i dati restano). Dettagli: `docs/INSTALL.md`.
 
 ## Test
 

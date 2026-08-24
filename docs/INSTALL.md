@@ -28,10 +28,21 @@ Dettagli: `docs/WINDOWS.md`.
 - Email: `andrea@studio.demo`
 - Password: `demo`
 
-## Aggiornamenti
+## Aggiornamenti (anche se è già installata)
 
-All’avvio Kreluna legge `GET /update/manifest` (firma Ed25519).  
-Se esce una versione più nuova **ti avvisa**. Non scarica zip da sola.
+Quando facciamo un aggiornamento insieme esce un **nuovo zip**. Non serve disinstallare.
+
+1. **Chiudi** Kreluna
+2. Apri il zip nuovo
+3. Stesso installatore di prima
+   - Mac: **Installa Kreluna.command**
+   - Windows: **Installa.bat**
+4. Riapri Kreluna
+
+Il programma viene sostituito. **I dati restano** (database, evidenze, login).  
+Se la versione è cambiata, alla prima apertura Kreluna aggiorna da sola i componenti Python.
+
+Kreluna **non scarica** lo zip da internet. Sei tu a installare il file nuovo.
 
 Quando gli zip saranno su un indirizzo pubblico, nel `.env`:
 

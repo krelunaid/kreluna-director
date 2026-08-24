@@ -26,4 +26,4 @@ Legenda: PASS = implementato e testato. SANDBOX = adapter locale, non software f
 
 Fuori perimetro voluto: invio F24/PEC/pagamenti reali, portali Agenzia, mouse libero del modello.
 
-Versione 0.4.0 — installer Mac e Windows; aggiornamenti avvisati da `/update/manifest`.
+Versione 0.4.1 — reinstallare lo zip nuovo sopra l’app già installata; i dati restano.

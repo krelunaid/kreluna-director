@@ -13,6 +13,10 @@ Non è un sito da telefono. È un’**app per computer Windows**.
 
 L’app va in `%LOCALAPPDATA%\KrelunaDirector` (cartella utente, senza amministratore). Sul desktop compare il collegamento.
 
+## Aggiornamento (già installata)
+
+Chiudi Kreluna, poi di nuovo **Installa.bat** sullo zip nuovo. Sostituisce il programma, lascia la cartella `data`.
+
 ## Accesso
 
 - Indirizzo (si apre da sola): `http://127.0.0.1:8080`

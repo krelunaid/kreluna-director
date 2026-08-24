@@ -4,7 +4,8 @@ import json
 import os
 from typing import Any
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.4.1"
+STAMP_NAME = "installed_version"
 
 
 def version_tuple(value: str) -> tuple[int, ...]:
@@ -66,4 +67,28 @@ def evaluate_update(manifest: dict[str, Any], local: str = APP_VERSION) -> str |
         return None
     notes = str(manifest.get("notes") or "").strip()
     extra = f" {notes}" if notes else ""
-    return f"È disponibile la versione {remote} (ora hai {local}).{extra} Il programma non scarica file da solo."
+    return (
+        f"È disponibile la versione {remote} (ora hai {local}).{extra} "
+        "Chiudi Kreluna e reinstalla lo zip nuovo: i dati dello studio restano."
+    )
+
+
+def read_installed_version(support_dir: Any, stamp_name: str = STAMP_NAME) -> str:
+    from pathlib import Path
+
+    path = Path(support_dir) / stamp_name
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
+
+
+def write_installed_version(support_dir: Any, version: str = APP_VERSION, stamp_name: str = STAMP_NAME) -> None:
+    from pathlib import Path
+
+    path = Path(support_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    (path / stamp_name).write_text(version + "\n", encoding="utf-8")
+
+
+def runtime_needs_refresh(support_dir: Any, version: str = APP_VERSION) -> bool:
+    return read_installed_version(support_dir) != version

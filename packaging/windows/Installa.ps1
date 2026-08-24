@@ -39,5 +39,6 @@ foreach ($folder in @($Desktop, $Start)) {
 }
 
 Write-Host "Kreluna Director e' in $Install"
+Write-Host "I dati dello studio restano (cartella data). Chiudi Kreluna prima di aggiornare."
 Write-Host "Avvio..."
 Start-Process -FilePath (Join-Path $Install "Avvia.vbs")

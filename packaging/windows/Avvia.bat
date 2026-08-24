@@ -14,21 +14,17 @@ if not exist "%ROOT%apps\director-desktop\kreluna_desktop.py" (
   exit /b 1
 )
 
-if not exist "%INSTALL%\venv\Scripts\python.exe" (
-  echo Prima apertura: sto preparando Kreluna...
-  where py >nul 2>nul
-  if %ERRORLEVEL%==0 (
-    py -3 -m venv "%INSTALL%\venv"
-  ) else (
-    python -m venv "%INSTALL%\venv"
-  )
-  if errorlevel 1 (
-    echo Serve Python 3.11 o piu nuovo: https://www.python.org/downloads/windows/
-    pause
-    exit /b 1
-  )
-  "%INSTALL%\venv\Scripts\python.exe" -m pip install --upgrade pip
-  "%INSTALL%\venv\Scripts\python.exe" -m pip install -e "%ROOT%"
+echo Controllo Kreluna...
+where py >nul 2>nul
+if %ERRORLEVEL%==0 (
+  py -3 "%ROOT%apps\director-desktop\ensure_runtime.py" "%ROOT%" "%INSTALL%" "%INSTALL%\venv"
+) else (
+  python "%ROOT%apps\director-desktop\ensure_runtime.py" "%ROOT%" "%INSTALL%" "%INSTALL%\venv"
+)
+if errorlevel 1 (
+  echo Serve Python 3.11 o piu nuovo: https://www.python.org/downloads/windows/
+  pause
+  exit /b 1
 )
 
 set "PYTHONPATH=%ROOT%packages\kreluna-shared\src;%ROOT%apps\director-api;%ROOT%apps\kreluna-agent;%ROOT%apps\director-desktop"

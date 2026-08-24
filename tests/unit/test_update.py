@@ -6,8 +6,10 @@ from kreluna_shared.update import (
     evaluate_update,
     is_newer,
     manifest_payload,
+    runtime_needs_refresh,
     sign_manifest,
     verify_manifest,
+    write_installed_version,
 )
 
 SEED = "kreluna-dev-signing-seed-change-in-production"
@@ -36,4 +38,12 @@ def test_evaluate_update_same_version():
     message = evaluate_update({"version": "9.0.0", "notes": "test"})
     assert message is not None
     assert "9.0.0" in message
-    assert "non scarica" in message.lower()
+    assert "reinstalla" in message.lower()
+
+
+def test_runtime_stamp(tmp_path):
+    assert runtime_needs_refresh(tmp_path) is True
+    write_installed_version(tmp_path, APP_VERSION)
+    assert runtime_needs_refresh(tmp_path) is False
+    write_installed_version(tmp_path, "0.0.1")
+    assert runtime_needs_refresh(tmp_path) is True

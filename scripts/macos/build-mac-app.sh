@@ -55,13 +55,15 @@ La prima apertura scarica i componenti e può richiedere uno o due minuti.
 Questa è la demo: fattura finta, non F24 veri.
 
 Aggiornamenti: all'avvio Kreluna legge /update/manifest e ti avvisa.
-Non scarica file da sola.
+Se è già installata: chiudi Kreluna e rilancia Installa Kreluna.command.
+I dati restano. Non scarica file da sola.
 TXT
 
 cat > "$OUT/Installa Kreluna.command" <<'TXT'
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
-osascript -e 'display notification "Installo Kreluna nelle Applicazioni…" with title "Kreluna Director"'
+osascript -e 'display notification "Aggiorno Kreluna. I dati dello studio restano." with title "Kreluna Director"'
+rm -rf "/Applications/Kreluna Director.app"
 cp -R "$DIR/Kreluna Director.app" "/Applications/"
 xattr -dr com.apple.quarantine "/Applications/Kreluna Director.app" >/dev/null 2>&1 || true
 open "/Applications/Kreluna Director.app"
