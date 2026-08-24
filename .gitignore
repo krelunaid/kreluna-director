@@ -20,3 +20,4 @@ dist-macos/
 dist-macos-agent/
 dist-agents/
 .cache/
+dist-windows/
