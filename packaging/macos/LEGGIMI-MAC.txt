@@ -1,8 +1,10 @@
 KRELUNA DIRECTOR PER MAC
 ========================
 
-1. Trascina Kreluna Director.app sulla cartella Applicazioni.
-2. Aprila. Se esce la finestra gialla: Fine (non Cestino).
+Cerca l'icona scura con la K oro: "Kreluna Director".
+
+1. Trascinala sulla cartella Applicazioni.
+2. Aprila. Finestra gialla: Fine (non Cestino).
 3. Menu Mela → Impostazioni di Sistema → Privacy e sicurezza
    → in basso → Apri comunque.
 

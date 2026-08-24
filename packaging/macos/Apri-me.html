@@ -2,41 +2,27 @@
 <html lang="it">
 <head>
   <meta charset="utf-8" />
-  <title>Kreluna — quella finestra gialla</title>
+  <title>Kreluna — apri questa app</title>
   <style>
     body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 36px auto; padding: 0 20px; color: #0b1220; }
     h1 { font-size: 24px; line-height: 1.25; }
-    .dialog { background: #f5f5f7; border-radius: 14px; padding: 18px 20px; margin: 20px 0; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
-    .dialog h2 { font-size: 16px; margin: 0 0 8px; }
-    .dialog p { font-size: 14px; color: #3a3a3c; margin: 0 0 14px; }
-    .btns { display: flex; gap: 10px; justify-content: flex-end; }
-    .no { background: #007aff; color: #fff; padding: 8px 14px; border-radius: 8px; text-decoration: line-through; opacity: .45; }
-    .yes { background: #e8e8ed; padding: 8px 14px; border-radius: 8px; font-weight: 700; }
+    .icon { width: 96px; height: 96px; border-radius: 22px; background: #0b1220; color: #f0d78c;
+            display: grid; place-items: center; font: 700 52px/1 Georgia, serif; margin: 12px 0 20px;
+            box-shadow: 0 8px 24px rgba(11,18,32,.35); border: 3px solid #d4af37; }
     ol { font-size: 18px; line-height: 1.55; }
     .warn { color: #9a3412; font-weight: 700; }
   </style>
 </head>
 <body>
-  <h1>Ho visto la finestra gialla. Quel file non si apre.</h1>
-  <p>Se c’è scritto <strong>Installa Kreluna.command</strong>, Apple lo blocca sempre. Non c’è il pulsante Apri. Non è rotta Kreluna: è quel file che non va usato.</p>
-  <div class="dialog">
-    <h2>Installa Kreluna.command non è stata aperta</h2>
-    <p>Apple non è in grado di verificare che non contenga malware…</p>
-    <div class="btns">
-      <span class="no">Sposta nel Cestino</span>
-      <span class="yes">Fine ← premi questo</span>
-    </div>
-  </div>
-  <p class="warn">Non premere Sposta nel Cestino.</p>
+  <div class="icon">K</div>
+  <h1>Apri l’app con la K oro su fondo scuro</h1>
+  <p>Si chiama <strong>Kreluna Director</strong>. È l’unica app. Non ci sono script da cliccare.</p>
   <ol>
-    <li>Premi <strong>Fine</strong>.</li>
-    <li>Non toccare più <code>Installa Kreluna.command</code>. Se lo vedi, lascialo stare (o mettilo tu nel Cestino).</li>
-    <li>Nella stessa cartella c’è <strong>Kreluna Director.app</strong>. Trascinala sulla cartella <strong>Applicazioni</strong>.</li>
-    <li>Apri Applicazioni e fai doppio clic su Kreluna Director.</li>
-    <li>Se torna la finestra gialla: di nuovo <strong>Fine</strong>.</li>
-    <li>Menu Mela () → <strong>Impostazioni di Sistema</strong> → <strong>Privacy e sicurezza</strong>.</li>
-    <li>Scorri in basso. «Kreluna è stata bloccata» → <strong>Apri comunque</strong>.</li>
+    <li>Trascina <strong>Kreluna Director</strong> sulla cartella Applicazioni (accanto all’app).</li>
+    <li>Aprila. Se esce la finestra gialla: premi <strong>Fine</strong>, non Cestino.</li>
+    <li>Menu Mela → Impostazioni di Sistema → Privacy e sicurezza → in basso → <strong>Apri comunque</strong>.</li>
   </ol>
+  <p class="warn">Se non vedi la K oro, stai aprendo uno zip vecchio. Scarica di nuovo quello di questa mail.</p>
   <p>Login: andrea@studio.demo / demo</p>
 </body>
 </html>

@@ -13,6 +13,7 @@ rm -rf "$OUT"
 mkdir -p "$APP/Contents/MacOS" "$RES"
 
 cp "$ROOT/packaging/macos/Info.plist" "$APP/Contents/Info.plist"
+printf 'APPL????' > "$APP/Contents/PkgInfo"
 cp "$ROOT/packaging/macos/Kreluna" "$APP/Contents/MacOS/Kreluna"
 chmod +x "$APP/Contents/MacOS/Kreluna"
 
@@ -22,21 +23,10 @@ echo "Includo Python nell'app (non serve installarlo)…"
 python3 "$ROOT/scripts/lib/bundle_python.py" macos-arm64 "$APP/Contents/Resources/python-arm64"
 python3 "$ROOT/scripts/lib/bundle_python.py" macos-x64 "$APP/Contents/Resources/python-x64"
 
-python3 - "$OUT" <<'PY'
-import sys
-from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
-
-out = Path(sys.argv[1])
-path = out / "Kreluna Director.app" / "Contents" / "Resources" / "AppIcon.png"
-img = Image.new("RGB", (1024, 1024), (11, 18, 32))
-draw = ImageDraw.Draw(img)
-draw.rounded_rectangle((80, 80, 944, 944), radius=180, outline=(212, 175, 55), width=28)
-draw.ellipse((300, 220, 724, 644), outline=(240, 215, 140), width=18)
-font = ImageFont.load_default()
-draw.text((430, 720), "KRELUNA", fill=(244, 239, 228), font=font)
-img.save(path)
-PY
+echo "Creo l'icona visibile in Finder…"
+python3 "$ROOT/scripts/lib/make_app_icon.py"
+cp "$ROOT/packaging/macos/AppIcon.png" "$APP/Contents/Resources/AppIcon.png"
+cp "$ROOT/packaging/macos/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$OUT/LEGGIMI-MAC.txt"
 cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$OUT/1-SE-DICE-CESTINO.txt"
