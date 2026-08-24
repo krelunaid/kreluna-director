@@ -159,6 +159,32 @@ async def test_broken_or_chatty_answers_do_not_crash():
 
 
 @pytest.mark.asyncio
+async def test_provider_refusing_json_mode_is_retried_without_it():
+    seen: list[bool] = []
+
+    def picky(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        asked_json = "response_format" in body
+        seen.append(asked_json)
+        if asked_json:
+            return httpx.Response(400, json={"error": "response_format non supportato"})
+        reply = json.dumps({"understood": False, "question": "Per quale cliente?"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": reply}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(picky)) as client:
+        plan = await plan_with_llm(
+            "fai quella cosa",
+            base_url="https://api.x.ai/v1",
+            api_key="chiave-finta",
+            model="grok-4.6",
+            client=client,
+        )
+    assert seen == [True, False]
+    assert plan is not None
+    assert plan.summary == "Per quale cliente?"
+
+
+@pytest.mark.asyncio
 async def test_no_key_means_no_call():
     async with fake_model("{}") as client:
         assert (

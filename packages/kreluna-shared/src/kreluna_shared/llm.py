@@ -194,7 +194,7 @@ async def plan_with_llm(
     if not base_url or not api_key:
         return None
     url = base_url.rstrip("/") + "/chat/completions"
-    body = {
+    body: dict[str, Any] = {
         "model": model,
         "temperature": 0,
         "response_format": {"type": "json_object"},
@@ -203,13 +203,13 @@ async def plan_with_llm(
             {"role": "user", "content": message[:4000]},
         ],
     }
+    headers = {"Authorization": f"Bearer {api_key}"}
     try:
-        response = await client.post(
-            url,
-            json=body,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=timeout,
-        )
+        response = await client.post(url, json=body, headers=headers, timeout=timeout)
+        if response.status_code == 400 and "response_format" in body:
+            # Qualche fornitore non accetta response_format: riprovo senza.
+            body.pop("response_format")
+            response = await client.post(url, json=body, headers=headers, timeout=timeout)
         response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]

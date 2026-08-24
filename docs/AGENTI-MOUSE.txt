@@ -1,0 +1,60 @@
+AGENTI CHE USANO IL MOUSE SUL PC: COME SI FA DAVVERO
+====================================================
+
+Dove siamo oggi
+---------------
+L'Agent sul PC NON muove il mouse nei programmi veri. Esegue passi scritti da
+noi e mostra una finestra dimostrativa (il gestionale demo delle fatture) piu'
+le schede di IPSOA, CGN, ComUnica, AdE, INPS. Serve a far vedere il giro
+completo: il Director manda, il PC lavora, tu approvi.
+Nessun programma dello studio e' ancora collegato.
+
+Le due strade per arrivare al mouse vero
+----------------------------------------
+
+STRADA A — passi scritti, un programma alla volta
+  Per ogni programma scriviamo la sequenza: apri, vai in quella pagina, scrivi
+  nel campo, clicca quel bottone, fai la foto, fermati prima dell'invio.
+  - Quasi tutti i tuoi programmi sono siti (Webdesk, AdE, CGN, INPS, IPSOA
+    web): si guidano dal browser, che e' molto piu' affidabile del mouse a
+    coordinate. Il campo si trova per nome, non per posizione sullo schermo.
+  - Desktop ComUnica e' un'applicazione: si guida con l'automazione finestre
+    (UIA su Windows, Accessibilita' su Mac).
+  Pregi: affidabile, ripetibile, si capisce cosa ha fatto e perche'.
+  Difetti: va scritta programma per programma, e va ritoccata se il sito cambia.
+
+STRADA B — IA che guarda lo schermo e clicca da sola
+  Un modello con la vista riceve la foto dello schermo e decide dove cliccare.
+  Pregi: non serve scrivere i passi, si adatta.
+  Difetti seri per uno studio:
+  - lenta e costosa: ogni click e' una foto mandata a pagamento;
+  - sbaglia: clicca la riga sbagliata, e in uno studio quello e' un danno;
+  - privacy: manderesti a un modello esterno schermate con dati di clienti,
+    partite IVA, cassetti fiscali. Oggi il Director NON manda mai schermate al
+    modello, solo la tua frase.
+
+Come la faremmo
+---------------
+1. Il Director (IA in cloud) decide COSA fare e a quale PC mandarlo.
+2. L'Agent sul PC decide COME farlo, con i passi scritti della strada A.
+   Il modello non sceglie le coordinate del mouse.
+3. La vista del modello, se serve, solo come aiuto per trovare un bottone che
+   si e' spostato, con la schermata mascherata e mai in automatico sull'invio.
+4. Login SPID, CNS e smart card: sempre a mano, tu. L'Agent parte dopo, nella
+   sessione che hai aperto. Le credenziali personali non si automatizzano.
+5. Prima di ogni invio vero (Telematico, camerale, DURC, PEC): si ferma e
+   chiede Approva. Questo non si tocca.
+
+Cosa serve, in pratica, per il primo programma
+----------------------------------------------
+- Decidere da quale partire. Consiglio: VISURE su CGN, perche' e' in sola
+  lettura: se sbaglia non combina danni.
+- Mettere un browser guidabile dentro l'Agent (l'installatore cresce di circa
+  150 MB) oppure guidare il browser gia' installato sul PC.
+- Scrivere i passi di quel programma e provarli sullo schermo vero, con le
+  credenziali di prova dello studio.
+- Le foto di ogni passaggio restano come prova, cifrate, come adesso.
+
+Poi si aggiunge un programma alla volta: DURC su INPS, contratti AdE, deleghe
+F24 in IPSOA, pratiche camerali su CGN e ComUnica. Ogni programma e' un lavoro
+a se': non si sbloccano tutti insieme.

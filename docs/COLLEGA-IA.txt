@@ -19,14 +19,20 @@ Cosa NON cambia
 
 Come si collega
 ---------------
-1. Prendi una chiave API (OpenAI, Anthropic, Mistral, Groq, oppure un modello
-   installato in studio che parla come OpenAI).
+1. Prendi una chiave API. Va bene Grok (xAI), OpenAI, Anthropic, Mistral,
+   oppure un modello installato in studio che parla come OpenAI.
 2. Nella cartella del Director copia .env.example in .env
-3. Scrivi tre righe:
-      KRELUNA_LLM_BASE_URL=https://api.openai.com/v1
+3. Scrivi tre righe. Con Grok:
+      KRELUNA_LLM_BASE_URL=https://api.x.ai/v1
       KRELUNA_LLM_API_KEY=la-tua-chiave
+      KRELUNA_LLM_MODEL=grok-4.6
+   Con OpenAI cambiano solo la prima e la terza riga:
+      KRELUNA_LLM_BASE_URL=https://api.openai.com/v1
       KRELUNA_LLM_MODEL=gpt-4o-mini
 4. Riavvia il Director.
+
+La chiave Grok si crea su console.x.ai, voce "API Keys".
+Cambiare fornitore non richiede di toccare il programma: solo queste righe.
 
 Come si controlla
 -----------------
