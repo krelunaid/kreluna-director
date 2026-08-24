@@ -143,12 +143,13 @@ async def chat(
             "source": plan.source,
         }
     if not plan.ok:
+        ai_error = plan.source == "llm-error"
         await write_audit(
             session,
             tenant_id=actor.tenant_id,
             actor=actor.user_id,
-            action="planner.deny" if plan.denied else "planner.ask",
-            result="deny" if plan.denied else "ask",
+            action="planner.ai_error" if ai_error else "planner.deny" if plan.denied else "planner.ask",
+            result="error" if ai_error else "deny" if plan.denied else "ask",
             detail=plan.deny_reason or plan.summary,
         )
         await session.commit()
@@ -159,6 +160,7 @@ async def chat(
             "deny_reason": plan.deny_reason,
             "tasks": [],
             "source": plan.source,
+            "diagnostic": plan.diagnostic,
         }
 
     created = []

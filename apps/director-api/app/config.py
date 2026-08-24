@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -23,9 +24,47 @@ class Settings(BaseSettings):
     kreluna_llm_api_key: str = ""
     kreluna_llm_model: str = "gpt-4o-mini"
     kreluna_enrollment_code: str = "KRELUNA-DEV-ENROLL"
+    director_bootstrap_email: str = ""
+    director_bootstrap_password: str = ""
+    director_bootstrap_name: str = "Titolare studio"
+    director_bootstrap_tenant_name: str = "Studio"
+    director_bootstrap_tenant_slug: str = "studio"
     heartbeat_timeout_seconds: int = 20
     grant_ttl_seconds: int = 120
     evidence_retention_hours: int = 72
+
+    @property
+    def is_production(self) -> bool:
+        return self.director_env.strip().lower() in {"production", "prod"}
+
+    @model_validator(mode="after")
+    def production_must_be_explicit(self) -> "Settings":
+        if not self.is_production:
+            return self
+        secrets = {
+            "DIRECTOR_SIGNING_SEED": self.director_signing_seed,
+            "DIRECTOR_SESSION_SECRET": self.director_session_secret,
+            "DIRECTOR_EVIDENCE_KEY": self.director_evidence_key,
+            "KRELUNA_ENROLLMENT_CODE": self.kreluna_enrollment_code,
+        }
+        invalid = [
+            name
+            for name, value in secrets.items()
+            if len(value.strip()) < 32 or "dev" in value.lower() or "change" in value.lower()
+        ]
+        if invalid:
+            raise ValueError(
+                "Produzione bloccata: configura segreti unici di almeno 32 caratteri: "
+                + ", ".join(invalid)
+            )
+        if len({value.strip() for value in secrets.values()}) != len(secrets):
+            raise ValueError("Produzione bloccata: i segreti del Director devono essere distinti")
+        if not self.director_bootstrap_email.strip() or len(self.director_bootstrap_password) < 14:
+            raise ValueError(
+                "Produzione bloccata: configura DIRECTOR_BOOTSTRAP_EMAIL e "
+                "DIRECTOR_BOOTSTRAP_PASSWORD (almeno 14 caratteri)"
+            )
+        return self
 
     @property
     def llm_ready(self) -> bool:

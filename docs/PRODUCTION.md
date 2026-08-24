@@ -2,6 +2,16 @@
 
 Questo prototipo **non è certificato** ISO e **non è candidato** all’uso fiscale reale.
 
+## Avvio fail-closed
+
+Con `DIRECTOR_ENV=production` l'applicazione non parte finché non sono configurati
+quattro segreti distinti di almeno 32 caratteri (`DIRECTOR_SIGNING_SEED`,
+`DIRECTOR_SESSION_SECRET`, `DIRECTOR_EVIDENCE_KEY`, `KRELUNA_ENROLLMENT_CODE`) e le
+credenziali iniziali del titolare (`DIRECTOR_BOOTSTRAP_EMAIL` e una
+`DIRECTOR_BOOTSTRAP_PASSWORD` di almeno 14 caratteri). In produzione non vengono
+creati account demo. Le password sono memorizzate con Argon2id; gli hash SHA-256
+esistenti vengono migrati ad Argon2id al primo login valido.
+
 Checklist coperta in codice/documenti:
 
 - [x] Kill switch

@@ -14,7 +14,7 @@ from app.config import settings
 from app.database import get_session
 from app.deps import Actor, get_actor, get_policy
 from app.models import AgentSlot, Device, EnrollmentCode, User
-from app.security import issue_session, verify_password
+from app.security import hash_password, issue_session, password_needs_rehash, verify_password
 from app.services.agents import compose_agent_rows
 from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
@@ -70,8 +70,15 @@ async def ready(session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
 @router.post("/auth/login")
 async def login(body: LoginBody, session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
     user = (await session.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
-    if user is None or not verify_password(settings.director_session_secret, body.password, user.password_hash):
+    if user is None or not verify_password(
+        body.password,
+        user.password_hash,
+        legacy_secret=settings.director_session_secret,
+    ):
         raise HTTPException(status_code=401, detail="Credenziali non valide")
+    if password_needs_rehash(user.password_hash):
+        user.password_hash = hash_password(body.password)
+        await session.commit()
     token = issue_session(
         settings.director_session_secret,
         {"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role},

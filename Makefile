@@ -1,4 +1,4 @@
-.PHONY: install test demo api agent web lint mac windows agents installers
+.PHONY: install test build check demo api agent web lint mac windows agents installers
 
 install:
 	python3 -m pip install -e ".[dev]"
@@ -8,7 +8,12 @@ test:
 	python3 -m pytest -q
 
 lint:
-	python3 -m ruff check packages apps tests || true
+	python3 -m ruff check packages apps tests
+
+build:
+	cd apps/director-web && npm run build
+
+check: lint test build
 
 api:
 	PYTHONPATH=packages/kreluna-shared/src:apps/director-api python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8080

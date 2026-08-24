@@ -102,7 +102,15 @@ export const api = {
   tasks: () => request<{ tasks: Task[] }>("/tasks"),
   approvals: () => request<{ approvals: Approval[] }>("/approvals"),
   chat: (message: string) =>
-    request<{ ok: boolean; summary: string; denied?: boolean; deny_reason?: string; source?: string; tasks: Task[] }>(
+    request<{
+      ok: boolean;
+      summary: string;
+      denied?: boolean;
+      deny_reason?: string;
+      source?: string;
+      diagnostic?: { code: string; detail: string } | null;
+      tasks: Task[];
+    }>(
       "/chat",
       {
         method: "POST",
