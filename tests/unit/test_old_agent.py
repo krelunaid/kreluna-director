@@ -50,7 +50,7 @@ def test_the_refusal_is_explained_in_italian():
     assert "Agent vecchio" in message
     assert "PC-VISURE" in message
 
-    current = a_device("pc-visure", ["visure_prepare", "document_check", "portal_open"])
+    current = a_device("pc-visure", ["visure_prepare", "document_check", "portal_open", "portal_learn"])
     wrong_pc = _readable_error("CAPABILITY_NOT_ALLOWED", current)
     assert "non è il PC che fa questo lavoro" in wrong_pc
 
@@ -60,7 +60,7 @@ def test_the_refusal_is_explained_in_italian():
 
 def test_an_old_agent_is_flagged_and_a_current_one_is_not():
     old = a_device("pc-visure", ["notepad_write", "email_draft"])
-    current = a_device("pc-visure", ["visure_prepare", "document_check", "portal_open"])
+    current = a_device("pc-visure", ["visure_prepare", "document_check", "portal_open", "portal_learn"])
     assert _needs_update(old) is True
     assert _needs_update(current) is False
     rows = compose_agent_rows([old], [])

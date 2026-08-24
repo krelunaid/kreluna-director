@@ -82,6 +82,15 @@ def test_the_selector_prefers_the_most_stable_handle():
     assert mac_browser.suggest_selector({"tag": "input", "type": "search"}) == 'input[type="search"]'
 
 
+def test_every_pc_that_opens_a_portal_can_also_learn_it():
+    from kreluna_shared.agents import capabilities_for_role, load_live_agent_roles
+
+    for role in load_live_agent_roles():
+        caps = capabilities_for_role(role.role)
+        if "portal_open" in caps:
+            assert "portal_learn" in caps, f"{role.role} apre il portale ma non sa impararlo"
+
+
 def test_asking_to_learn_is_not_asking_to_fill():
     teach = plan_deterministic("Impara la pagina di Webdesk per le fatture")
     assert teach.ok

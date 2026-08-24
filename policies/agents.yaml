@@ -32,6 +32,7 @@ agents:
     capabilities:
       - camera_prepare
       - portal_open
+      - portal_learn
   - role: pc-contratti
     display_name: PC-CONTRATTI
     job: Contratti
@@ -39,6 +40,7 @@ agents:
     capabilities:
       - contratti_prepare
       - portal_open
+      - portal_learn
   - role: pc-durc
     display_name: PC-DURC
     job: Richieste DURC
@@ -46,6 +48,7 @@ agents:
     capabilities:
       - durc_prepare
       - portal_open
+      - portal_learn
   - role: pc-visure
     display_name: PC-VISURE
     job: Visure
@@ -54,6 +57,7 @@ agents:
       - visure_prepare
       - document_check
       - portal_open
+      - portal_learn
 
   # Vecchi posti: restano in database se già creati, non si scelgono più.
   - role: pc-pagamenti
