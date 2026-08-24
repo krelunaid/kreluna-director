@@ -69,8 +69,9 @@ async def test_free_phrase_goes_to_the_model(ai_on):
 
 
 @pytest.mark.asyncio
-async def test_without_a_key_the_rules_answer_alone():
+async def test_without_a_key_reports_that_ai_is_not_configured():
     plan = await plan_message("senti, per la ditta Bianchi mi serve quel certificato dei contributi")
     assert not plan.ok
-    assert plan.source == "deterministic-unknown"
-    assert "Fattura Gadducci" in plan.summary
+    assert plan.source == "llm-error"
+    assert plan.diagnostic and plan.diagnostic["code"] == "not_configured"
+    assert "non configurata" in plan.summary

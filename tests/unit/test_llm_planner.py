@@ -154,7 +154,12 @@ async def test_question_when_the_model_is_unsure():
 async def test_broken_or_chatty_answers_do_not_crash():
     fenced = await ask('```json\n{"understood": false, "question": "Quanto?"}\n```')
     assert fenced is not None and fenced.summary == "Quanto?"
-    assert await ask("non ho capito niente") is None
+    invalid = await ask("non ho capito niente")
+    assert invalid is not None and invalid.source == "llm-error"
+    assert invalid.diagnostic == {
+        "code": "invalid_response",
+        "detail": "risposta del provider priva di un piano JSON valido",
+    }
     assert await ask('{"understood": true, "tasks": []}') is not None
 
 
@@ -200,7 +205,7 @@ async def test_no_key_means_no_call():
 
 
 @pytest.mark.asyncio
-async def test_model_down_falls_back_to_rules():
+async def test_model_down_is_reported_instead_of_falling_back_silently():
     def broken(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": "giù"})
 
@@ -212,7 +217,10 @@ async def test_model_down_falls_back_to_rules():
             model="modello-test",
             client=client,
         )
-    assert plan is None
+    assert plan is not None
+    assert plan.source == "llm-error"
+    assert plan.diagnostic and plan.diagnostic["code"] == "provider_unavailable"
+    assert "Nessun lavoro" in plan.summary
 
 
 def test_payload_without_json_is_rejected():

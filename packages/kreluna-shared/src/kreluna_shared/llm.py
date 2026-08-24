@@ -234,6 +234,17 @@ def parse_llm_payload(raw: str, message: str = "") -> PlanResult | None:
     return _as_plan(payload, message)
 
 
+def _llm_error(code: str, detail: str) -> PlanResult:
+    return PlanResult(
+        ok=False,
+        summary=f"IA non disponibile: {detail}. Nessun lavoro è stato creato.",
+        denied=False,
+        deny_reason="",
+        source="llm-error",
+        diagnostic={"code": code, "detail": detail},
+    )
+
+
 async def plan_with_llm(
     message: str,
     *,
@@ -242,10 +253,11 @@ async def plan_with_llm(
     model: str,
     client: httpx.AsyncClient,
     timeout: float = 15.0,
+    allow_anonymous: bool = False,
 ) -> PlanResult | None:
-    """Chiede il piano al modello. Ritorna None se il modello non è raggiungibile."""
+    """Chiede il piano al modello e rende esplicito ogni errore del provider."""
 
-    if not base_url or not api_key:
+    if not base_url or not model or (not api_key and not allow_anonymous):
         return None
     url = base_url.rstrip("/") + "/chat/completions"
     body: dict[str, Any] = {
@@ -258,18 +270,32 @@ async def plan_with_llm(
             {"role": "user", "content": message[:4000]},
         ],
     }
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         response = await client.post(url, json=body, headers=headers, timeout=timeout)
         if response.status_code == 400 and "response_format" in body:
             # Qualche fornitore non accetta response_format: riprovo senza.
             body.pop("response_format")
             response = await client.post(url, json=body, headers=headers, timeout=timeout)
-        response.raise_for_status()
+        if response.status_code in {401, 403}:
+            return _llm_error("authentication", "chiave API rifiutata dal provider")
+        if response.status_code == 429:
+            return _llm_error("rate_limit", "limite di richieste del provider raggiunto")
+        if response.status_code >= 500:
+            return _llm_error("provider_unavailable", "il provider non risponde correttamente")
+        if response.status_code >= 400:
+            return _llm_error("request_rejected", f"il provider ha rifiutato la richiesta ({response.status_code})")
         data = response.json()
         content = data["choices"][0]["message"]["content"]
-    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
-        return None
+    except httpx.TimeoutException:
+        return _llm_error("timeout", "tempo di risposta scaduto")
+    except httpx.HTTPError:
+        return _llm_error("connection", "connessione al provider fallita")
+    except (KeyError, IndexError, TypeError, ValueError):
+        return _llm_error("invalid_response", "risposta del provider non valida")
     if not isinstance(content, str):
-        return None
-    return parse_llm_payload(content, message)
+        return _llm_error("invalid_response", "risposta del provider non valida")
+    parsed = parse_llm_payload(content, message)
+    if parsed is None:
+        return _llm_error("invalid_response", "risposta del provider priva di un piano JSON valido")
+    return parsed

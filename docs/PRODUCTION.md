@@ -2,6 +2,29 @@
 
 Questo prototipo **non è certificato** ISO e **non è candidato** all’uso fiscale reale.
 
+## Avvio fail-closed
+
+Con `DIRECTOR_ENV=production` l'applicazione non parte finché non sono configurati
+quattro segreti distinti di almeno 32 caratteri (`DIRECTOR_SIGNING_SEED`,
+`DIRECTOR_SESSION_SECRET`, `DIRECTOR_EVIDENCE_KEY`, `KRELUNA_ENROLLMENT_CODE`) e le
+credenziali iniziali del titolare (`DIRECTOR_BOOTSTRAP_EMAIL` e una
+`DIRECTOR_BOOTSTRAP_PASSWORD` di almeno 14 caratteri). In produzione non vengono
+creati account demo. Le password sono memorizzate con Argon2id; gli hash SHA-256
+esistenti vengono migrati ad Argon2id al primo login valido.
+
+## Provider IA e diagnostica
+
+Grok, Ollama e OpenAI hanno configurazioni separate per indirizzo, chiave e modello
+(vedi `.env.example`). La scelta del titolare viene salvata per studio. La dashboard
+esegue un health check con cache breve e distingue: provider non configurato,
+autenticazione rifiutata, timeout, provider non disponibile e modello assente. Se il
+planner IA fallisce, il Director non usa una risposta deterministica come se nulla fosse:
+ferma la richiesta, mostra la causa e registra `planner.ai_error` nell'audit.
+
+Gli errori task delle ultime 24 ore sono mostrati come attivi; quelli più vecchi restano
+nello storico. Anche `tasks_today` usa la stessa finestra temporale invece di contare
+tutti i task presenti nel database.
+
 Checklist coperta in codice/documenti:
 
 - [x] Kill switch

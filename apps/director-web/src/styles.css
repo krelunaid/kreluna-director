@@ -975,6 +975,23 @@ textarea:focus {
   font-size: 13px;
 }
 
+.provider-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.provider-select select {
+  max-width: 170px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: var(--panel);
+}
+
 /* ---------- small screens ---------- */
 
 @media (max-width: 1200px) {

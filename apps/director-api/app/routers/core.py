@@ -14,8 +14,9 @@ from app.config import settings
 from app.database import get_session
 from app.deps import Actor, get_actor, get_policy
 from app.models import AgentSlot, Device, EnrollmentCode, User
-from app.security import issue_session, verify_password
+from app.security import hash_password, issue_session, password_needs_rehash, verify_password
 from app.services.agents import compose_agent_rows
+from app.services.ai import check_ai_health, save_selected_provider, selected_provider
 from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
 from app.services.registry import hub, mark_offline_stale
@@ -37,6 +38,10 @@ class EnrollBody(BaseModel):
     display_name: str | None = None
     capabilities: list[str] = Field(default_factory=list)
     platform: str = "linux"
+
+
+class AIProviderBody(BaseModel):
+    provider: str
 
 
 @router.get("/health")
@@ -67,11 +72,76 @@ async def ready(session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
     return {"ok": True, "service": "director-api", "ready": True}
 
 
+@router.get("/ai/providers")
+async def ai_providers(
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    current = await selected_provider(session, actor.tenant_id)
+    providers = []
+    for name in ("grok", "ollama", "openai"):
+        config = settings.ai_provider_config(name)
+        providers.append(
+            {
+                "provider": name,
+                "label": config.label,
+                "model": config.model,
+                "configured": config.configured,
+            }
+        )
+    return {"selected": current, "providers": providers}
+
+
+@router.get("/ai/health")
+async def ai_health(
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    current = await selected_provider(session, actor.tenant_id)
+    return await check_ai_health(settings.ai_provider_config(current), force=True)
+
+
+@router.post("/ai/provider")
+async def choose_ai_provider(
+    body: AIProviderBody,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può cambiare provider IA")
+    try:
+        chosen = await save_selected_provider(
+            session,
+            tenant_id=actor.tenant_id,
+            provider=body.provider,
+            actor_id=actor.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="ai.provider.select",
+        result="ok",
+        detail=chosen,
+    )
+    await session.commit()
+    return await check_ai_health(settings.ai_provider_config(chosen), force=True)
+
+
 @router.post("/auth/login")
 async def login(body: LoginBody, session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
     user = (await session.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
-    if user is None or not verify_password(settings.director_session_secret, body.password, user.password_hash):
+    if user is None or not verify_password(
+        body.password,
+        user.password_hash,
+        legacy_secret=settings.director_session_secret,
+    ):
         raise HTTPException(status_code=401, detail="Credenziali non valide")
+    if password_needs_rehash(user.password_hash):
+        user.password_hash = hash_password(body.password)
+        await session.commit()
     token = issue_session(
         settings.director_session_secret,
         {"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role},

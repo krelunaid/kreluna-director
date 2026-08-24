@@ -20,6 +20,33 @@ OTHER_USER_ID = "44444444-4444-4444-4444-444444444444"
 async def seed_if_empty(session: AsyncSession) -> None:
     existing = (await session.execute(select(Tenant).limit(1))).scalar_one_or_none()
     if existing is None:
+        if settings.is_production:
+            studio = Tenant(
+                name=settings.director_bootstrap_tenant_name,
+                slug=settings.director_bootstrap_tenant_slug,
+            )
+            session.add(studio)
+            await session.flush()
+            session.add_all(
+                [
+                    User(
+                        tenant_id=studio.id,
+                        email=settings.director_bootstrap_email.strip().lower(),
+                        name=settings.director_bootstrap_name,
+                        role="studio_owner",
+                        password_hash=hash_password(settings.director_bootstrap_password),
+                    ),
+                    License(tenant_id=studio.id, state="active", plan="studio"),
+                    EnrollmentCode(
+                        tenant_id=studio.id,
+                        code=settings.kreluna_enrollment_code,
+                        used=False,
+                    ),
+                ]
+            )
+            await session.commit()
+            await seed_agent_slots(session, studio.id)
+            return
         studio = Tenant(id=DEMO_TENANT_ID, name="Studio Rossi & Associati", slug="studio-rossi")
         other = Tenant(id=OTHER_TENANT_ID, name="Studio Isolato", slug="studio-isolato")
         session.add_all([studio, other])
@@ -31,7 +58,7 @@ async def seed_if_empty(session: AsyncSession) -> None:
                     email="andrea@studio.demo",
                     name="Andrea Rossi",
                     role="studio_owner",
-                    password_hash=hash_password(settings.director_session_secret, "demo"),
+                    password_hash=hash_password("demo"),
                 ),
                 User(
                     id=OTHER_USER_ID,
@@ -39,7 +66,7 @@ async def seed_if_empty(session: AsyncSession) -> None:
                     email="altro@studio.demo",
                     name="Altro Titolare",
                     role="studio_owner",
-                    password_hash=hash_password(settings.director_session_secret, "demo"),
+                    password_hash=hash_password("demo"),
                 ),
                 License(tenant_id=DEMO_TENANT_ID, state="active", plan="studio-demo"),
                 License(tenant_id=OTHER_TENANT_ID, state="active", plan="studio-demo"),
@@ -50,11 +77,31 @@ async def seed_if_empty(session: AsyncSession) -> None:
                     email="viewer@studio.demo",
                     name="Viewer Rossi",
                     role="viewer",
-                    password_hash=hash_password(settings.director_session_secret, "demo"),
+                    password_hash=hash_password("demo"),
                 ),
             ]
         )
         await session.commit()
+    if settings.is_production:
+        demo_user = (
+            await session.execute(
+                select(User)
+                .where(User.email.in_(("andrea@studio.demo", "altro@studio.demo", "viewer@studio.demo")))
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        demo_code = (
+            await session.execute(
+                select(EnrollmentCode).where(EnrollmentCode.code == "KRELUNA-DEV-ENROLL")
+            )
+        ).scalar_one_or_none()
+        if demo_user is not None or demo_code is not None:
+            raise RuntimeError(
+                "Produzione bloccata: il database contiene account o codici demo; "
+                "usa un database di produzione pulito"
+            )
+        await seed_agent_slots(session, existing.id)
+        return
     await seed_agent_slots(session, DEMO_TENANT_ID)
 
 

@@ -31,6 +31,7 @@ export type Task = {
   assigned_device_id?: string | null;
   result: Record<string, unknown>;
   error: string | null;
+  error_state?: "active" | "historical" | null;
   created_at: string | null;
   evidence: { id: string; kind: string; sha256: string }[];
 };
@@ -52,9 +53,22 @@ export type Overview = {
   running: number;
   pending_approvals: number;
   errors: number;
+  active_errors: number;
+  historical_errors: number;
   kill_armed: boolean;
   ai_connected?: boolean;
   ai_model?: string;
+  ai_provider?: "grok" | "ollama" | "openai";
+  ai_provider_label?: string;
+  ai_status?: string;
+  ai_detail?: string;
+};
+
+export type AIProviderOption = {
+  provider: "grok" | "ollama" | "openai";
+  label: string;
+  model: string;
+  configured: boolean;
 };
 
 const TOKEN_KEY = "kreluna.token";
@@ -98,11 +112,25 @@ export const api = {
     request<{ manifest: { version: string; notes: string }; signature: string }>("/update/manifest"),
   me: () => request<{ name: string; email: string; role: string; license_state: string }>("/me"),
   overview: () => request<Overview>("/overview"),
+  aiProviders: () => request<{ selected: string; providers: AIProviderOption[] }>("/ai/providers"),
+  chooseAIProvider: (provider: string) =>
+    request<{ connected: boolean; detail: string }>("/ai/provider", {
+      method: "POST",
+      body: JSON.stringify({ provider }),
+    }),
   agents: () => request<{ agents: Agent[] }>("/agents"),
   tasks: () => request<{ tasks: Task[] }>("/tasks"),
   approvals: () => request<{ approvals: Approval[] }>("/approvals"),
   chat: (message: string) =>
-    request<{ ok: boolean; summary: string; denied?: boolean; deny_reason?: string; source?: string; tasks: Task[] }>(
+    request<{
+      ok: boolean;
+      summary: string;
+      denied?: boolean;
+      deny_reason?: string;
+      source?: string;
+      diagnostic?: { code: string; detail: string } | null;
+      tasks: Task[];
+    }>(
       "/chat",
       {
         method: "POST",

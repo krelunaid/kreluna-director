@@ -87,6 +87,7 @@ class PlanResult(BaseModel):
     denied: bool = False
     deny_reason: str | None = None
     source: str = "deterministic"
+    diagnostic: dict[str, str] | None = None
     # Cosa resta da sapere, per capire la risposta che arriva dopo.
     pending: dict[str, Any] | None = None
 

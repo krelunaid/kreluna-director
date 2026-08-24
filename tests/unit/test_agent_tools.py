@@ -1,6 +1,7 @@
 from agent.capabilities.documents import check
 from agent.capabilities.notepad import write_notepad
 from agent.capabilities.studio import durc, visure
+from agent.tools import gestionale
 from agent.tools.gestionale import fill_invoice_on_pc, show_invoice_on_this_mac
 from kreluna_shared.crypto import sha256_hex
 
@@ -34,7 +35,8 @@ def test_invoice_gestionale_types_client_and_shows_mouse():
     assert last["metadata"]["program"] == "gestionale-fatture-demo"
 
 
-def test_live_mac_window_skipped_on_linux():
+def test_live_mac_window_skipped_on_linux(monkeypatch):
+    monkeypatch.setattr(gestionale.sys, "platform", "linux")
     assert show_invoice_on_this_mac(client_name="Andrea Gadducci", description="Manodopera", net_eur=37500) is False
 
 
