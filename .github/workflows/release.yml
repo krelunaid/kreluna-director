@@ -29,7 +29,7 @@ jobs:
         run: test "v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" = "${GITHUB_REF_NAME}"
       - name: Crea pacchetto Mac
         run: bash scripts/macos/build-mac-app.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: mac
           path: |
@@ -56,7 +56,7 @@ jobs:
         run: test "v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" = "${GITHUB_REF_NAME}"
       - name: Crea pacchetto Windows
         run: bash scripts/windows/build-windows-zip.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: windows
           path: |
@@ -68,7 +68,7 @@ jobs:
     needs: [mac, windows]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: release
           merge-multiple: true
