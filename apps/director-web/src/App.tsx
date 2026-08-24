@@ -4,12 +4,12 @@ import { Agent, api, Approval, Overview, setToken, Task, token } from "./lib/api
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean };
 
 const SUGGESTIONS = [
-  "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera",
-  "Apri Blocco Note e scrivi: Kreluna Agent operativo",
-  "Controlla le fatture",
-  "Prepara un pagamento di 500 euro, non eseguirlo",
-  "Prepara gli F24 in scadenza, ma non inviarli",
-  "Ferma tutto",
+  { short: "Fattura Gadducci", full: "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera" },
+  { short: "Blocco note", full: "Apri Blocco Note e scrivi: Kreluna Agent operativo" },
+  { short: "Controlla fatture", full: "Controlla le fatture" },
+  { short: "Pagamento", full: "Prepara un pagamento di 500 euro, non eseguirlo" },
+  { short: "F24", full: "Prepara gli F24 in scadenza, ma non inviarli" },
+  { short: "Ferma", full: "Ferma tutto" },
 ];
 
 export default function App() {
@@ -25,7 +25,7 @@ export default function App() {
   const [chat, setChat] = useState<ChatItem[]>([
     {
       role: "director",
-      text: "Sono Kreluna Director. Parla solo con me: scelgo io il PC, preparo il lavoro e ti chiedo conferma prima di qualsiasi cosa irreversibile.",
+      text: "Sono Kreluna Director. Parla solo con me: scelgo io il PC e ti chiedo conferma prima delle azioni irreversibili.",
     },
   ]);
   const [draft, setDraft] = useState("");
@@ -33,6 +33,7 @@ export default function App() {
   const [confirmKill, setConfirmKill] = useState(false);
   const [version, setVersion] = useState("");
   const [updateNote, setUpdateNote] = useState("");
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   async function refresh() {
     const [over, ag, ts, ap] = await Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals()]);
@@ -53,7 +54,7 @@ export default function App() {
         if (!result) return;
         const remote = result.data.manifest?.version;
         if (remote && remote !== result.health.version) {
-          setUpdateNote(`Aggiornamento ${remote} disponibile. Scarica il nuovo zip: Kreluna non lo scarica da sola.`);
+          setUpdateNote(`Aggiornamento ${remote} disponibile.`);
         }
       })
       .catch(() => undefined);
@@ -114,6 +115,7 @@ export default function App() {
   }
 
   const pending = useMemo(() => approvals.filter((item) => item.status === "pending"), [approvals]);
+  const recentTasks = tasks.slice(0, 6);
 
   if (!ready) {
     return (
@@ -146,13 +148,19 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <div className="eyebrow">Kreluna</div>
-          <h1>Director</h1>
+          <div className="eyebrow">Kreluna Director</div>
           <div className="small">
-            {name} · licenza {overview?.license_state ?? "…"}
+            {name} · {overview?.license_state ?? "…"}
             {version ? ` · v${version}` : ""}
             {updateNote ? ` · ${updateNote}` : ""}
           </div>
+        </div>
+        <div className="stats">
+          <Stat label="PC" value={`${overview?.agents_online ?? 0}/${overview?.agents_total ?? 0}`} />
+          <Stat label="Task" value={overview?.tasks_today ?? 0} />
+          <Stat label="Corso" value={overview?.running ?? 0} />
+          <Stat label="Approva" value={overview?.pending_approvals ?? 0} />
+          <Stat label="Errori" value={overview?.errors ?? 0} />
         </div>
         <div className="actions">
           {confirmKill ? (
@@ -169,12 +177,12 @@ export default function App() {
                   await refresh();
                 }}
               >
-                Conferma FERMA TUTTO
+                Conferma stop
               </button>
             </>
           ) : (
             <button className="btn danger" onClick={() => setConfirmKill(true)}>
-              Ferma tutto
+              Ferma
             </button>
           )}
           <button
@@ -189,14 +197,6 @@ export default function App() {
         </div>
       </header>
 
-      <section className="stats">
-        <Stat label="PC online" value={`${overview?.agents_online ?? 0}/${overview?.agents_total ?? 0}`} />
-        <Stat label="Task" value={overview?.tasks_today ?? 0} />
-        <Stat label="In corso" value={overview?.running ?? 0} />
-        <Stat label="Da approvare" value={overview?.pending_approvals ?? 0} />
-        <Stat label="Errori" value={overview?.errors ?? 0} />
-      </section>
-
       <main className="layout">
         <section className="chat">
           <div className="chat-log">
@@ -206,14 +206,13 @@ export default function App() {
                 <div>{item.text}</div>
               </div>
             ))}
-            <div className="small">Prova: {SUGGESTIONS[0]}</div>
-            <div className="actions" style={{ flexWrap: "wrap" }}>
-              {SUGGESTIONS.map((item) => (
-                <button key={item} className="btn ghost" onClick={() => send(item)} disabled={busy}>
-                  {item}
-                </button>
-              ))}
-            </div>
+          </div>
+          <div className="chips">
+            {SUGGESTIONS.map((item) => (
+              <button key={item.full} className="chip" onClick={() => send(item.full)} disabled={busy} title={item.full}>
+                {item.short}
+              </button>
+            ))}
           </div>
           <form
             className="composer"
@@ -224,7 +223,7 @@ export default function App() {
           >
             <textarea
               value={draft}
-              placeholder="Scrivi a Kreluna Director…"
+              placeholder="Scrivi a Kreluna…"
               onChange={(event) => setDraft(event.target.value)}
             />
             <button className="btn" disabled={busy}>
@@ -235,84 +234,89 @@ export default function App() {
 
         <aside className="stack">
           <div className="panel">
-            <h2>PC dello studio</h2>
-            {agents.length === 0 ? <div className="small">Nessun agent iscritto. Avvia l’agent locale.</div> : null}
-            {agents.map((agent) => (
-              <div className="row" key={agent.device_id}>
-                <div>
-                  <span className={`dot ${agent.presence}`} />
-                  <strong>{agent.display_name || agent.agent_id}</strong>
-                  <div className="small">
-                    {agent.job ? `${agent.job} · ` : ""}
-                    {agent.program || "programma da definire"}
-                  </div>
-                  <div className="small">
-                    {agent.hostname} · {agent.connected ? agent.platform : "da installare sul PC"}
-                  </div>
-                </div>
-                <div className="actions">
-                  <span className="pill">{agent.killed ? "fermo" : agent.presence}</span>
-                  {agent.killed ? (
-                    <button className="btn ghost" onClick={() => api.resume(agent.device_id).then(refresh)}>
-                      Riprendi
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="panel">
-            <h2>Da approvare</h2>
-            {pending.length === 0 ? <div className="small">Nessuna azione sensibile in attesa.</div> : null}
-            {pending.map((item) => {
-              const observed = ((item.preview.observed as Record<string, string>) || {}) as Record<string, string>;
-              return (
-                <div className="row" key={item.id} style={{ flexDirection: "column", alignItems: "stretch" }}>
-                  <div>
-                    <strong>Fattura pronta</strong>
-                    <div className="small">
-                      Cliente: {observed.client} · {observed.total_label} · stato {observed.status}
+            <h2>Da approvare {pending.length ? `(${pending.length})` : ""}</h2>
+            <div className="panel-body">
+              {pending.length === 0 ? <div className="small">Niente in attesa.</div> : null}
+              {pending.map((item) => {
+                const observed = ((item.preview.observed as Record<string, string>) || {}) as Record<string, string>;
+                return (
+                  <div className="row compact" key={item.id}>
+                    <div className="row-main">
+                      <strong>{observed.client || "Fattura"}</strong>
+                      <div className="small">
+                        {observed.total_label} · {observed.status}
+                      </div>
+                      <EvidenceStrip ids={(item.task?.evidence || []).map((shot) => shot.id)} onOpen={setLightbox} />
+                    </div>
+                    <div className="actions">
+                      <button className="btn ok" onClick={() => api.approve(item.id).then(refresh)}>
+                        Approva
+                      </button>
+                      <button className="btn ghost" onClick={() => api.reject(item.id).then(refresh)}>
+                        No
+                      </button>
                     </div>
                   </div>
-                  {item.task?.evidence?.map((shot) => (
-                    <EvidenceImage key={shot.id} id={shot.id} />
-                  ))}
-                  <div className="actions">
-                    <button className="btn ok" onClick={() => api.approve(item.id).then(refresh)}>
-                      Approva
-                    </button>
-                    <button className="btn ghost" onClick={() => api.reject(item.id).then(refresh)}>
-                      Rifiuta
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           <div className="panel">
-            <h2>Task</h2>
-            {tasks.slice(0, 8).map((task) => (
-              <div className="row" key={task.id}>
-                <div>
-                  <div>{task.goal}</div>
-                  <div className="small">{task.capability}</div>
-                  {task.evidence.map((shot) => (
-                    <EvidenceImage key={shot.id} id={shot.id} />
-                  ))}
+            <h2>Richieste</h2>
+            <div className="panel-body">
+              {recentTasks.map((task) => (
+                <div className="row compact" key={task.id}>
+                  <div className="row-main">
+                    <div className="task-goal">{task.goal}</div>
+                    <EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} />
+                  </div>
+                  <span className={`pill ${task.status} ${task.risk}`}>{task.status}</span>
                 </div>
-                <span className={`pill ${task.status} ${task.risk}`}>{task.status}</span>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+
+          <div className="panel slim">
+            <h2>PC</h2>
+            <div className="panel-body">
+              {agents.map((agent) => (
+                <div className="row compact" key={agent.device_id}>
+                  <div>
+                    <span className={`dot ${agent.presence}`} />
+                    <strong>{agent.display_name || agent.agent_id}</strong>
+                    <span className="small"> · {agent.job}</span>
+                  </div>
+                  <span className="pill">{agent.killed ? "fermo" : agent.presence}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </aside>
       </main>
+      {lightbox ? (
+        <button className="lightbox" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Schermata del PC" />
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function EvidenceImage({ id }: { id: string }) {
+function EvidenceStrip({ ids, onOpen }: { ids: string[]; onOpen: (src: string) => void }) {
+  if (!ids.length) return null;
+  const shown = ids.slice(-3).reverse();
+  return (
+    <div className="thumbs">
+      {shown.map((id) => (
+        <EvidenceThumb key={id} id={id} onOpen={onOpen} />
+      ))}
+      {ids.length > 3 ? <span className="small">+{ids.length - 3}</span> : null}
+    </div>
+  );
+}
+
+function EvidenceThumb({ id, onOpen }: { id: string; onOpen: (src: string) => void }) {
   const [src, setSrc] = useState<string>();
   useEffect(() => {
     let objectUrl = "";
@@ -330,7 +334,11 @@ function EvidenceImage({ id }: { id: string }) {
     };
   }, [id]);
   if (!src) return null;
-  return <img className="evidence" src={src} alt="Evidenza del lavoro" />;
+  return (
+    <button type="button" className="thumb" onClick={() => onOpen(src)}>
+      <img src={src} alt="" />
+    </button>
+  );
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {
