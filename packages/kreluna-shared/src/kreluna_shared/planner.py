@@ -102,7 +102,7 @@ def _email_to(text: str) -> str | None:
     if addr:
         return addr.group(0)
     match = re.search(
-        r"(?:a|ad|to)\s+([A-Za-zÀ-ÿ0-9._+\-]+(?:\s+[A-Za-zÀ-ÿ']+){0,3})"
+        r"\b(?:a|ad|to)\s+([A-Za-zÀ-ÿ0-9._+\-]+(?:\s+[A-Za-zÀ-ÿ']+){0,3})"
         r"(?=\s+(?:dicendo|che|per|con|,|$))",
         text,
         flags=re.I,

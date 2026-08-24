@@ -71,8 +71,13 @@ def test_planner_understands_italian_mail_as_draft():
     assert not plan.denied
     task = plan.tasks[0]
     assert task.capability == "email_draft"
-    assert "andreagadducci" in (task.args.get("to") or "").lower()
+    assert task.args.get("to", "").lower() == "andreagadducci"
     assert "vedere" in task.args["body"].lower()
+    named = plan_deterministic(
+        "Prepara una bozza mail a Andrea Gadducci dicendo di aprire Kreluna"
+    )
+    assert named.ok
+    assert named.tasks[0].args["to"] == "Andrea Gadducci"
     pec = plan_deterministic("Invia la PEC al cliente adesso")
     assert pec.denied
 
