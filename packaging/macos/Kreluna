@@ -20,9 +20,9 @@ fail() {
 
 ARCH="$(uname -m)"
 if [[ "$ARCH" == "arm64" ]]; then
-  PYTHON="$APP_DIR/Resources/python-arm64/bin/python3"
+  PYTHON="$APP_DIR/Resources/python-arm64/bin/python3.12"
 else
-  PYTHON="$APP_DIR/Resources/python-x64/bin/python3"
+  PYTHON="$APP_DIR/Resources/python-x64/bin/python3.12"
 fi
 
 if [[ ! -x "$PYTHON" ]]; then

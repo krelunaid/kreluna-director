@@ -76,7 +76,7 @@ xattr -cr "$APP" >/dev/null 2>&1 || true
 
 (
   cd "$OUT"
-  zip -qry "Kreluna-Director-Mac.zip" "Kreluna Director.app" "Installa Kreluna.command" "LEGGIMI-MAC.txt"
+  zip -qry -y "Kreluna-Director-Mac.zip" "Kreluna Director.app" "Installa Kreluna.command" "LEGGIMI-MAC.txt"
 )
 
 python3 - "$OUT/Kreluna-Director-Mac.zip" <<'PY'
