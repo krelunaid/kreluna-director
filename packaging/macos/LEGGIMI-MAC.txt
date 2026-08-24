@@ -1,11 +1,10 @@
 KRELUNA DIRECTOR PER MAC
 ========================
 
-NON usare Installa Kreluna.command (macOS lo blocca).
-
 1. Trascina Kreluna Director.app sulla cartella Applicazioni.
 2. Aprila. Se esce la finestra gialla: Fine (non Cestino).
 3. Menu Mela → Impostazioni di Sistema → Privacy e sicurezza
    → in basso → Apri comunque.
 
 Login: andrea@studio.demo / demo
+Non serve Python.

@@ -2,27 +2,41 @@
 <html lang="it">
 <head>
   <meta charset="utf-8" />
-  <title>Kreluna — come aprirla sul Mac</title>
+  <title>Kreluna — quella finestra gialla</title>
   <style>
-    body { font-family: -apple-system, sans-serif; max-width: 680px; margin: 40px auto; padding: 0 24px; color: #0b1220; }
-    h1 { font-size: 26px; }
-    .box { background: #f4efe4; border-radius: 16px; padding: 20px; margin: 16px 0; }
+    body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 36px auto; padding: 0 20px; color: #0b1220; }
+    h1 { font-size: 24px; line-height: 1.25; }
+    .dialog { background: #f5f5f7; border-radius: 14px; padding: 18px 20px; margin: 20px 0; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+    .dialog h2 { font-size: 16px; margin: 0 0 8px; }
+    .dialog p { font-size: 14px; color: #3a3a3c; margin: 0 0 14px; }
+    .btns { display: flex; gap: 10px; justify-content: flex-end; }
+    .no { background: #007aff; color: #fff; padding: 8px 14px; border-radius: 8px; text-decoration: line-through; opacity: .45; }
+    .yes { background: #e8e8ed; padding: 8px 14px; border-radius: 8px; font-weight: 700; }
     ol { font-size: 18px; line-height: 1.55; }
     .warn { color: #9a3412; font-weight: 700; }
   </style>
 </head>
 <body>
-  <h1>Quella finestra gialla è normale</h1>
-  <p>Apple non ha un pulsante «Apri» lì. Non è rotta. <span class="warn">Non premere Sposta nel Cestino.</span> Premi <strong>Fine</strong>.</p>
-  <div class="box">
-    <ol>
-      <li>Trascina <code>Kreluna Director.app</code> sulla cartella <code>Applicazioni</code> (è nello zip, accanto all’app).</li>
-      <li>Apri <strong>Applicazioni</strong> e fai doppio clic su Kreluna Director.</li>
-      <li>Stessa finestra gialla: premi <strong>Fine</strong>.</li>
-      <li>Menu Mela () → <strong>Impostazioni di Sistema</strong> → <strong>Privacy e sicurezza</strong>.</li>
-      <li>Scorri in basso. C’è scritto che Kreluna è stata bloccata. Premi <strong>Apri comunque</strong>.</li>
-    </ol>
+  <h1>Ho visto la finestra gialla. Quel file non si apre.</h1>
+  <p>Se c’è scritto <strong>Installa Kreluna.command</strong>, Apple lo blocca sempre. Non c’è il pulsante Apri. Non è rotta Kreluna: è quel file che non va usato.</p>
+  <div class="dialog">
+    <h2>Installa Kreluna.command non è stata aperta</h2>
+    <p>Apple non è in grado di verificare che non contenga malware…</p>
+    <div class="btns">
+      <span class="no">Sposta nel Cestino</span>
+      <span class="yes">Fine ← premi questo</span>
+    </div>
   </div>
+  <p class="warn">Non premere Sposta nel Cestino.</p>
+  <ol>
+    <li>Premi <strong>Fine</strong>.</li>
+    <li>Non toccare più <code>Installa Kreluna.command</code>. Se lo vedi, lascialo stare (o mettilo tu nel Cestino).</li>
+    <li>Nella stessa cartella c’è <strong>Kreluna Director.app</strong>. Trascinala sulla cartella <strong>Applicazioni</strong>.</li>
+    <li>Apri Applicazioni e fai doppio clic su Kreluna Director.</li>
+    <li>Se torna la finestra gialla: di nuovo <strong>Fine</strong>.</li>
+    <li>Menu Mela () → <strong>Impostazioni di Sistema</strong> → <strong>Privacy e sicurezza</strong>.</li>
+    <li>Scorri in basso. «Kreluna è stata bloccata» → <strong>Apri comunque</strong>.</li>
+  </ol>
   <p>Login: andrea@studio.demo / demo</p>
 </body>
 </html>

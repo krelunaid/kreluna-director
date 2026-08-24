@@ -41,8 +41,7 @@ PY
 cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$OUT/LEGGIMI-MAC.txt"
 cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$OUT/1-SE-DICE-CESTINO.txt"
 cp "$ROOT/packaging/macos/Apri-me.html" "$OUT/Apri-me.html"
-cp "$ROOT/packaging/macos/Installa Kreluna.command" "$OUT/Installa Kreluna.command"
-chmod +x "$OUT/Installa Kreluna.command"
+ln -sfn /Applications "$OUT/Applicazioni"
 
 xattr -cr "$APP" >/dev/null 2>&1 || true
 
@@ -50,7 +49,7 @@ xattr -cr "$APP" >/dev/null 2>&1 || true
   cd "$OUT"
   zip -qry -y "Kreluna-Director-Mac.zip" \
     "Kreluna Director.app" \
-    "Installa Kreluna.command" \
+    "Applicazioni" \
     "1-SE-DICE-CESTINO.txt" \
     "Apri-me.html" \
     "LEGGIMI-MAC.txt"

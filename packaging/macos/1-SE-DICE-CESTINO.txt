@@ -1,8 +1,8 @@
 KRELUNA SUL MAC — LEGGI QUESTO
 ==============================
 
-La finestra gialla NON ha il pulsante Apri.
-NON premere "Sposta nel Cestino". Premi Fine.
+Se la finestra gialla parla di "Installa Kreluna.command":
+quel file NON si apre. Premi Fine. Non usarlo.
 
 Poi:
 
@@ -11,7 +11,7 @@ Poi:
 
 2. Apri Applicazioni → Kreluna Director.
 
-3. Di nuovo la finestra gialla: premi Fine.
+3. Di nuovo la finestra gialla: premi Fine (non Cestino).
 
 4. Menu Mela → Impostazioni di Sistema → Privacy e sicurezza.
 
