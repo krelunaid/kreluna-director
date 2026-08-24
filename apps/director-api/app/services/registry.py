@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Device, utcnow
+from kreluna_shared.agents import preferred_role
 
 
 class ConnectionHub:
@@ -93,5 +94,8 @@ def score_agent(device: Device, capability: str) -> int:
     score = 100
     if not device.busy:
         score += 30
+    role = preferred_role(capability)
+    if role and device.agent_id == role:
+        score += 80
     score -= device.recent_errors * 15
     return score

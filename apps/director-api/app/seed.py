@@ -68,6 +68,14 @@ async def seed_agent_slots(session: AsyncSession, tenant_id: str) -> None:
     }
     for role in roles:
         if role.role in existing:
+            slot = (
+                await session.execute(
+                    select(AgentSlot).where(AgentSlot.tenant_id == tenant_id, AgentSlot.role == role.role)
+                )
+            ).scalar_one()
+            slot.job = role.job
+            slot.program = role.program
+            slot.display_name = role.display_name
             continue
         code = f"KRELUNA-{role.role.upper().replace('_', '-')}"
         already = (

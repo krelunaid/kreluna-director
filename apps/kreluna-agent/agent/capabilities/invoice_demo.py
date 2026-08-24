@@ -4,25 +4,7 @@ from typing import Any
 
 import httpx
 
-from agent.tools.render import render_card
-from kreluna_shared.crypto import sha256_hex
-
-
-def _card(title: str, observed: dict) -> bytes:
-    return render_card(
-        title,
-        [
-            f"Cliente: {observed.get('client')}",
-            f"Descrizione: {observed.get('description')}",
-            f"Imponibile: {observed.get('net_label')}",
-            f"IVA: {observed.get('vat_label')}",
-            f"Totale: {observed.get('total_label')}",
-            f"Stato: {str(observed.get('status', '')).upper()}",
-            f"Pratica: {observed.get('draft_id')}",
-            "",
-            "Gestionale DEMO locale. Nessun invio fiscale.",
-        ],
-    )
+from agent.tools.gestionale import fill_invoice_on_pc
 
 
 async def prepare(
@@ -37,6 +19,13 @@ async def prepare(
     net_eur: float,
     vat_rate: float = 0.22,
 ) -> dict[str, Any]:
+    evidence = fill_invoice_on_pc(
+        client_name=client_name,
+        description=description,
+        net_eur=net_eur,
+        vat_rate=vat_rate,
+        status="draft",
+    )
     response = await client.post(
         f"{director_url}/agent/demo-invoice/prepare",
         json={
@@ -52,18 +41,16 @@ async def prepare(
     )
     response.raise_for_status()
     data = response.json()
-    image = _card("FATTURA DEMO PRONTA — BOZZA", data["observed"])
+    if evidence:
+        evidence[-1]["metadata"]["draft_id"] = data["observed"]["draft_id"]
+        evidence[-1]["metadata"]["status"] = "draft"
     return {
         "ok": True,
         **data,
-        "evidence": [
-            {
-                "kind": "screenshot",
-                "sha256": sha256_hex(image),
-                "png": image,
-                "metadata": {"status": "draft", "draft_id": data["observed"]["draft_id"]},
-            }
-        ],
+        "method": "ui_visible",
+        "program": "Gestionale Fatture",
+        "agent": "pc-fatture",
+        "evidence": evidence,
     }
 
 
@@ -75,6 +62,10 @@ async def submit(
     task_id: str,
     signature: str,
     draft_id: str,
+    client_name: str = "Cliente",
+    description: str = "Prestazione",
+    net_eur: float = 0.0,
+    vat_rate: float = 0.22,
 ) -> dict[str, Any]:
     response = await client.post(
         f"{director_url}/agent/demo-invoice/submit",
@@ -88,16 +79,20 @@ async def submit(
     )
     response.raise_for_status()
     data = response.json()
-    image = _card("FATTURA DEMO EMESSA", data["observed"])
+    observed = data.get("observed") or {}
+    net = float(observed.get("net") or 0)
+    evidence = fill_invoice_on_pc(
+        client_name=str(observed.get("client") or client_name),
+        description=str(observed.get("description") or description),
+        net_eur=net if net > 0 else 1.0,
+        vat_rate=vat_rate,
+        status="issued",
+    )
     return {
         "ok": True,
         **data,
-        "evidence": [
-            {
-                "kind": "screenshot",
-                "sha256": sha256_hex(image),
-                "png": image,
-                "metadata": {"status": "issued", "draft_id": draft_id},
-            }
-        ],
+        "method": "ui_visible",
+        "program": "Gestionale Fatture",
+        "agent": "pc-fatture",
+        "evidence": evidence,
     }

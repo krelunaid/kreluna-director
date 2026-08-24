@@ -1,5 +1,6 @@
-from agent.capabilities.notepad import write_notepad
 from agent.capabilities.documents import check
+from agent.capabilities.notepad import write_notepad
+from agent.tools.gestionale import fill_invoice_on_pc
 from kreluna_shared.crypto import sha256_hex
 
 
@@ -16,3 +17,17 @@ def test_document_check_is_readonly():
     result = check()
     assert result["ok"] is True
     assert len(result["missing"]) >= 1
+
+
+def test_invoice_gestionale_types_client_and_shows_mouse():
+    shots = fill_invoice_on_pc(
+        client_name="Andrea Gadducci",
+        description="Manodopera",
+        net_eur=37500,
+    )
+    assert len(shots) >= 3
+    last = shots[-1]
+    assert last["sha256"] == sha256_hex(last["png"])
+    assert last["png"].startswith(b"\x89PNG")
+    assert last["metadata"]["mouse"] is True
+    assert last["metadata"]["program"] == "gestionale-fatture-demo"

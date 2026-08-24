@@ -32,17 +32,35 @@ DENY_PHRASES = (
 
 
 def _parse_amount(raw: str) -> float:
-    raw = raw.strip()
+    raw = raw.strip().replace(" ", "")
     if re.fullmatch(r"\d{1,3}(\.\d{3})+(,\d{1,2})?", raw):
         return float(raw.replace(".", "").replace(",", "."))
     if re.fullmatch(r"\d{1,3}(\.\d{3})+", raw):
         return float(raw.replace(".", ""))
     if "," in raw and "." not in raw:
         return float(raw.replace(",", "."))
-    return float(raw)
+    return float(raw.replace(".", "").replace(",", ".")) if re.fullmatch(r"\d{1,3}([.,]\d{3})+", raw) else float(raw)
 
 
 def _money(text: str) -> float | None:
+    range_mila = re.search(
+        r"(\d{1,3})\s*[-–/]\s*(\d{1,3})\s*(?:mila|thousand|k)\b",
+        text,
+        flags=re.I,
+    )
+    if range_mila:
+        low, high = int(range_mila.group(1)), int(range_mila.group(2))
+        return round((low + high) / 2 * 1000, 2)
+
+    range_plain = re.search(
+        r"(\d{1,3}(?:[.\s]\d{3})+|\d{4,7})\s*[-–/]\s*(\d{1,3}(?:[.\s]\d{3})+|\d{4,7})",
+        text,
+    )
+    if range_plain:
+        low = _parse_amount(range_plain.group(1).replace(" ", ""))
+        high = _parse_amount(range_plain.group(2).replace(" ", ""))
+        return round((low + high) / 2, 2)
+
     match = re.search(
         r"(?:eur(?:o)?|€)\s*([0-9]{1,7}(?:[.,][0-9]{3})?(?:[.,][0-9]{1,2})?)|([0-9]{1,7}(?:[.,][0-9]{3})?(?:[.,][0-9]{1,2})?)\s*(?:eur(?:o)?|€)",
         text,
@@ -55,22 +73,30 @@ def _money(text: str) -> float | None:
 
 def _client_name(text: str) -> str | None:
     patterns = [
-        r"fattura(?:\s+demo)?\s+a(?:l\s+cliente)?\s+([A-Za-zÀ-ÿ' ]{3,60}?)(?:\s+per|\s*,|\s+di|\s+euro|\s+eur|\s+€|$)",
-        r"(?:cliente|a)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
+        r"(?:fattura|invoice)(?:\s+demo)?\s+(?:ad|al cliente|a|to)\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+){0,3}?)(?=\s+(?:per|di|for|da|euro|eur|€|\d)|[,.]|$)",
+        r"(?:cliente)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.I)
         if match:
-            return " ".join(match.group(1).split()).title()
+            name = " ".join(match.group(1).split()).title()
+            if name.lower() in {"demo", "una", "la", "the"}:
+                continue
+            return name
     return None
 
 
 def _description(text: str) -> str:
-    match = re.search(r"per\s+([^,.]{3,80})", text, flags=re.I)
+    lowered = text.lower()
+    if "manodopera" in lowered or "manpower" in lowered:
+        return "Manodopera"
+    match = re.search(r"(?:per|for|di)\s+([^,.]{3,80})", text, flags=re.I)
     if match:
         desc = match.group(1)
-        desc = re.split(r"\s+(?:eur|euro|€)\b", desc, flags=re.I)[0]
-        return desc.strip().capitalize()
+        desc = re.split(r"\s+(?:eur|euro|€|di\s+\d|\d{2})", desc, flags=re.I)[0]
+        desc = re.sub(r"\b(?:mila|thousand|euro|eur)\b.*", "", desc, flags=re.I).strip()
+        if len(desc) >= 3:
+            return desc.strip().capitalize()
     return "Consulenza"
 
 
@@ -136,16 +162,19 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
-    if "fattura" in lowered:
-        client = _client_name(lowered) or "Mario Rossi"
-        net = _money(lowered) or 1500.0
+    if "fattura" in lowered or re.search(r"\binvoice\b", lowered):
+        client = _client_name(raw) or _client_name(lowered) or "Mario Rossi"
+        net = _money(raw) or _money(lowered) or 1500.0
         description = _description(raw)
         return PlanResult(
             ok=True,
-            summary=f"Preparo una fattura DEMO per {client}: {description}, € {net:,.2f} + IVA.",
+            summary=(
+                f"Mando PC-FATTURE: apre il gestionale, scrive la fattura a {client} "
+                f"per {description}, € {net:,.2f} + IVA. Poi ti chiedo conferma prima di emetterla."
+            ),
             tasks=[
                 PlannedTask(
-                    goal=f"Preparare fattura demo a {client} per {description}",
+                    goal=f"Aprire il gestionale e compilare la fattura a {client} per {description}",
                     capability="invoice_prepare_demo",
                     args={
                         "client_name": client,

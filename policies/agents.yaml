@@ -5,7 +5,7 @@ agents:
   - role: pc-fatture
     display_name: PC-FATTURE
     job: Creare fatture
-    program: da definire (es. Fatture in Cloud)
+    program: Gestionale fatture (demo visibile sul PC). Fatture in Cloud da collegare.
     capabilities:
       - notepad_write
       - invoice_prepare_demo

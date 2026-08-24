@@ -4,8 +4,8 @@ import { Agent, api, Approval, Overview, setToken, Task, token } from "./lib/api
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean };
 
 const SUGGESTIONS = [
+  "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera",
   "Apri Blocco Note e scrivi: Kreluna Agent operativo",
-  "Prepara una fattura demo a Rossi Mario per consulenza, EUR 1500 + IVA",
   "Controlla le fatture",
   "Prepara un pagamento di 500 euro, non eseguirlo",
   "Prepara gli F24 in scadenza, ma non inviarli",
@@ -267,7 +267,6 @@ export default function App() {
             {pending.length === 0 ? <div className="small">Nessuna azione sensibile in attesa.</div> : null}
             {pending.map((item) => {
               const observed = ((item.preview.observed as Record<string, string>) || {}) as Record<string, string>;
-              const shot = item.task?.evidence[0];
               return (
                 <div className="row" key={item.id} style={{ flexDirection: "column", alignItems: "stretch" }}>
                   <div>
@@ -276,7 +275,9 @@ export default function App() {
                       Cliente: {observed.client} · {observed.total_label} · stato {observed.status}
                     </div>
                   </div>
-                  {shot ? <EvidenceImage id={shot.id} /> : null}
+                  {item.task?.evidence?.map((shot) => (
+                    <EvidenceImage key={shot.id} id={shot.id} />
+                  ))}
                   <div className="actions">
                     <button className="btn ok" onClick={() => api.approve(item.id).then(refresh)}>
                       Approva
@@ -297,7 +298,9 @@ export default function App() {
                 <div>
                   <div>{task.goal}</div>
                   <div className="small">{task.capability}</div>
-                  {task.evidence[0] ? <EvidenceImage id={task.evidence[0].id} /> : null}
+                  {task.evidence.map((shot) => (
+                    <EvidenceImage key={shot.id} id={shot.id} />
+                  ))}
                 </div>
                 <span className={`pill ${task.status} ${task.risk}`}>{task.status}</span>
               </div>

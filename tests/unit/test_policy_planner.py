@@ -33,7 +33,24 @@ def test_invalid_yaml_rejected():
         pass
 
 
-def test_planner_notepad_and_invoice():
+def test_planner_routes_invoice_to_pc_fatture_with_range():
+    plan = plan_deterministic(
+        "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera"
+    )
+    assert plan.ok
+    task = plan.tasks[0]
+    assert task.capability == "invoice_prepare_demo"
+    assert task.args["client_name"] == "Andrea Gadducci"
+    assert task.args["description"] == "Manodopera"
+    assert task.args["net_eur"] == 37500.0
+    assert "PC-FATTURE" in plan.summary
+
+    english = plan_deterministic(
+        "make the invoice to Andrea Gadducci for 35-40 thousand euros of manpower"
+    )
+    assert english.ok
+    assert english.tasks[0].args["client_name"] == "Andrea Gadducci"
+    assert english.tasks[0].args["net_eur"] == 37500.0
     note = plan_deterministic("Apri Blocco Note e scrivi: Kreluna Agent operativo")
     assert note.ok
     assert note.tasks[0].capability == "notepad_write"

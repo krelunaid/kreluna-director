@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from kreluna_shared.agents import load_agent_roles
+from kreluna_shared.agents import load_agent_roles, preferred_role
 from kreluna_shared.planner import plan_deterministic
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,3 +38,5 @@ def test_payments_and_invoice_check_are_split():
     assert check.tasks[0].capability == "invoice_check"
     create = plan_deterministic("Prepara una fattura demo a Rossi per consulenza EUR 1500")
     assert create.tasks[0].capability == "invoice_prepare_demo"
+    assert preferred_role("invoice_prepare_demo") == "pc-fatture"
+    assert preferred_role("payment_prepare") == "pc-pagamenti"
