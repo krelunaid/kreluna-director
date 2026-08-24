@@ -20,31 +20,33 @@ BASE = f"https://github.com/astral-sh/python-build-standalone/releases/download/
 # Agent Mac must not pull sqlalchemy: greenlet only ships universal2 wheels,
 # which trigger "App basate su Intel non più supportate" on Apple Silicon.
 AGENT_PKGS = [
-    "httpx>=0.28.0",
-    "pydantic>=2.10.0",
-    "pyyaml>=6.0.2",
-    "pillow>=11.0.0",
-    "websockets>=14.0",
-    "cryptography>=44.0.0",
+    "httpx==0.28.1",
+    "pydantic==2.13.4",
+    "pyyaml==6.0.3",
+    "pillow==11.3.0",
+    "websockets==15.0.1",
+    "cryptography==50.0.0",
 ]
 
 COMMON_PKGS = [
-    "fastapi>=0.115.0",
-    "uvicorn>=0.32.0",
-    "httptools>=0.6.0",
-    "watchfiles>=1.0.0",
-    "sqlalchemy>=2.0.36",
-    "greenlet>=3.1.0",
-    "aiosqlite>=0.20.0",
-    "pydantic>=2.10.0",
-    "pydantic-settings>=2.6.0",
-    "pyyaml>=6.0.2",
-    "httpx>=0.28.0",
-    "cryptography>=44.0.0",
-    "pillow>=11.0.0",
-    "websockets>=14.0",
-    "python-multipart>=0.0.18",
-    "argon2-cffi>=23.1.0",
+    # Un installer deve essere riproducibile: i range aperti causavano ore di
+    # backtracking e potevano produrre due zip diversi per la stessa release.
+    "fastapi==0.128.8",
+    "uvicorn==0.39.0",
+    "httptools==0.8.0",
+    "watchfiles==1.1.1",
+    "sqlalchemy==2.0.52",
+    "greenlet==3.2.4",
+    "aiosqlite==0.22.1",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.11.0",
+    "pyyaml==6.0.3",
+    "httpx==0.28.1",
+    "cryptography==50.0.0",
+    "pillow==11.3.0",
+    "websockets==15.0.1",
+    "python-multipart==0.0.20",
+    "argon2-cffi==25.1.0",
 ]
 
 PLATFORMS = {
@@ -68,7 +70,7 @@ PLATFORMS = {
     "windows-x64": {
         "archive": f"cpython-{PY_VER}+{RELEASE}-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
         "pip_platforms": ["win_amd64"],
-        "extra": ["pywinauto>=0.6.8", "colorama>=0.4.6"],
+        "extra": ["pywinauto==0.6.9", "colorama==0.4.6"],
     },
 }
 

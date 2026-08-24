@@ -72,8 +72,13 @@ def health_info() -> dict | None:
 
 def notify(text: str, *, dialog: bool = False) -> None:
     if sys.platform == "darwin":
+        script = (
+            "on run argv\n"
+            'display notification (item 1 of argv) with title "Kreluna Director"\n'
+            "end run"
+        )
         subprocess.run(
-            ["osascript", "-e", f'display notification "{text}" with title "Kreluna Director"'],
+            ["osascript", "-e", script, text],
             check=False,
         )
         return
@@ -130,35 +135,39 @@ def _write_log(text: str) -> None:
         fh.write(line)
 
 
-def check_updates() -> None:
-    from kreluna_shared.crypto import b64d
-    from kreluna_shared.update import APP_VERSION, evaluate_update, verify_manifest
-
-    update_url = os.environ.get("KRELUNA_UPDATE_URL", f"{API_URL}/update/manifest")
+def _update_notification_due(version: str, *, now: float | None = None) -> bool:
+    stamp = SUPPORT / "last_update_notification.json"
+    current = now if now is not None else time.time()
     try:
-        with urllib.request.urlopen(f"{API_URL}/health", timeout=8) as response:
-            health = json.loads(response.read().decode())
-        with urllib.request.urlopen(update_url, timeout=8) as response:
-            data = json.loads(response.read().decode())
+        previous = json.loads(stamp.read_text(encoding="utf-8"))
+        if previous.get("version") == version and current - float(previous.get("at") or 0) < 86400:
+            return False
+    except Exception:
+        pass
+    stamp.write_text(json.dumps({"version": version, "at": current}), encoding="utf-8")
+    return True
+
+
+def check_updates() -> None:
+    from kreluna_shared.update import APP_VERSION
+
+    try:
+        with urllib.request.urlopen(f"{API_URL}/update/status", timeout=10) as response:
+            status = json.loads(response.read().decode())
     except Exception as exc:
         _write_log(f"Canale aggiornamenti non raggiungibile: {exc}")
         return
 
-    payload = data.get("manifest") if isinstance(data.get("manifest"), dict) else data
-    signature = str(data.get("signature") or "")
-    pubkey_b64 = os.environ.get("KRELUNA_UPDATE_PUBKEY") or str(health.get("server_pubkey") or "")
-    try:
-        public = b64d(pubkey_b64) if pubkey_b64 else b""
-    except Exception:
-        public = b""
-    if not public or not signature or not verify_manifest(public, payload, signature):
-        _write_log("Manifest aggiornamenti non valido: ignorato.")
+    latest = str(status.get("latest_version") or "")
+    if status.get("available") is True and latest and _update_notification_due(latest):
+        notify(
+            f"È disponibile Kreluna Director {latest}. Apri Kreluna per aggiornare.",
+            dialog=True,
+        )
+        _write_log(f"Aggiornamento segnalato: {latest}")
         return
-
-    message = evaluate_update(payload, APP_VERSION)
-    if message:
-        notify(message, dialog=True)
-        _write_log(f"Aggiornamento segnalato: {payload.get('version')}")
+    if status.get("state") == "unavailable":
+        _write_log("Canale aggiornamenti temporaneamente non raggiungibile.")
         return
     _write_log(f"Versione attuale {APP_VERSION}: nessun aggiornamento.")
 

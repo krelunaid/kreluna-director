@@ -20,6 +20,7 @@ from app.services.ai import check_ai_health, save_selected_provider, selected_pr
 from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
 from app.services.registry import hub, mark_offline_stale, requeue_device_tasks
+from app.services.updates import latest_update_status
 
 router = APIRouter()
 
@@ -64,6 +65,11 @@ async def update_manifest() -> dict:
         "signature": sign_manifest(settings.director_signing_seed, payload),
         "algorithm": "ed25519",
     }
+
+
+@router.get("/update/status")
+async def update_status() -> dict:
+    return await latest_update_status()
 
 
 @router.get("/ready")

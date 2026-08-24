@@ -34,8 +34,6 @@ export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/director-api:$RO
 export DIRECTOR_DATABASE_URL="sqlite+aiosqlite:///$SUPPORT/data/kreluna.db"
 export DIRECTOR_EVIDENCE_DIR="$SUPPORT/data/evidence"
 export KRELUNA_DIRECTOR_URL="http://127.0.0.1:8080"
-export KRELUNA_UPDATE_URL="${KRELUNA_UPDATE_URL:-http://127.0.0.1:8080/update/manifest}"
-
 notify "Apro Kreluna Director…"
 cd "$ROOT"
 exec "$PYTHON" "$ROOT/apps/director-desktop/kreluna_desktop.py"

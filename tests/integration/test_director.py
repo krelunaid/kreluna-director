@@ -486,7 +486,7 @@ async def test_evidence_tenant_isolation_and_retention(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_ready_viewer_and_billing(client: AsyncClient):
+async def test_ready_viewer_and_billing(client: AsyncClient, monkeypatch):
     import hashlib
     import hmac
     import json
@@ -503,6 +503,21 @@ async def test_ready_viewer_and_billing(client: AsyncClient):
 
     assert body["manifest"]["version"] == APP_VERSION
     assert verify_manifest(b64d(health.json()["server_pubkey"]), body["manifest"], body["signature"])
+
+    async def fake_update_status():
+        return {
+            "state": "available",
+            "available": True,
+            "current_version": APP_VERSION,
+            "latest_version": "9.0.0",
+            "notes": "Aggiornamento di prova",
+            "download_url": "https://github.com/krelunaid/kreluna-director/releases/latest",
+        }
+
+    monkeypatch.setattr("app.routers.core.latest_update_status", fake_update_status)
+    update = await client.get("/update/status")
+    assert update.status_code == 200
+    assert update.json()["latest_version"] == "9.0.0"
     viewer = await login(client, "viewer@studio.demo")
     denied = await client.post("/chat", headers=auth(viewer), json={"message": "ciao"})
     assert denied.status_code == 403

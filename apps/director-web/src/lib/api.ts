@@ -71,6 +71,19 @@ export type AIProviderOption = {
   configured: boolean;
 };
 
+export type UpdateStatus = {
+  state: "available" | "current" | "unavailable";
+  available: boolean;
+  current_version: string;
+  latest_version: string;
+  notes: string;
+  platform: "macos" | "windows" | "unknown";
+  download_url: string;
+  checksum_url: string;
+  release_url: string;
+  published_at: string;
+};
+
 const TOKEN_KEY = "kreluna.token";
 
 export function token(): string | null {
@@ -108,6 +121,7 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   health: () => request<{ ok: boolean; version: string }>("/health"),
+  updateStatus: () => request<UpdateStatus>("/update/status"),
   updateManifest: () =>
     request<{ manifest: { version: string; notes: string }; signature: string }>("/update/manifest"),
   me: () => request<{ name: string; email: string; role: string; license_state: string }>("/me"),

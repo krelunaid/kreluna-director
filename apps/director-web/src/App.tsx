@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Agent, AIProviderOption, api, Approval, Overview, setToken, Task, token } from "./lib/api";
+import { Agent, AIProviderOption, api, Approval, Overview, setToken, Task, token, UpdateStatus } from "./lib/api";
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
 
@@ -28,6 +28,17 @@ const TASK_LABEL: Record<string, string> = {
   queued: "in attesa", assigned: "sul PC", running: "in corso", waiting_approval: "da approvare",
   completed: "fatto", failed: "errore", cancelled: "annullato", blocked: "bloccato",
 };
+
+const UPDATE_REMINDER_KEY = "kreluna.update.reminder";
+
+function updateReminderExpired(version: string): boolean {
+  try {
+    const value = JSON.parse(localStorage.getItem(UPDATE_REMINDER_KEY) || "{}");
+    return value.version !== version || Number(value.until || 0) <= Date.now();
+  } catch {
+    return true;
+  }
+}
 
 function label(map: Record<string, string>, value: string): string {
   return map[value] || value.replace(/_/g, " ");
@@ -65,7 +76,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
   const [version, setVersion] = useState("");
-  const [updateNote, setUpdateNote] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [updateOpen, setUpdateOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
   const [activeNav, setActiveNav] = useState("dashboard");
@@ -79,13 +91,12 @@ export default function App() {
   }
 
   useEffect(() => {
-    api.health().then((health) => {
+    Promise.all([api.health(), api.updateStatus().catch(() => null)]).then(([health, status]) => {
       setVersion(health.version);
-      return api.updateManifest().then((data) => ({ health, data }));
-    }).then((result) => {
-      if (!result) return;
-      const remote = result.data.manifest?.version;
-      if (remote && remote !== result.health.version) setUpdateNote(`Aggiornamento ${remote} disponibile`);
+      if (status?.available) {
+        setUpdateStatus(status);
+        setUpdateOpen(updateReminderExpired(status.latest_version));
+      }
     }).catch(() => undefined);
   }, []);
 
@@ -142,6 +153,23 @@ export default function App() {
     window.setTimeout(() => document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 0);
   }
 
+  function remindUpdateLater() {
+    if (updateStatus) {
+      localStorage.setItem(UPDATE_REMINDER_KEY, JSON.stringify({
+        version: updateStatus.latest_version,
+        until: Date.now() + 24 * 60 * 60 * 1000,
+      }));
+    }
+    setUpdateOpen(false);
+  }
+
+  function downloadUpdate() {
+    if (!updateStatus) return;
+    const url = updateStatus.download_url || updateStatus.release_url;
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    setUpdateOpen(false);
+  }
+
   if (!ready) {
     return <div className="login"><div className="login-card">
       <div className="orb listen login-orb" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
@@ -162,7 +190,7 @@ export default function App() {
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
-        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.8"}</p>
+        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.9"}</p>
           <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => goTo("ai-settings")}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : " · da configurare"}</button>
         </div>
       </div>
@@ -174,7 +202,7 @@ export default function App() {
         <Metric icon="?" label="ERRORI" value={overview?.active_errors ?? 0} note="Da risolvere" tone="red" />
       </div>
       <div className="orbit-art" aria-hidden="true"><span className="orbit-line orbit-one" /><span className="orbit-line orbit-two" /><span className="orbit-line orbit-three" /><span className="orbit-planet"><i /></span></div>
-      <div className="header-tools"><button className="approval-shortcut" onClick={() => goTo("approvals")}>Da approvare ({pending.length})</button><button className="notification" aria-label="Notifiche">♧{activeErrors.length ? <i /> : null}</button><button className="avatar" aria-label="Profilo">AR</button></div>
+      <div className="header-tools"><button className="approval-shortcut" onClick={() => goTo("approvals")}>Da approvare ({pending.length})</button><button className="notification" aria-label="Notifiche" onClick={() => updateStatus?.available ? setUpdateOpen(true) : goTo("errors")}>♧{activeErrors.length || updateStatus?.available ? <i /> : null}</button><button className="avatar" aria-label="Profilo">AR</button></div>
     </header>
 
     <div className="cockpit-body">
@@ -234,7 +262,16 @@ export default function App() {
     <footer className="cockpit-footer"><span>◉&nbsp; Sistema: macOS</span><span>▣&nbsp; Host: questo Mac</span><span>♙&nbsp; Utente: {name}</span><span>◷&nbsp; Sessione attiva</span><span className={aiConnected ? "healthy" : "warning"}>●&nbsp; {aiConnected ? "Tutti i sistemi operativi" : `${providerLabel} da configurare`}</span></footer>
     {confirmKill ? <div className="kill-confirm" role="dialog" aria-modal="true" aria-label="Conferma stop"><div><h2>Fermare tutti gli Agent?</h2><p>I lavori in corso torneranno in attesa.</p><button onClick={() => setConfirmKill(false)}>Annulla</button><button className="danger" onClick={async () => { await api.kill(); setConfirmKill(false); await refresh(); }}>Conferma stop</button></div></div> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>
-    {updateNote ? <div className="update-note">{updateNote}</div> : null}
+    {updateStatus?.available && !updateOpen ? <button className="update-note" onClick={() => setUpdateOpen(true)}>↑ Kreluna {updateStatus.latest_version} disponibile</button> : null}
+    {updateOpen && updateStatus ? <div className="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><div className="update-card">
+      <div className="update-orb" aria-hidden="true">↑</div>
+      <span className="update-eyebrow">AGGIORNAMENTO SOFTWARE</span>
+      <h2 id="update-title">Kreluna {updateStatus.latest_version} è disponibile</h2>
+      <p>Ora stai usando la versione {updateStatus.current_version}. I dati dello studio e la configurazione restano al loro posto.</p>
+      {updateStatus.notes ? <div className="update-notes"><strong>Novità</strong><span>{updateStatus.notes}</span></div> : null}
+      <div className="update-actions"><button onClick={remindUpdateLater}>Ricordamelo dopo</button><button className="primary" onClick={downloadUpdate}>Scarica aggiornamento</button></div>
+      <small>Il download parte solo dopo il tuo clic dalla pagina ufficiale Kreluna.</small>
+    </div></div> : null}
     {lightbox ? <button className="lightbox" onClick={() => setLightbox(null)}><img src={lightbox} alt="Schermata del PC" /></button> : null}
   </div>;
 }

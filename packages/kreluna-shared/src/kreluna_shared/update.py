@@ -2,10 +2,19 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from typing import Any
+from urllib.parse import urlparse
 
-APP_VERSION = "0.5.8"
+APP_VERSION = "0.5.9"
 STAMP_NAME = "installed_version"
+DEFAULT_UPDATE_API = "https://api.github.com/repos/krelunaid/kreluna-director/releases/latest"
+DEFAULT_RELEASE_PAGE = "https://github.com/krelunaid/kreluna-director/releases/latest"
+RELEASE_FILENAMES = {
+    "macos": "Kreluna-Director-Mac.zip",
+    "windows": "Kreluna-Director-Windows.zip",
+}
+TRUSTED_RELEASE_HOSTS = {"github.com", "api.github.com", "objects.githubusercontent.com"}
 
 
 def version_tuple(value: str) -> tuple[int, ...]:
@@ -18,6 +27,82 @@ def version_tuple(value: str) -> tuple[int, ...]:
 
 def is_newer(remote: str, local: str = APP_VERSION) -> bool:
     return version_tuple(remote) > version_tuple(local)
+
+
+def platform_key(value: str | None = None) -> str:
+    current = (value or sys.platform).lower()
+    if current.startswith(("darwin", "macos")):
+        return "macos"
+    if current.startswith(("win", "windows")):
+        return "windows"
+    return "unknown"
+
+
+def trusted_release_url(value: Any) -> str:
+    url = str(value or "").strip()
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return ""
+    if parsed.scheme != "https" or (parsed.hostname or "").lower() not in TRUSTED_RELEASE_HOSTS:
+        return ""
+    return url
+
+
+def release_status(
+    release: dict[str, Any],
+    local: str = APP_VERSION,
+    platform: str | None = None,
+) -> dict[str, Any]:
+    """Converte una GitHub Release nel solo stato sicuro mostrato dalla UI."""
+
+    latest = str(release.get("tag_name") or release.get("version") or "").strip().lstrip("vV")
+    system = platform_key(platform)
+    release_url = trusted_release_url(release.get("html_url")) or DEFAULT_RELEASE_PAGE
+    filename = RELEASE_FILENAMES.get(system, "")
+    download_url = ""
+    checksum_url = ""
+    assets = release.get("assets")
+    if isinstance(assets, list):
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            name = str(asset.get("name") or "")
+            url = trusted_release_url(asset.get("browser_download_url"))
+            if name == filename:
+                download_url = url
+            elif filename and name == f"{filename}.sha256":
+                checksum_url = url
+    notes = str(release.get("body") or release.get("notes") or "").strip()[:4000]
+    ignored = bool(release.get("draft")) or bool(release.get("prerelease"))
+    available = bool(latest and not ignored and is_newer(latest, local))
+    return {
+        "state": "available" if available else "current",
+        "available": available,
+        "current_version": local,
+        "latest_version": latest or local,
+        "notes": notes,
+        "platform": system,
+        "download_url": download_url or (release_url if available else ""),
+        "checksum_url": checksum_url,
+        "release_url": release_url,
+        "published_at": str(release.get("published_at") or ""),
+    }
+
+
+def unavailable_status(local: str = APP_VERSION, platform: str | None = None) -> dict[str, Any]:
+    return {
+        "state": "unavailable",
+        "available": False,
+        "current_version": local,
+        "latest_version": local,
+        "notes": "",
+        "platform": platform_key(platform),
+        "download_url": "",
+        "checksum_url": "",
+        "release_url": DEFAULT_RELEASE_PAGE,
+        "published_at": "",
+    }
 
 
 def _canonical(payload: dict[str, Any]) -> bytes:
@@ -69,7 +154,7 @@ def evaluate_update(manifest: dict[str, Any], local: str = APP_VERSION) -> str |
     extra = f" {notes}" if notes else ""
     return (
         f"È disponibile la versione {remote} (ora hai {local}).{extra} "
-        "Chiudi Kreluna e reinstalla lo zip nuovo: i dati dello studio restano."
+        "Apri Kreluna e scegli Scarica e aggiorna: i dati dello studio restano."
     )
 
 

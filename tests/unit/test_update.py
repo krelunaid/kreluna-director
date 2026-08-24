@@ -6,8 +6,11 @@ from kreluna_shared.update import (
     evaluate_update,
     is_newer,
     manifest_payload,
+    release_status,
     runtime_needs_refresh,
     sign_manifest,
+    trusted_release_url,
+    unavailable_status,
     verify_manifest,
     write_installed_version,
 )
@@ -38,7 +41,60 @@ def test_evaluate_update_same_version():
     message = evaluate_update({"version": "9.0.0", "notes": "test"})
     assert message is not None
     assert "9.0.0" in message
-    assert "reinstalla" in message.lower()
+    assert "scarica e aggiorna" in message.lower()
+
+
+def test_github_release_status_selects_the_right_installer():
+    release = {
+        "tag_name": "v9.0.0",
+        "html_url": "https://github.com/krelunaid/kreluna-director/releases/tag/v9.0.0",
+        "body": "Nuova dashboard",
+        "published_at": "2026-08-25T10:00:00Z",
+        "draft": False,
+        "prerelease": False,
+        "assets": [
+            {
+                "name": "Kreluna-Director-Mac.zip",
+                "browser_download_url": (
+                    "https://github.com/krelunaid/kreluna-director/releases/download/"
+                    "v9.0.0/Kreluna-Director-Mac.zip"
+                ),
+            },
+            {
+                "name": "Kreluna-Director-Windows.zip",
+                "browser_download_url": (
+                    "https://github.com/krelunaid/kreluna-director/releases/download/"
+                    "v9.0.0/Kreluna-Director-Windows.zip"
+                ),
+            },
+        ],
+    }
+    mac = release_status(release, local="0.5.9", platform="darwin")
+    windows = release_status(release, local="0.5.9", platform="win32")
+    assert mac["available"] is True
+    assert mac["latest_version"] == "9.0.0"
+    assert mac["download_url"].endswith("Kreluna-Director-Mac.zip")
+    assert windows["download_url"].endswith("Kreluna-Director-Windows.zip")
+
+
+def test_release_status_ignores_unsafe_links_and_prereleases():
+    release = {
+        "tag_name": "v9.0.0",
+        "html_url": "javascript:alert(1)",
+        "prerelease": True,
+        "assets": [
+            {
+                "name": "Kreluna-Director-Mac.zip",
+                "browser_download_url": "https://example.invalid/Kreluna-Director-Mac.zip",
+            }
+        ],
+    }
+    result = release_status(release, local="0.5.9", platform="darwin")
+    assert result["available"] is False
+    assert result["download_url"] == ""
+    assert result["release_url"].startswith("https://github.com/")
+    assert trusted_release_url("https://example.invalid/file.zip") == ""
+    assert unavailable_status("0.5.9")["state"] == "unavailable"
 
 
 def test_runtime_stamp(tmp_path):
