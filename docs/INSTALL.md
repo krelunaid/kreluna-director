@@ -1,6 +1,6 @@
 # Installa Kreluna Director
 
-App per **Mac** e **Windows**. Non è un sito da telefono.
+App per **Mac** e **Windows**. Non è un sito da telefono. **Non serve Python.**
 
 ## Mac
 
@@ -8,7 +8,6 @@ App per **Mac** e **Windows**. Non è un sito da telefono.
 2. Doppio clic su **Installa Kreluna.command**
    (oppure trascina `Kreluna Director.app` in Applicazioni)
 3. Se macOS blocca: clic destro → **Apri** → **Apri**
-4. Serve **Python 3.11+**: https://www.python.org/downloads/macos/
 
 Dettagli: `docs/MAC.md`.
 
@@ -18,7 +17,6 @@ Dettagli: `docs/MAC.md`.
 2. Doppio clic su **Installa.bat**
    Se Windows avvisa: Altre informazioni → Esegui comunque
 3. Sul desktop compare **Kreluna Director**
-4. Serve **Python 3.11+** con PATH: https://www.python.org/downloads/windows/
 
 Dettagli: `docs/WINDOWS.md`.
 
@@ -30,34 +28,15 @@ Dettagli: `docs/WINDOWS.md`.
 
 ## Aggiornamenti (anche se è già installata)
 
-Quando facciamo un aggiornamento insieme esce un **nuovo zip**. Non serve disinstallare.
-
 1. **Chiudi** Kreluna
-2. Apri il zip nuovo
+2. Apri lo zip nuovo
 3. Stesso installatore di prima
-   - Mac: **Installa Kreluna.command**
-   - Windows: **Installa.bat**
 4. Riapri Kreluna
 
-Il programma viene sostituito. **I dati restano** (database, evidenze, login).  
-Se la versione è cambiata, alla prima apertura Kreluna aggiorna da sola i componenti Python.
-
-Kreluna **non scarica** lo zip da internet. Sei tu a installare il file nuovo.
-
-Quando gli zip saranno su un indirizzo pubblico, nel `.env`:
-
-```
-KRELUNA_UPDATE_URL=https://tuo-canale/update/manifest
-KRELUNA_UPDATE_MAC_URL=https://…/Kreluna-Director-Mac.zip
-KRELUNA_UPDATE_WIN_URL=https://…/Kreluna-Director-Windows.zip
-KRELUNA_UPDATE_MAC_SHA256=…
-KRELUNA_UPDATE_WIN_SHA256=…
-```
+Il programma viene sostituito. **I dati restano.**
 
 Ricreare gli zip:
 
 ```bash
 make installers
 ```
-
-Escono in `dist-macos/` e `dist-windows/`.

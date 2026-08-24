@@ -22,8 +22,8 @@ Legenda: PASS = implementato e testato. SANDBOX = adapter locale, non software f
 | 15 | Hardening grant | PASS | Ed25519, nonce, device-bound |
 | 16 | Audit / retention | PASS | append-only, redaction, retention |
 | 17 | Adapter gestionale | SANDBOX | Fatture sandbox locale, mai Agenzia reale |
-| 18 | Production readiness | NOT-CERTIFIED | zip Mac/Windows, /ready, canale update; no firma codice / pentest |
+| 18 | Production readiness | NOT-CERTIFIED | zip Mac/Windows con Python dentro; no firma codice / pentest |
 
 Fuori perimetro voluto: invio F24/PEC/pagamenti reali, portali Agenzia, mouse libero del modello.
 
-Versione 0.4.1 — reinstallare lo zip nuovo sopra l’app già installata; i dati restano.
+Versione 0.5.0 — programma installabile: Python è già dentro, lo studio non lo installa.

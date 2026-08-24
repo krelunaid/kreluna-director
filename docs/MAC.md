@@ -1,6 +1,8 @@
 # Kreluna Director sul Mac
 
-Non è un sito da iPhone. È un’**app per computer Mac** (macOS).
+Non è un sito da iPhone. È un’**app per computer Mac**.
+
+**Non serve installare Python.** È già dentro il programma.
 
 ## Installazione
 
@@ -9,11 +11,6 @@ Non è un sito da iPhone. È un’**app per computer Mac** (macOS).
 3. Doppio clic su **Installa Kreluna.command**
    - oppure trascina `Kreluna Director.app` in **Applicazioni**
 4. Se macOS blocca l’app: clic destro → **Apri** → **Apri**
-5. La prima volta serve **Python 3.11+**: [python.org/downloads/macos](https://www.python.org/downloads/macos/)
-
-## Aggiornamento (già installata)
-
-Chiudi Kreluna, poi di nuovo **Installa Kreluna.command** sullo zip nuovo. Sostituisce l’app in Applicazioni. I dati restano in `~/Library/Application Support/KrelunaDirector`.
 
 ## Accesso
 
@@ -21,18 +18,12 @@ Chiudi Kreluna, poi di nuovo **Installa Kreluna.command** sullo zip nuovo. Sosti
 - Email: `andrea@studio.demo`
 - Password: `demo`
 
-## Cosa vedi
+## Aggiornamento (già installata)
 
-Chat con il Director, il Mac come PC-studio, fattura demo, screenshot, Approva/Rifiuta.
-
-Non invia F24 veri. Per i gestionali italiani dello studio serve in seguito un PC Windows.
+Chiudi Kreluna, poi di nuovo **Installa Kreluna.command** sullo zip nuovo. I dati restano.
 
 ## Ricreare lo zip
 
 ```bash
 make mac
 ```
-
-Il file esce in `dist-macos/Kreluna-Director-Mac.zip`.
-
-Istruzioni complete Mac + Windows: `docs/INSTALL.md`.

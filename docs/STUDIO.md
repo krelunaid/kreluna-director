@@ -12,4 +12,4 @@ Non registri il monitor. Non insegni i click. I programmi si collegano dopo, un 
 
 Login demo: `andrea@studio.demo` / `demo`
 
-Installazione sul computer: `docs/INSTALL.md` (zip Mac e zip Windows).
+Installazione sul computer: `docs/INSTALL.md` (zip Mac e zip Windows, senza installare Python).

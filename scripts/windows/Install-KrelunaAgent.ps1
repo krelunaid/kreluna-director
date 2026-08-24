@@ -32,6 +32,11 @@ if (Test-Path $App) { Remove-Item -Recurse -Force $App }
 New-Item -ItemType Directory -Force -Path $App | Out-Null
 Copy-Item -Path (Join-Path $Source "*") -Destination $App -Recurse -Force
 
+$Py = Join-Path $App "runtime\python.exe"
+if (-not (Test-Path $Py)) {
+    throw "Manca il runtime di Kreluna nello zip. Usa lo zip Windows completo."
+}
+
 $Launcher = @"
 @echo off
 setlocal
@@ -43,14 +48,10 @@ set KRELUNA_ENROLLMENT_CODE=$EnrollCode
 set KRELUNA_AGENT_ID=$Role
 set KRELUNA_AGENT_DISPLAY_NAME=$Role
 set KRELUNA_AGENT_DATA_DIR=%INSTALL%\data
-if not exist "%INSTALL%\venv\Scripts\python.exe" (
-  py -3 -m venv "%INSTALL%\venv" 2>nul || python -m venv "%INSTALL%\venv"
-  "%INSTALL%\venv\Scripts\python.exe" -m pip install --upgrade pip
-  "%INSTALL%\venv\Scripts\python.exe" -m pip install -e "%ROOT%"
-)
+set PYTHONHOME=%ROOT%runtime
 set PYTHONPATH=%ROOT%packages\kreluna-shared\src;%ROOT%apps\kreluna-agent
 cd /d "%ROOT%"
-"%INSTALL%\venv\Scripts\python.exe" -m agent.main
+"%ROOT%runtime\python.exe" -m agent.main
 "@
 Set-Content -Path (Join-Path $Install "Avvia-Agent.bat") -Value $Launcher -Encoding ASCII
 

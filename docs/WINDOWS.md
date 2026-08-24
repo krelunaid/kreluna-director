@@ -2,26 +2,26 @@
 
 Non è un sito da telefono. È un’**app per computer Windows**.
 
+**Non serve installare Python.** È già dentro il programma.
+
 ## Installazione
 
 1. Scarica `Kreluna-Director-Windows.zip`
 2. Estrailo (tasto destro → Estrai tutto)
 3. Doppio clic su **Installa.bat**
 4. Se Windows blocca: **Altre informazioni** → **Esegui comunque**
-5. La prima volta serve **Python 3.11+**: [python.org/downloads/windows](https://www.python.org/downloads/windows/)  
-   Spunta **Add python.exe to PATH**.
 
 L’app va in `%LOCALAPPDATA%\KrelunaDirector` (cartella utente, senza amministratore). Sul desktop compare il collegamento.
-
-## Aggiornamento (già installata)
-
-Chiudi Kreluna, poi di nuovo **Installa.bat** sullo zip nuovo. Sostituisce il programma, lascia la cartella `data`.
 
 ## Accesso
 
 - Indirizzo (si apre da sola): `http://127.0.0.1:8080`
 - Email: `andrea@studio.demo`
 - Password: `demo`
+
+## Aggiornamento (già installata)
+
+Chiudi Kreluna, poi di nuovo **Installa.bat** sullo zip nuovo. Sostituisce il programma, lascia la cartella `data`.
 
 ## Agent su un altro PC dello studio
 
@@ -38,5 +38,3 @@ Un ruolo per PC. I programmi gestionali restano **da definire**.
 ```bash
 make windows
 ```
-
-Il file esce in `dist-windows/Kreluna-Director-Windows.zip`.

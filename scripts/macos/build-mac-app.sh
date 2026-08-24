@@ -18,6 +18,10 @@ chmod +x "$APP/Contents/MacOS/Kreluna"
 
 bash "$ROOT/scripts/lib/copy-app-tree.sh" "$RES"
 
+echo "Includo Python nell'app (non serve installarlo)…"
+python3 "$ROOT/scripts/lib/bundle_python.py" macos-arm64 "$APP/Contents/Resources/python-arm64"
+python3 "$ROOT/scripts/lib/bundle_python.py" macos-x64 "$APP/Contents/Resources/python-x64"
+
 python3 - "$OUT" <<'PY'
 import sys
 from pathlib import Path
@@ -49,14 +53,12 @@ KRELUNA DIRECTOR PER MAC
    email:    andrea@studio.demo
    password: demo
 
-Serve Python 3.11 o più nuovo (https://www.python.org/downloads/macos/).
-La prima apertura scarica i componenti e può richiedere uno o due minuti.
+Non serve installare Python. È già dentro Kreluna.
 
 Questa è la demo: fattura finta, non F24 veri.
 
-Aggiornamenti: all'avvio Kreluna legge /update/manifest e ti avvisa.
-Se è già installata: chiudi Kreluna e rilancia Installa Kreluna.command.
-I dati restano. Non scarica file da sola.
+Aggiornamenti: chiudi Kreluna e rilancia Installa Kreluna.command sullo zip nuovo.
+I dati restano.
 TXT
 
 cat > "$OUT/Installa Kreluna.command" <<'TXT'

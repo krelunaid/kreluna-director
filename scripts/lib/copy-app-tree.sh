@@ -9,8 +9,10 @@ tar -C "$ROOT" -cf - \
   --exclude '.venv' \
   --exclude 'node_modules' \
   --exclude 'data' \
+  --exclude '.cache' \
   --exclude 'dist-macos' \
   --exclude 'dist-windows' \
+  --exclude '__pycache__' \
   --exclude '.pytest_cache' \
   --exclude '.cursor' \
   --exclude '*.pyc' \

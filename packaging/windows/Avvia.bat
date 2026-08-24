@@ -9,24 +9,19 @@ if not exist "%ROOT%apps\director-desktop\kreluna_desktop.py" (
 )
 
 if not exist "%ROOT%apps\director-desktop\kreluna_desktop.py" (
-  echo Non trovo Kreluna. Esegui prima Installa.bat
+  echo Non trovo Kreluna. Esegui Installa.bat dallo zip.
   pause
   exit /b 1
 )
 
-echo Controllo Kreluna...
-where py >nul 2>nul
-if %ERRORLEVEL%==0 (
-  py -3 "%ROOT%apps\director-desktop\ensure_runtime.py" "%ROOT%" "%INSTALL%" "%INSTALL%\venv"
-) else (
-  python "%ROOT%apps\director-desktop\ensure_runtime.py" "%ROOT%" "%INSTALL%" "%INSTALL%\venv"
-)
-if errorlevel 1 (
-  echo Serve Python 3.11 o piu nuovo: https://www.python.org/downloads/windows/
+set "PY=%ROOT%runtime\python.exe"
+if not exist "%PY%" (
+  echo Kreluna e' incompleta. Reinstalla dallo zip nuovo.
   pause
   exit /b 1
 )
 
+set "PYTHONHOME=%ROOT%runtime"
 set "PYTHONPATH=%ROOT%packages\kreluna-shared\src;%ROOT%apps\director-api;%ROOT%apps\kreluna-agent;%ROOT%apps\director-desktop"
 set "DIRECTOR_DATABASE_URL=sqlite+aiosqlite:///%INSTALL%\data\kreluna.db"
 set "DIRECTOR_EVIDENCE_DIR=%INSTALL%\data\evidence"
@@ -38,4 +33,4 @@ set "KRELUNA_AGENT_ID=pc-studio"
 set "KRELUNA_AGENT_DISPLAY_NAME=PC-STUDIO"
 
 cd /d "%ROOT%"
-"%INSTALL%\venv\Scripts\python.exe" "%ROOT%apps\director-desktop\kreluna_desktop.py"
+"%PY%" "%ROOT%apps\director-desktop\kreluna_desktop.py"

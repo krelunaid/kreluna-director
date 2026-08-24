@@ -18,3 +18,4 @@ apps/director-web/dist/
 .coverage
 dist-macos/
 dist-windows/
+.cache/

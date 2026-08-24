@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any
 
-APP_VERSION = "0.4.1"
+APP_VERSION = "0.5.0"
 STAMP_NAME = "installed_version"
 
 
@@ -29,7 +29,7 @@ def manifest_payload() -> dict[str, Any]:
         "version": APP_VERSION,
         "min_version": "0.3.0",
         "channel": os.environ.get("KRELUNA_UPDATE_CHANNEL", "stable"),
-        "notes": "Installer Mac e Windows. Collega gli URL degli zip per gli aggiornamenti.",
+        "notes": "Programma installabile Mac e Windows: Python è già dentro, non si installa a parte.",
         "packages": {
             "macos": {
                 "filename": "Kreluna-Director-Mac.zip",

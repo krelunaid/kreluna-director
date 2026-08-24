@@ -170,7 +170,7 @@ def main() -> int:
             thread.start()
             started_api = True
         if not wait_health():
-            notify("Kreluna non è partita. Serve Python 3.11 o più nuovo.", dialog=True)
+            notify("Kreluna non è partita. Reinstalla lo zip nuovo.", dialog=True)
             print("Kreluna: /health non risponde", file=sys.stderr)
             return 1
 

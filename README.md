@@ -9,6 +9,8 @@ Istruzioni: `docs/INSTALL.md`
 - Mac: `Kreluna-Director-Mac.zip` → **Installa Kreluna.command**
 - Windows: `Kreluna-Director-Windows.zip` → **Installa.bat**
 
+**Non serve installare Python.** È già dentro il programma.
+
 Login demo: `andrea@studio.demo` / `demo`
 
 Per ricreare gli zip:
