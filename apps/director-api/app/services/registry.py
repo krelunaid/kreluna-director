@@ -109,10 +109,9 @@ def score_agent(device: Device, capability: str, args: dict | None = None) -> in
     if device.presence == "offline" or device.killed or device.paused:
         return -10_000
     role = preferred_role(capability, args)
-    if role and device.agent_id != role:
-        # Un portale vero si apre solo sul PC che fa quel lavoro.
-        if capability == "portal_open":
-            return -10_000
+    # Un portale vero si apre solo sul PC che fa quel lavoro.
+    if capability == "portal_open" and role and device.agent_id != role:
+        return -10_000
     score = 100
     if not device.busy:
         score += 30
