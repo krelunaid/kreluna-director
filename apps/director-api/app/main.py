@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -17,6 +18,12 @@ from app.routers.core import router as core_router
 from app.routers.work import router as work_router
 from app.routers.ws import router as ws_router
 from app.seed import seed_if_empty
+from app.services.housekeeping import (
+    close_expired_approvals,
+    heal_stopped_tasks,
+    housekeeping_loop,
+    purge_old_evidence,
+)
 
 
 @asynccontextmanager
@@ -27,7 +34,17 @@ async def lifespan(_app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     async with SessionLocal() as session:
         await seed_if_empty(session)
-    yield
+        await purge_old_evidence(session)
+        await heal_stopped_tasks(session)
+        await close_expired_approvals(session)
+        await session.commit()
+    keeper = asyncio.create_task(housekeeping_loop(SessionLocal))
+    try:
+        yield
+    finally:
+        keeper.cancel()
+        with suppress(asyncio.CancelledError):
+            await keeper
 
 
 app = FastAPI(title="Kreluna Director", version=APP_VERSION, lifespan=lifespan)
