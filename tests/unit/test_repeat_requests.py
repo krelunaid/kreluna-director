@@ -24,8 +24,10 @@ async def session():
         yield opened
 
 
-async def live_count(session, capability: str) -> int:
-    rows = (await session.execute(select(Task).where(Task.capability == capability))).scalars().all()
+async def count_for(session, capability: str, goal: str) -> int:
+    rows = (
+        await session.execute(select(Task).where(Task.capability == capability, Task.goal == goal))
+    ).scalars().all()
     return len(rows)
 
 
@@ -34,7 +36,7 @@ async def test_asking_twice_while_waiting_does_not_duplicate(session):
     first = await enqueue_planned(session, tenant_id=DEMO_TENANT_ID, user_id=DEMO_USER_ID, planned=visura())
     again = await enqueue_planned(session, tenant_id=DEMO_TENANT_ID, user_id=DEMO_USER_ID, planned=visura())
     assert again.id == first.id
-    assert await live_count(session, "visure_prepare") == 1
+    assert await count_for(session, "visure_prepare", first.goal) == 1
 
 
 @pytest.mark.asyncio

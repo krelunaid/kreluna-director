@@ -90,6 +90,11 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
     if body.ok:
         task.status = "completed"
         task.error = None
+    elif (body.error or "") in {"AGENT_KILLED", "AGENT_PAUSED"}:
+        # Il PC era fermo, non è un errore del lavoro: resta in coda per dopo il Riprendi.
+        task.status = "queued"
+        task.assigned_device_id = None
+        task.error = None
     else:
         task.status = "failed"
         task.error = body.error

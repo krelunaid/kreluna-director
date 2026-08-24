@@ -181,6 +181,64 @@ async def test_invoice_demo_and_cross_tenant(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient):
+    """Dopo Ferma il lavoro non si perde: torna in coda e riparte con Riprendi."""
+
+    token = await login(client)
+    async with SessionLocal() as session:
+        session.add(EnrollmentCode(tenant_id=DEMO_TENANT_ID, code="ONCE-FERMA", used=False))
+        await session.commit()
+    private, public = generate_device_keypair()
+    enrolled = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": "ONCE-FERMA",
+            "agent_id": "pc-ferma",
+            "hostname": "pc-ferma",
+            "public_key": b64e(public),
+            "capabilities": ["visure_prepare"],
+            "platform": "macos",
+        },
+    )
+    device_id = enrolled.json()["device_id"]
+    planned = await client.post(
+        "/chat",
+        headers=auth(token),
+        json={"message": "Prepara la visura per Verdi Luigi"},
+    )
+    task_id = planned.json()["tasks"][0]["id"]
+    async with SessionLocal() as session:
+        task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
+        task.assigned_device_id = device_id
+        task.status = "assigned"
+        await session.commit()
+
+    refused = await client.post(
+        "/agent/ingest",
+        json={
+            "device_id": device_id,
+            "task_id": task_id,
+            "signature": b64e(sign_bytes(private, task_id.encode())),
+            "ok": False,
+            "result": {},
+            "error": "AGENT_KILLED",
+            "evidence": [],
+        },
+    )
+    assert refused.status_code == 200
+    assert refused.json()["status"] == "queued"
+
+    async with SessionLocal() as session:
+        task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
+        assert task.status == "queued"
+        assert task.assigned_device_id is None
+        assert task.error is None
+
+    overview = await client.get("/overview", headers=auth(token))
+    assert overview.json()["errors"] == 0
+
+
+@pytest.mark.asyncio
 async def test_approval_token_single_use_and_kill(client: AsyncClient):
     token = await login(client)
     async with SessionLocal() as session:
