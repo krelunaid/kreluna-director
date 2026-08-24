@@ -3,16 +3,21 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from kreluna_shared.crypto import b64e, encrypt_bytes, generate_device_keypair, sha256_hex, sign_bytes
-from sqlalchemy import select
-
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.models import EnrollmentCode, Evidence, InvoiceDraft, Task, utcnow
 from app.routers.agent_io import purge_expired_evidence
 from app.seed import DEMO_TENANT_ID, OTHER_TENANT_ID, seed_if_empty
+from httpx import ASGITransport, AsyncClient
+from kreluna_shared.crypto import (
+    b64e,
+    encrypt_bytes,
+    generate_device_keypair,
+    sha256_hex,
+    sign_bytes,
+)
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -70,7 +75,7 @@ async def test_health_and_login(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_enrollment_replay_and_revoke(client: AsyncClient):
-    private, public = generate_device_keypair()
+    _private, public = generate_device_keypair()
     first = await client.post(
         "/enrollment/redeem",
         json={
@@ -178,6 +183,36 @@ async def test_invoice_demo_and_cross_tenant(client: AsyncClient):
         headers=auth(other),
     )
     assert stolen.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_the_error_counter_shows_today_not_forever(client: AsyncClient):
+    """Un errore di ieri resta nella lista, ma non tiene il contatore rosso."""
+
+    token = await login(client)
+    async with SessionLocal() as session:
+        session.add(
+            Task(
+                tenant_id=DEMO_TENANT_ID,
+                requested_by="22222222-2222-2222-2222-222222222222",
+                goal="Lavoro andato male la settimana scorsa",
+                capability="visure_prepare",
+                args_json="{}",
+                risk="medium",
+                status="failed",
+                error="Quel PC non sa fare questo lavoro.",
+                idempotency_key="errore-vecchio",
+                created_at=utcnow() - timedelta(days=8),
+            )
+        )
+        await session.commit()
+
+    overview = await client.get("/overview", headers=auth(token))
+    assert overview.json()["errors"] == 0
+
+    tasks = await client.get("/tasks", headers=auth(token))
+    stale = [t for t in tasks.json()["tasks"] if t["goal"].startswith("Lavoro andato male")]
+    assert stale and stale[0]["status"] == "failed", "l'errore vecchio resta visibile nella lista"
 
 
 @pytest.mark.asyncio

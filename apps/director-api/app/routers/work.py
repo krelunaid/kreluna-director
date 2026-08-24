@@ -441,7 +441,13 @@ async def overview(
         "tasks_today": len(tasks),
         "running": sum(1 for task in tasks if task.status in {"assigned", "running"}),
         "pending_approvals": len(pending),
-        "errors": sum(1 for task in tasks if task.status == "failed"),
+        # Salute di adesso, non la storia: un errore di ieri resta nella lista,
+        # ma non tiene il contatore rosso per sempre.
+        "errors": sum(
+            1
+            for task in tasks
+            if task.status == "failed" and task.created_at and as_utc(task.created_at) > utcnow() - timedelta(days=1)
+        ),
         "kill_armed": any(device.killed for device in devices),
         "ai_connected": settings.llm_ready,
         "ai_model": settings.kreluna_llm_model if settings.llm_ready else "",

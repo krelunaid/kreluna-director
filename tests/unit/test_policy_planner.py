@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 from kreluna_shared.capabilities import validate_capability_args
 from kreluna_shared.crypto import (
@@ -12,7 +13,6 @@ from kreluna_shared.crypto import (
 from kreluna_shared.planner import apply_policy, plan_deterministic
 from kreluna_shared.policy import load_policy, parse_policy_yaml
 from kreluna_shared.protocol import SignedGrant
-from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
 

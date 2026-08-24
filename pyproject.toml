@@ -49,3 +49,19 @@ pythonpath = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# Confini dove un errore non deve mai fermare il programma: l'Agent che riceve
+# un compito, il Director che parla a una socket morta, il lanciatore sul
+# desktop. Qui si cattura tutto di proposito e si riporta, non si esplode.
+"apps/kreluna-agent/agent/main.py" = ["BLE001"]
+"apps/kreluna-agent/agent/capabilities/notepad.py" = ["BLE001"]
+"apps/kreluna-agent/agent/tools/automation.py" = ["BLE001"]
+"apps/director-api/app/services/registry.py" = ["BLE001", "S112"]
+"apps/director-desktop/kreluna_desktop.py" = ["BLE001", "S110", "DTZ005"]
+"packages/kreluna-shared/src/kreluna_shared/crypto.py" = ["BLE001"]
+"packages/kreluna-shared/src/kreluna_shared/update.py" = ["BLE001"]
+"packages/kreluna-shared/src/kreluna_shared/planner.py" = ["BLE001"]
+# La policy rifiuta un file di configurazione sbagliato con ValueError, che è
+# quello che il resto del programma e i test si aspettano.
+"packages/kreluna-shared/src/kreluna_shared/policy.py" = ["TRY004"]

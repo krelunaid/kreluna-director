@@ -1,6 +1,6 @@
 from agent.tools.automation import prefer_method, safe_click
 from agent.tools.bounds import Bounds
-from agent.tools.vision_loop import ScreenObservation, unexpected_dialog, run_loop
+from agent.tools.vision_loop import ScreenObservation, run_loop, unexpected_dialog
 from kreluna_shared.adapters import DraftResult
 
 

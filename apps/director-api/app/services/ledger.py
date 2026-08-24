@@ -4,7 +4,7 @@ from app.models import InvoiceDraft, new_id
 
 
 def money_cents(value: float) -> int:
-    return int(round(value * 100))
+    return round(value * 100)
 
 
 def format_eur(cents: int) -> str:
@@ -13,7 +13,7 @@ def format_eur(cents: int) -> str:
 
 def create_draft(tenant_id: str, client_name: str, description: str, net_eur: float, vat_rate: float) -> InvoiceDraft:
     net = money_cents(net_eur)
-    vat = int(round(net * vat_rate))
+    vat = round(net * vat_rate)
     return InvoiceDraft(
         id=new_id(),
         tenant_id=tenant_id,

@@ -43,7 +43,7 @@ def _pointer(draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
 
 
 def _field(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], label: str, value: str, focus: bool) -> None:
-    x1, y1, x2, y2 = box
+    x1, y1, _x2, y2 = box
     draw.text((x1, y1 - 22), label, fill=(90, 96, 108), font=_font(13))
     draw.rounded_rectangle(box, radius=8, fill=WHITE, outline=GOLD if focus else (186, 180, 168), width=2 if focus else 1)
     draw.text((x1 + 12, y1 + 10), value, fill=INK, font=_font(16))
