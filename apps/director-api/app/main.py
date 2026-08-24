@@ -102,6 +102,7 @@ async def spa_fallback(full_path: str):
         "billing",
         "ready",
         "update",
+        "ai",
         "docs",
         "redoc",
         "openapi.json",

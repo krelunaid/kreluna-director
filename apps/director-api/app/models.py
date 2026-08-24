@@ -41,6 +41,14 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(200), default="")
 
 
+class AISelection(Base):
+    __tablename__ = "ai_selections"
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20))
+    updated_by: Mapped[str] = mapped_column(String(36))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class License(Base):
     __tablename__ = "licenses"
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)

@@ -209,10 +209,40 @@ async def test_the_error_counter_shows_today_not_forever(client: AsyncClient):
 
     overview = await client.get("/overview", headers=auth(token))
     assert overview.json()["errors"] == 0
+    assert overview.json()["active_errors"] == 0
+    assert overview.json()["historical_errors"] >= 1
 
     tasks = await client.get("/tasks", headers=auth(token))
     stale = [t for t in tasks.json()["tasks"] if t["goal"].startswith("Lavoro andato male")]
     assert stale and stale[0]["status"] == "failed", "l'errore vecchio resta visibile nella lista"
+    assert stale[0]["error_state"] == "historical"
+
+
+@pytest.mark.asyncio
+async def test_ai_provider_selection_is_persisted_per_studio(client: AsyncClient):
+    token = await login(client)
+    selected = await client.post(
+        "/ai/provider",
+        headers=auth(token),
+        json={"provider": "ollama"},
+    )
+    assert selected.status_code == 200
+    assert selected.json()["provider"] == "ollama"
+
+    providers = await client.get("/ai/providers", headers=auth(token))
+    assert providers.json()["selected"] == "ollama"
+    assert {item["provider"] for item in providers.json()["providers"]} == {
+        "grok",
+        "ollama",
+        "openai",
+    }
+
+    invalid = await client.post(
+        "/ai/provider",
+        headers=auth(token),
+        json={"provider": "sconosciuto"},
+    )
+    assert invalid.status_code == 400
 
 
 @pytest.mark.asyncio

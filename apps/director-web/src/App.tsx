@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Agent, api, Approval, Overview, setToken, Task, token } from "./lib/api";
+import { Agent, AIProviderOption, api, Approval, Overview, setToken, Task, token } from "./lib/api";
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
 
@@ -50,6 +50,7 @@ export default function App() {
   const [name, setName] = useState("Studio");
   const [error, setError] = useState("");
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [aiProviders, setAIProviders] = useState<AIProviderOption[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -70,8 +71,15 @@ export default function App() {
   const talkTimer = useRef<number>(0);
 
   async function refresh() {
-    const [over, ag, ts, ap] = await Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals()]);
+    const [over, ag, ts, ap, ai] = await Promise.all([
+      api.overview(),
+      api.agents(),
+      api.tasks(),
+      api.approvals(),
+      api.aiProviders(),
+    ]);
     setOverview(over);
+    setAIProviders(ai.providers);
     setAgents(ag.agents);
     setTasks(ts.tasks);
     setApprovals(ap.approvals);
@@ -176,6 +184,8 @@ export default function App() {
   }
 
   const recentTasks = tasks.slice(0, 12);
+  const activeErrors = tasks.filter((task) => task.error_state === "active");
+  const historicalErrors = tasks.filter((task) => task.error_state === "historical").slice(0, 5);
 
   if (!ready) {
     return (
@@ -216,7 +226,9 @@ export default function App() {
           <div className="small">
             {name} · {overview?.license_state ?? "…"}
             {version ? ` · v${version}` : ""}
-            {overview ? ` · IA: ${overview.ai_connected ? overview.ai_model : "non collegata"}` : ""}
+            {overview
+              ? ` · IA: ${overview.ai_provider_label || "non configurata"}${overview.ai_model ? ` / ${overview.ai_model}` : ""}`
+              : ""}
             {updateNote ? ` · ${updateNote}` : ""}
           </div>
         </div>
@@ -225,7 +237,8 @@ export default function App() {
           <Stat label="Task" value={overview?.tasks_today ?? 0} />
           <Stat label="Corso" value={overview?.running ?? 0} />
           <Stat label="Approva" value={overview?.pending_approvals ?? 0} />
-          <Stat label="Errori" value={overview?.errors ?? 0} />
+          <Stat label="Errori attivi" value={overview?.active_errors ?? 0} />
+          <Stat label="Storico" value={overview?.historical_errors ?? 0} />
         </div>
         <div className="actions">
           {blocked.length && !confirmKill ? (
@@ -255,6 +268,23 @@ export default function App() {
               Ferma
             </button>
           )}
+          <label className="provider-select">
+            <span>IA</span>
+            <select
+              value={overview?.ai_provider || "openai"}
+              onChange={async (event) => {
+                await api.chooseAIProvider(event.target.value);
+                await refresh();
+              }}
+              aria-label="Provider IA"
+            >
+              {aiProviders.map((item) => (
+                <option key={item.provider} value={item.provider}>
+                  {item.label}{item.configured ? "" : " · da configurare"}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="btn ghost"
             onClick={() => {
@@ -266,6 +296,15 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {overview && overview.ai_status !== "connected" ? (
+        <div className="banner">
+          <span>
+            IA {overview.ai_provider_label || ""} non disponibile: {overview.ai_detail || "controlla la configurazione"}.
+            Le richieste non comprese dalle regole vengono fermate e segnalate, senza fallback silenzioso.
+          </span>
+        </div>
+      ) : null}
 
       {wrongJob.map((item) => (
         <div className="banner" key={item.device_id}>
@@ -393,6 +432,31 @@ export default function App() {
         </section>
 
         <aside className="stack">
+          {(activeErrors.length || historicalErrors.length) ? (
+            <div className="panel">
+              <h2>Errori</h2>
+              <div className="panel-body">
+                <div className="small">Attivi nelle ultime 24 ore ({activeErrors.length})</div>
+                {activeErrors.map((task) => (
+                  <div className="row compact" key={`errore-${task.id}`}>
+                    <div className="row-main">
+                      <strong>{task.goal}</strong>
+                      <div className="small">{task.error}</div>
+                    </div>
+                  </div>
+                ))}
+                <div className="small">Storico ({overview?.historical_errors ?? historicalErrors.length})</div>
+                {historicalErrors.map((task) => (
+                  <div className="row compact" key={`storico-${task.id}`}>
+                    <div className="row-main">
+                      <strong>{task.goal}</strong>
+                      <div className="small">{task.error}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="panel">
             <h2>Da approvare {pending.length ? `(${pending.length})` : ""}</h2>
             <div className="panel-body">

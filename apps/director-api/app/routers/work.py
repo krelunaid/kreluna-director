@@ -28,6 +28,7 @@ from app.models import (
     utcnow,
 )
 from app.services.agents import compose_agent_rows, count_online
+from app.services.ai import check_ai_health, selected_provider
 from app.services.audit import write_audit
 from app.services.followup import followups
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
@@ -79,6 +80,10 @@ class ApprovalDecision(BaseModel):
 
 
 def _task_out(task: Task, evidence: list[Evidence] | None = None) -> dict[str, Any]:
+    error_state = None
+    if task.status == "failed" and task.error:
+        cutoff = utcnow() - timedelta(days=1)
+        error_state = "active" if task.created_at and as_utc(task.created_at) > cutoff else "historical"
     return {
         "id": task.id,
         "goal": task.goal,
@@ -90,6 +95,7 @@ def _task_out(task: Task, evidence: list[Evidence] | None = None) -> dict[str, A
         "assigned_device_id": task.assigned_device_id,
         "result": json.loads(task.result_json or "{}"),
         "error": task.error,
+        "error_state": error_state,
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "evidence": [
             {"id": item.id, "kind": item.kind, "sha256": item.sha256, "created_at": item.created_at.isoformat()}
@@ -112,7 +118,8 @@ async def chat(
     if answered is None:
         opened = followups.last_invoice(actor.user_id)
         answered = continue_open_invoice(opened, body.message) if opened else None
-    plan = answered if answered is not None else await plan_message(body.message)
+    provider = await selected_provider(session, actor.tenant_id)
+    plan = answered if answered is not None else await plan_message(body.message, provider=provider)
     plan = apply_policy(plan, get_policy(), actor.license_state)
     if plan.pending:
         followups.remember(actor.user_id, plan.pending)
@@ -458,24 +465,37 @@ async def overview(
         await session.execute(select(AgentSlot).where(AgentSlot.tenant_id == actor.tenant_id))
     ).scalars().all()
     agent_rows = compose_agent_rows(devices, slots)
+    now = utcnow()
+    cutoff = now - timedelta(days=1)
+    failed = [task for task in tasks if task.status == "failed" and task.error]
+    active_errors = [
+        task for task in failed if task.created_at and as_utc(task.created_at) > cutoff
+    ]
+    historical_errors = [
+        task for task in failed if not task.created_at or as_utc(task.created_at) <= cutoff
+    ]
+    provider = await selected_provider(session, actor.tenant_id)
+    ai_health = await check_ai_health(settings.ai_provider_config(provider))
     return {
         "tenant_id": actor.tenant_id,
         "license_state": actor.license_state,
         "agents_online": count_online(agent_rows),
         "agents_total": len(agent_rows),
-        "tasks_today": len(tasks),
+        "tasks_today": sum(
+            1 for task in tasks if task.created_at and as_utc(task.created_at) > cutoff
+        ),
         "running": sum(1 for task in tasks if task.status in {"assigned", "running"}),
         "pending_approvals": len(pending),
-        # Salute di adesso, non la storia: un errore di ieri resta nella lista,
-        # ma non tiene il contatore rosso per sempre.
-        "errors": sum(
-            1
-            for task in tasks
-            if task.status == "failed" and task.created_at and as_utc(task.created_at) > utcnow() - timedelta(days=1)
-        ),
+        "errors": len(active_errors),
+        "active_errors": len(active_errors),
+        "historical_errors": len(historical_errors),
         "kill_armed": any(device.killed for device in devices),
-        "ai_connected": settings.llm_ready,
-        "ai_model": settings.kreluna_llm_model if settings.llm_ready else "",
+        "ai_connected": ai_health["connected"],
+        "ai_provider": ai_health["provider"],
+        "ai_provider_label": ai_health["label"],
+        "ai_model": ai_health["model"],
+        "ai_status": ai_health["status"],
+        "ai_detail": ai_health["detail"],
     }
 
 

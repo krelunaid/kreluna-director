@@ -253,10 +253,11 @@ async def plan_with_llm(
     model: str,
     client: httpx.AsyncClient,
     timeout: float = 15.0,
+    allow_anonymous: bool = False,
 ) -> PlanResult | None:
     """Chiede il piano al modello e rende esplicito ogni errore del provider."""
 
-    if not base_url or not api_key:
+    if not base_url or not model or (not api_key and not allow_anonymous):
         return None
     url = base_url.rstrip("/") + "/chat/completions"
     body: dict[str, Any] = {
@@ -269,7 +270,7 @@ async def plan_with_llm(
             {"role": "user", "content": message[:4000]},
         ],
     }
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         response = await client.post(url, json=body, headers=headers, timeout=timeout)
         if response.status_code == 400 and "response_format" in body:
