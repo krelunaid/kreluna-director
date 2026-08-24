@@ -4,6 +4,9 @@ Non è un sito da telefono. È un’**app per computer Windows**.
 
 **Non serve installare Python.** È già dentro il programma.
 
+Il Director non installa né avvia automaticamente un Agent: funziona anche da solo.
+Gli Agent si possono aggiungere in seguito con il pacchetto separato.
+
 ## Installazione
 
 1. Scarica `Kreluna-Director-Windows.zip`

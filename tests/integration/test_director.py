@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 from app.config import settings
@@ -103,6 +104,45 @@ async def test_enrollment_replay_and_revoke(client: AsyncClient):
     token = await login(client)
     revoked = await client.post(f"/devices/{device_id}/revoke", headers=auth(token))
     assert revoked.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_owner_can_pause_and_resume_one_agent(client: AsyncClient):
+    suffix = str(uuid4())
+    code = f"KRELUNA-PAUSE-{suffix}"
+    async with SessionLocal() as session:
+        session.add(EnrollmentCode(tenant_id=DEMO_TENANT_ID, code=code))
+        await session.commit()
+
+    _private, public = generate_device_keypair()
+    enrolled = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": code,
+            "agent_id": f"pc-pause-{suffix}",
+            "hostname": "pause-test-host",
+            "public_key": b64e(public),
+            "capabilities": ["notepad_write"],
+        },
+    )
+    assert enrolled.status_code == 200
+    device_id = enrolled.json()["device_id"]
+    token = await login(client)
+
+    paused = await client.post(f"/agents/{device_id}/pause", headers=auth(token))
+    assert paused.status_code == 200
+    agents = (await client.get("/agents", headers=auth(token))).json()["agents"]
+    agent = next(item for item in agents if item["device_id"] == device_id)
+    assert agent["paused"] is True
+    assert agent["presence"] == "paused"
+
+    other = await login(client, "altro@studio.demo")
+    assert (await client.post(f"/agents/{device_id}/resume", headers=auth(other))).status_code == 404
+    resumed = await client.post(f"/agents/{device_id}/resume", headers=auth(token))
+    assert resumed.status_code == 200
+    agents = (await client.get("/agents", headers=auth(token))).json()["agents"]
+    agent = next(item for item in agents if item["device_id"] == device_id)
+    assert agent["paused"] is False
 
 
 @pytest.mark.asyncio
@@ -446,7 +486,7 @@ async def test_evidence_tenant_isolation_and_retention(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_ready_viewer_and_billing(client: AsyncClient):
+async def test_ready_viewer_and_billing(client: AsyncClient, monkeypatch):
     import hashlib
     import hmac
     import json
@@ -463,6 +503,21 @@ async def test_ready_viewer_and_billing(client: AsyncClient):
 
     assert body["manifest"]["version"] == APP_VERSION
     assert verify_manifest(b64d(health.json()["server_pubkey"]), body["manifest"], body["signature"])
+
+    async def fake_update_status():
+        return {
+            "state": "available",
+            "available": True,
+            "current_version": APP_VERSION,
+            "latest_version": "9.0.0",
+            "notes": "Aggiornamento di prova",
+            "download_url": "https://github.com/krelunaid/kreluna-director/releases/latest",
+        }
+
+    monkeypatch.setattr("app.routers.core.latest_update_status", fake_update_status)
+    update = await client.get("/update/status")
+    assert update.status_code == 200
+    assert update.json()["latest_version"] == "9.0.0"
     viewer = await login(client, "viewer@studio.demo")
     denied = await client.post("/chat", headers=auth(viewer), json={"message": "ciao"})
     assert denied.status_code == 403

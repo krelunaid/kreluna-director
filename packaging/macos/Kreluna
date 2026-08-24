@@ -30,17 +30,10 @@ if [[ ! -x "$PYTHON" ]]; then
 fi
 
 export PYTHONHOME="$(cd "$(dirname "$PYTHON")/.." && pwd)"
-export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/director-api:$ROOT/apps/kreluna-agent:$ROOT/apps/director-desktop"
+export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/director-api:$ROOT/apps/director-desktop"
 export DIRECTOR_DATABASE_URL="sqlite+aiosqlite:///$SUPPORT/data/kreluna.db"
 export DIRECTOR_EVIDENCE_DIR="$SUPPORT/data/evidence"
-export KRELUNA_AGENT_DATA_DIR="$SUPPORT/data/agent"
-export AGENT_DIRECTOR_URL="http://127.0.0.1:8080"
-export AGENT_DIRECTOR_WSS="ws://127.0.0.1:8080/ws/agent"
-export KRELUNA_ENROLLMENT_CODE="KRELUNA-DEV-ENROLL"
-export KRELUNA_AGENT_ID="${KRELUNA_AGENT_ID:-mac-studio}"
-export KRELUNA_AGENT_DISPLAY_NAME="${KRELUNA_AGENT_DISPLAY_NAME:-MAC-STUDIO}"
-export KRELUNA_UPDATE_URL="${KRELUNA_UPDATE_URL:-http://127.0.0.1:8080/update/manifest}"
-
+export KRELUNA_DIRECTOR_URL="http://127.0.0.1:8080"
 notify "Apro Kreluna Director…"
 cd "$ROOT"
 exec "$PYTHON" "$ROOT/apps/director-desktop/kreluna_desktop.py"

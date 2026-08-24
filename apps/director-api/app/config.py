@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     kreluna_openai_api_key: str = ""
     kreluna_openai_model: str = ""
     kreluna_enrollment_code: str = "KRELUNA-DEV-ENROLL"
+    kreluna_update_api_url: str = (
+        "https://api.github.com/repos/krelunaid/kreluna-director/releases/latest"
+    )
     director_bootstrap_email: str = ""
     director_bootstrap_password: str = ""
     director_bootstrap_name: str = "Titolare studio"

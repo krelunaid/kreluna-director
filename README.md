@@ -13,6 +13,9 @@ Istruzioni: `docs/INSTALL.md`
 
 **Non serve installare Python.** È già dentro il programma.
 
+Il Director è autonomo: gli Agent sono opzionali e si installano separatamente
+quando vuoi collegare i PC operativi.
+
 Login demo: `andrea@studio.demo` / `demo`
 
 Per ricreare gli zip:
