@@ -67,6 +67,8 @@ export default function App() {
   const [updateNote, setUpdateNote] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
+  const [activeNav, setActiveNav] = useState("dashboard");
+  const [deviceAction, setDeviceAction] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<number>(0);
 
@@ -183,6 +185,24 @@ export default function App() {
     await refresh();
   }
 
+  async function toggleAgent(agent: Agent) {
+    if (agent.presence === "waiting_install" || deviceAction) return;
+    setDeviceAction(agent.device_id);
+    try {
+      if (agent.killed || agent.paused) await api.resume(agent.device_id);
+      else await api.pause(agent.device_id);
+      await refresh();
+    } finally {
+      setDeviceAction(null);
+    }
+  }
+
+  function goTo(section: string, prompt?: string) {
+    setActiveNav(section);
+    if (prompt) setDraft(prompt);
+    window.setTimeout(() => document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
   const recentTasks = tasks.slice(0, 12);
   const activeErrors = tasks.filter((task) => task.error_state === "active");
   const historicalErrors = tasks.filter((task) => task.error_state === "historical").slice(0, 5);
@@ -219,7 +239,37 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="director-frame">
+      <aside className="sidebar">
+        <div className="side-brand">
+          <div className={`orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /></div>
+          <div><strong>KRELUNA</strong><span>DIRECTOR</span></div>
+        </div>
+        <nav aria-label="Navigazione principale">
+          {[
+            ["dashboard", "⌂", "Dashboard"], ["agents", "▣", "PC & Feature"], ["requests", "◫", "Task"],
+            ["requests", "◎", "Richieste"], ["errors", "△", "Errori"],
+          ].map(([id, icon, text]) => (
+            <button key={`${id}-${text}`} className={activeNav === id ? "active" : ""} onClick={() => goTo(id)}>
+              <span>{icon}</span>{text}
+              {text === "Task" && overview?.tasks_today ? <b>{overview.tasks_today}</b> : null}
+              {text === "Errori" && overview?.active_errors ? <b className="alert-count">{overview.active_errors}</b> : null}
+            </button>
+          ))}
+          <button onClick={() => goTo("chat", "Prepara un contratto, senza inviarlo")}><span>▤</span>Contratti</button>
+          <button onClick={() => goTo("chat", "Prepara una visura, senza inviarla")}><span>◉</span>Visure</button>
+          <button onClick={() => goTo("requests")}><span>▧</span>Documenti</button>
+          <button onClick={() => goTo("ai-settings")}><span>⚙</span>Impostazioni</button>
+        </nav>
+        <div className="side-assistant">
+          <div className="orb listen" aria-hidden="true"><span className="orb-core" /></div>
+          <div><strong>Kreluna</strong><span>{busy ? "Sta pensando" : "Ti ascolta"}</span></div>
+        </div>
+        <button className="new-request" onClick={() => goTo("chat")}>Nuova richiesta <b>＋</b></button>
+        <button className="side-logout" onClick={() => { setToken(null); setReady(false); }}>↪ Chiudi sessione</button>
+      </aside>
+
+      <div className="app-shell" id="dashboard">
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark">Kreluna Director</div>
@@ -268,7 +318,7 @@ export default function App() {
               Ferma
             </button>
           )}
-          <label className="provider-select">
+          <label className="provider-select" id="ai-settings">
             <span>IA</span>
             <select
               value={overview?.ai_provider || "openai"}
@@ -285,15 +335,6 @@ export default function App() {
               ))}
             </select>
           </label>
-          <button
-            className="btn ghost"
-            onClick={() => {
-              setToken(null);
-              setReady(false);
-            }}
-          >
-            Esci
-          </button>
         </div>
       </header>
 
@@ -338,7 +379,9 @@ export default function App() {
         </div>
       ) : null}
 
-      <section className="agent-board" aria-label="PC dello studio">
+      <section className="feature-section" id="agents">
+        <div className="section-title"><strong>PC & FEATURE</strong><span>Attiva o disattiva ogni agente senza rimuoverlo</span></div>
+      <div className="agent-board" aria-label="PC dello studio">
         {agents.map((agent) => {
           const work = currentWork(agent, tasks);
           const working = Boolean(agent.busy || work);
@@ -363,18 +406,27 @@ export default function App() {
                         ? "In ascolto"
                         : "Spento"}
               </div>
-              {agent.killed || agent.paused ? (
-                <button className="btn ok" onClick={() => api.resume(agent.device_id).then(refresh)}>
-                  Riprendi
-                </button>
-              ) : null}
+              <button
+                className={`agent-toggle ${agent.killed || agent.paused ? "off" : "on"}`}
+                disabled={agent.presence === "waiting_install" || deviceAction === agent.device_id}
+                onClick={() => void toggleAgent(agent)}
+                aria-pressed={!(agent.killed || agent.paused)}
+              >
+                <span />
+                {agent.presence === "waiting_install"
+                  ? "Installa prima"
+                  : deviceAction === agent.device_id
+                    ? "Attendo…"
+                    : agent.killed || agent.paused ? "Attiva" : "Disattiva"}
+              </button>
             </article>
           );
         })}
+      </div>
       </section>
 
       <main className="layout">
-        <section className="chat">
+        <section className="chat" id="chat">
           <div className="chat-head">
             <div className={`orb ${busy ? "think" : orb}`} aria-hidden="true">
               <span className="orb-core" />
@@ -433,7 +485,7 @@ export default function App() {
 
         <aside className="stack">
           {(activeErrors.length || historicalErrors.length) ? (
-            <div className="panel">
+            <div className="panel" id="errors">
               <h2>Errori</h2>
               <div className="panel-body">
                 <div className="small">Attivi nelle ultime 24 ore ({activeErrors.length})</div>
@@ -457,7 +509,7 @@ export default function App() {
               </div>
             </div>
           ) : null}
-          <div className="panel">
+          <div className="panel" id="approvals">
             <h2>Da approvare {pending.length ? `(${pending.length})` : ""}</h2>
             <div className="panel-body">
               {pending.length === 0 ? <div className="small">Niente in attesa.</div> : null}
@@ -486,7 +538,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="panel">
+          <div className="panel" id="requests">
             <h2>Richieste</h2>
             <div className="panel-body">
               {recentTasks.map((task) => (
@@ -516,6 +568,11 @@ export default function App() {
           <img src={lightbox} alt="Schermata del PC" />
         </button>
       ) : null}
+      <footer className="status-footer">
+        <span>◉ Sistema operativo: locale</span><span>▣ Host: questo Mac</span><span>♙ Utente: {name}</span>
+        <span className={overview?.ai_status === "connected" ? "healthy" : "warning"}>● {overview?.ai_status === "connected" ? "IA operativa" : "IA da configurare"}</span>
+      </footer>
+      </div>
     </div>
   );
 }

@@ -19,7 +19,7 @@ from app.services.agents import compose_agent_rows
 from app.services.ai import check_ai_health, save_selected_provider, selected_provider
 from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
-from app.services.registry import hub, mark_offline_stale
+from app.services.registry import hub, mark_offline_stale, requeue_device_tasks
 
 router = APIRouter()
 
@@ -346,6 +346,41 @@ async def resume_agent(
         await hub.send_agent(device.id, {"type": "resume"})
     await session.commit()
     return {"ok": True}
+
+
+@router.post("/agents/{device_id}/pause")
+async def pause_agent(
+    device_id: str,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    if actor.role not in {"studio_owner", "approver"}:
+        raise HTTPException(status_code=403, detail="Ruolo insufficiente")
+    device = (
+        await session.execute(
+            select(Device).where(Device.id == device_id, Device.tenant_id == actor.tenant_id)
+        )
+    ).scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device non trovato")
+    device.paused = True
+    device.presence = "paused"
+    device.busy = False
+    device.active_task_id = None
+    requeued = await requeue_device_tasks(session, device.id)
+    if device.id in hub.agents:
+        await hub.send_agent(device.id, {"type": "pause"})
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="agent.pause",
+        result="ok",
+        device_id=device.id,
+        detail=json.dumps({"requeued_tasks": requeued}),
+    )
+    await session.commit()
+    return {"ok": True, "requeued_tasks": requeued}
 
 
 @router.get("/policy")

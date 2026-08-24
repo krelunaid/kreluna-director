@@ -84,6 +84,9 @@ async def mark_offline_stale(session: AsyncSession) -> None:
     cutoff = utcnow() - timedelta(seconds=settings.heartbeat_timeout_seconds)
     rows = (await session.execute(select(Device))).scalars().all()
     for device in rows:
+        if device.paused:
+            device.presence = "paused"
+            continue
         if device.presence == "offline":
             continue
         last = device.last_seen_at
