@@ -261,3 +261,33 @@ async def test_evidence_tenant_isolation_and_retention(client: AsyncClient):
     agents = await client.get("/agents", headers=auth(other))
     assert all(agent.get("tenant_id") != DEMO_TENANT_ID for agent in agents.json()["agents"])
     assert OTHER_TENANT_ID
+
+
+@pytest.mark.asyncio
+async def test_ready_viewer_and_billing(client: AsyncClient):
+    import hashlib
+    import hmac
+    import json
+
+    ready = await client.get("/ready")
+    assert ready.status_code == 200
+    viewer = await login(client, "viewer@studio.demo")
+    denied = await client.post("/chat", headers=auth(viewer), json={"message": "ciao"})
+    assert denied.status_code == 403
+    body = json.dumps({"id": "evt-1", "type": "invoice.paid", "tenant_id": DEMO_TENANT_ID}).encode()
+    sig = hmac.new(settings.director_signing_seed.encode(), body, hashlib.sha256).hexdigest()
+    paid = await client.post("/billing/webhook", content=body, headers={"X-Kreluna-Signature": sig})
+    assert paid.status_code == 200
+    assert paid.json()["state"] == "active"
+    again = await client.post("/billing/webhook", content=body, headers={"X-Kreluna-Signature": sig})
+    assert again.json().get("duplicate") is True
+    fail = json.dumps({"id": "evt-2", "type": "invoice.payment_failed", "tenant_id": DEMO_TENANT_ID}).encode()
+    sig2 = hmac.new(settings.director_signing_seed.encode(), fail, hashlib.sha256).hexdigest()
+    grace = await client.post("/billing/webhook", content=fail, headers={"X-Kreluna-Signature": sig2})
+    assert grace.json()["state"] == "grace"
+    owner = await login(client)
+    sus = await client.post("/billing/simulate/suspended", headers=auth(owner))
+    assert sus.json()["state"] == "suspended"
+    blocked = await client.post("/chat", headers=auth(owner), json={"message": "Apri Blocco Note e scrivi CIAO"})
+    assert blocked.json()["denied"] is True
+    await client.post("/billing/simulate/active", headers=auth(owner))

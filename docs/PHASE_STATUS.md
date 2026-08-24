@@ -1,27 +1,29 @@
 # PHASE_STATUS
 
-Legenda: PASS = implementato e coperto da test o demo eseguibile. DESIGN = contratto e policy presenti, senza integrazione esterna. SKIP = volutamente non in questo prototipo.
+Legenda: PASS = implementato e testato. SANDBOX = adapter locale, non software fiscale vero. NOT-CERTIFIED = documenti e controlli pronti, non certificazione ISO.
 
 | Fase | Modulo | Stato | Nota |
 |---|---|---|---|
-| 0 | Freeze architettura | PASS | docs + policy YAML + parser |
+| 0 | Freeze architettura | PASS | docs + policy YAML |
 | 1 | Scheletro Director + Agent | PASS | health + identity |
-| 2 | Enrollment | PASS | codice monouso, revoca, no private key upload |
-| 3 | WSS + heartbeat + kill | PASS | registry in-process, kill globale |
-| 4 | Notepad | PASS | Windows pywinauto se c'è, altrimenti notepad virtuale |
-| 5 | Screenshot / evidenze | PASS | PNG, hash, cifratura, tenant scope |
-| 6 | Task queue + routing | PASS | SQLite persistente, idempotenza, lock GUI agent |
-| 7 | Dashboard | PASS | chat, PC, task, evidenze, FERMA TUTTO |
-| 8 | Planner IA | PASS | deterministico + schema + policy |
-| 9 | Approval Gateway | PASS | preview, token monouso, approve/reject |
-| 10 | Automation toolkit | DESIGN | API demo + allowlist; no mouse libero |
-| 11 | Vision loop | DESIGN | contratto pronto, non stream FPS |
+| 2 | Enrollment | PASS | monouso, revoca |
+| 3 | WSS + heartbeat + kill | PASS | registry, FERMA TUTTO |
+| 4 | Notepad | PASS | Windows o virtuale |
+| 5 | Screenshot / evidenze | PASS | hash, cifratura, tenant |
+| 6 | Task queue + routing | PASS | persistenza, idempotenza |
+| 7 | Dashboard | PASS | chat, PC, prove |
+| 8 | Planner IA | PASS | JSON/schema + policy |
+| 9 | Approval Gateway | PASS | token monouso |
+| 10 | Automation toolkit | PASS | API→UI→Playwright→mouse in bounds, failsafe |
+| 11 | Vision loop | PASS | max_steps, BLOCKED su dialoghi, no 30 FPS |
 | 12 | Demo fattura e2e | PASS | BOZZA → approve → EMESSA demo |
-| 13 | Multi-tenant + RBAC | PASS | scope server-side + ruoli |
-| 14 | Billing Stripe | DESIGN | stati licenza cloud, no Stripe live |
-| 15 | Hardening grant | PASS | HMAC grant, nonce, device-bound |
-| 16 | Audit / retention | PASS | append-only, redaction, retention job |
-| 17 | Adapter reale | SKIP | solo gestionale demo |
-| 18 | Production readiness | SKIP | non candidato produzione fiscale |
+| 13 | Multi-tenant + RBAC | PASS | viewer non chatta; scope tenant |
+| 14 | Billing / licensing | PASS | webhook firmati, ACTIVE/GRACE/SUSPENDED (no Stripe live) |
+| 15 | Hardening grant | PASS | Ed25519, nonce, device-bound |
+| 16 | Audit / retention | PASS | append-only, redaction, retention |
+| 17 | Adapter gestionale | SANDBOX | Fatture sandbox locale, mai Agenzia reale |
+| 18 | Production readiness | NOT-CERTIFIED | script Windows, manuali, /ready; no firma codice / pentest |
 
-Ultimo aggiornamento: prototipo migliorato 0.2.0.
+Fuori perimetro voluto: invio F24/PEC/pagamenti reali, portali Agenzia, mouse libero del modello.
+
+Versione 0.3.0 — roadmap PDF completata in codice fino al limite di sicurezza.

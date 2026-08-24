@@ -13,6 +13,7 @@ from app.database import Base, engine
 from app.routers.agent_io import router as agent_io_router
 from app.routers.core import router as core_router
 from app.routers.work import router as work_router
+from app.routers.billing import router as billing_router
 from app.routers.ws import router as ws_router
 from app.seed import seed_if_empty
 from app.database import SessionLocal
@@ -29,7 +30,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Kreluna Director", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Kreluna Director", version="0.3.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins + ["http://127.0.0.1:8080", "http://localhost:8080"],
@@ -40,6 +41,7 @@ app.add_middleware(
 app.include_router(core_router)
 app.include_router(work_router)
 app.include_router(agent_io_router)
+app.include_router(billing_router)
 app.include_router(ws_router)
 
 def _web_dist() -> Path:
@@ -78,6 +80,8 @@ async def spa_fallback(full_path: str):
         "ws",
         "agent",
         "demo",
+        "billing",
+        "ready",
         "docs",
         "redoc",
         "openapi.json",

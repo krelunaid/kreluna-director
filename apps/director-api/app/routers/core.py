@@ -44,9 +44,15 @@ async def health() -> dict:
     return {
         "ok": True,
         "service": "director-api",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "server_pubkey": b64e(server_public_bytes(settings.director_signing_seed)),
     }
+
+
+@router.get("/ready")
+async def ready(session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
+    await session.execute(select(User).limit(1))
+    return {"ok": True, "service": "director-api", "ready": True}
 
 
 @router.post("/auth/login")

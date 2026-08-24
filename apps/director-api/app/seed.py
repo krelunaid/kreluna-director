@@ -44,6 +44,14 @@ async def seed_if_empty(session: AsyncSession) -> None:
                 License(tenant_id=DEMO_TENANT_ID, state="active", plan="studio-demo"),
                 License(tenant_id=OTHER_TENANT_ID, state="active", plan="studio-demo"),
                 EnrollmentCode(tenant_id=DEMO_TENANT_ID, code=settings.kreluna_enrollment_code, used=False),
+                User(
+                    id="55555555-5555-5555-5555-555555555555",
+                    tenant_id=DEMO_TENANT_ID,
+                    email="viewer@studio.demo",
+                    name="Viewer Rossi",
+                    role="viewer",
+                    password_hash=hash_password(settings.director_session_secret, "demo"),
+                ),
             ]
         )
         await session.commit()

@@ -59,6 +59,8 @@ async def chat(
     actor: Annotated[Actor, Depends(get_actor)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
+    if actor.role == "viewer":
+        raise HTTPException(status_code=403, detail="Il visore può solo leggere")
     plan = apply_policy(plan_deterministic(body.message), get_policy(), actor.license_state)
     if plan.source == "deterministic-kill":
         from app.services.orchestrator import kill_all
