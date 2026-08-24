@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.deps import Actor, get_actor, get_policy
-from app.models import Approval, AuditEvent, Evidence, InvoiceDraft, Task, as_utc, utcnow
+from app.models import Approval, AuditEvent, Device, Evidence, InvoiceDraft, Task, as_utc, utcnow
 from app.services.audit import write_audit
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.orchestrator import dispatch_queued, dispatch_to_device, enqueue_planned

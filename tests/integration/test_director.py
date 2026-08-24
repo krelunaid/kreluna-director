@@ -45,6 +45,9 @@ async def test_health_and_login(client: AsyncClient):
     token = await login(client)
     me = await client.get("/me", headers=auth(token))
     assert me.json()["email"] == "andrea@studio.demo"
+    overview = await client.get("/overview", headers=auth(token))
+    assert overview.status_code == 200
+    assert "agents_online" in overview.json()
 
 
 @pytest.mark.asyncio

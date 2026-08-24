@@ -44,7 +44,7 @@ export default function App() {
       .me()
       .then((me) => {
         setName(me.name);
-        return refresh();
+        return refresh().catch(() => undefined);
       })
       .catch(() => {
         setToken(null);
