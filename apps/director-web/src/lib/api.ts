@@ -11,6 +11,9 @@ export type Agent = {
   platform: string;
   last_seen_at: string | null;
   connected: boolean;
+  job?: string;
+  program?: string;
+  enrollment_code?: string;
 };
 
 export type Task = {

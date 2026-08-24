@@ -184,12 +184,29 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
-    if any(word in lowered for word in ("f24", "pagamento", "bonifico", "pec")):
+    if any(word in lowered for word in ("f24",)):
+        return PlanResult(
+            ok=True,
+            summary="Assegno la preparazione F24 all'Agent PC-F24. Non invio nulla: il programma Agenzia non è ancora collegato.",
+            tasks=[
+                PlannedTask(
+                    goal="Preparare F24 in scadenza, senza inviarli",
+                    capability="f24_prepare",
+                    args={"period": "in_scadenza", "note": raw[:500]},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    if any(word in lowered for word in ("pagamento", "bonifico")) or (
+        "pec" in lowered and any(word in lowered for word in ("invia", "manda", "spedisci"))
+    ):
         return PlanResult(
             ok=False,
-            summary="Operazione fiscale/irreversibile non abilitata in questo prototipo.",
+            summary="Pagamenti e invio PEC non sono abilitati.",
             denied=True,
-            deny_reason="F24, pagamenti e PEC reali sono esclusi finché non esiste l'Approval Gateway di produzione.",
+            deny_reason="Solo preparazione. L'invio reale resta bloccato.",
         )
 
     return PlanResult(

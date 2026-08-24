@@ -270,8 +270,8 @@ textarea {
   background: var(--ok);
 }
 
-.dot.offline {
-  background: #667;
+.dot.waiting_install {
+  background: var(--warn);
 }
 
 .dot.killed,

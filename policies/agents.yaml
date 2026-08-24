@@ -1,0 +1,36 @@
+# Posti Agent dello studio. I programmi si collegano dopo.
+# status: waiting_install finché il PC non iscrive l'Agent.
+
+agents:
+  - role: pc-fatture
+    display_name: PC-FATTURE
+    job: Fatture
+    program: da definire (es. Fatture in Cloud)
+    capabilities:
+      - notepad_write
+      - invoice_prepare_demo
+      - invoice_submit_demo
+  - role: pc-f24
+    display_name: PC-F24
+    job: F24 e Agenzia delle Entrate
+    program: da definire (es. Entratel / Fatture e Corrispettivi)
+    capabilities:
+      - f24_prepare
+  - role: pc-contabilita
+    display_name: PC-CONTABILITA
+    job: Contabilità
+    program: da definire
+    capabilities:
+      - document_check
+  - role: pc-documenti
+    display_name: PC-DOCUMENTI
+    job: Documenti mancanti
+    program: da definire
+    capabilities:
+      - document_check
+  - role: pc-email
+    display_name: PC-EMAIL
+    job: Posta e bozze (nessun invio)
+    program: da definire (es. Outlook / PEC)
+    capabilities:
+      - email_draft

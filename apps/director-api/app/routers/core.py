@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.deps import Actor, get_actor, get_policy
-from app.models import Device, EnrollmentCode, User
+from app.models import AgentSlot, Device, EnrollmentCode, User
 from app.security import issue_session, verify_password
 from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
@@ -109,6 +109,26 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
     await session.flush()
     code.used = True
     code.used_by_device_id = device.id
+    slot = (
+        await session.execute(
+            select(AgentSlot).where(
+                AgentSlot.tenant_id == code.tenant_id,
+                AgentSlot.role == body.agent_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if slot is None:
+        slot = (
+            await session.execute(
+                select(AgentSlot).where(
+                    AgentSlot.tenant_id == code.tenant_id,
+                    AgentSlot.enrollment_code == body.enrollment_code,
+                )
+            )
+        ).scalar_one_or_none()
+    if slot is not None:
+        slot.device_id = device.id
+        device.display_name = slot.display_name or device.display_name
     await write_audit(
         session,
         tenant_id=code.tenant_id,
@@ -127,6 +147,28 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
     }
 
 
+def _agent_out(row: Device, slot: AgentSlot | None) -> dict:
+    return {
+        "device_id": row.id,
+        "agent_id": row.agent_id,
+        "hostname": row.hostname,
+        "display_name": row.display_name,
+        "capabilities": parse_caps(row.capabilities),
+        "status": row.status,
+        "presence": row.presence,
+        "busy": row.busy,
+        "killed": row.killed,
+        "paused": row.paused,
+        "platform": row.platform,
+        "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
+        "active_task_id": row.active_task_id,
+        "connected": row.id in hub.agents,
+        "job": slot.job if slot else "",
+        "program": slot.program if slot else "",
+        "enrollment_code": slot.enrollment_code if slot else "",
+    }
+
+
 @router.get("/agents")
 async def list_agents(
     actor: Annotated[Actor, Depends(get_actor)],
@@ -136,28 +178,49 @@ async def list_agents(
     rows = (
         await session.execute(select(Device).where(Device.tenant_id == actor.tenant_id))
     ).scalars().all()
+    slots = (
+        await session.execute(select(AgentSlot).where(AgentSlot.tenant_id == actor.tenant_id))
+    ).scalars().all()
     await session.commit()
-    return {
-        "agents": [
-            {
-                "device_id": row.id,
-                "agent_id": row.agent_id,
-                "hostname": row.hostname,
-                "display_name": row.display_name,
-                "capabilities": parse_caps(row.capabilities),
-                "status": row.status,
-                "presence": row.presence,
-                "busy": row.busy,
-                "killed": row.killed,
-                "paused": row.paused,
-                "platform": row.platform,
-                "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
-                "active_task_id": row.active_task_id,
-                "connected": row.id in hub.agents,
-            }
-            for row in rows
-        ]
-    }
+    by_device = {row.id: row for row in rows}
+    by_agent_id = {row.agent_id: row for row in rows}
+    agents = []
+    seen_devices: set[str] = set()
+    for slot in slots:
+        live = None
+        if slot.device_id and slot.device_id in by_device:
+            live = by_device[slot.device_id]
+        elif slot.role in by_agent_id:
+            live = by_agent_id[slot.role]
+        if live:
+            seen_devices.add(live.id)
+            agents.append(_agent_out(live, slot))
+        else:
+            agents.append(
+                {
+                    "device_id": slot.id,
+                    "agent_id": slot.role,
+                    "hostname": "non-installato",
+                    "display_name": slot.display_name,
+                    "capabilities": parse_caps(slot.capabilities),
+                    "status": "waiting_install",
+                    "presence": "waiting_install",
+                    "busy": False,
+                    "killed": False,
+                    "paused": False,
+                    "platform": "windows",
+                    "last_seen_at": None,
+                    "active_task_id": None,
+                    "connected": False,
+                    "job": slot.job,
+                    "program": slot.program,
+                    "enrollment_code": slot.enrollment_code,
+                }
+            )
+    for row in rows:
+        if row.id not in seen_devices:
+            agents.append(_agent_out(row, None))
+    return {"agents": agents}
 
 
 @router.post("/devices/{device_id}/revoke")

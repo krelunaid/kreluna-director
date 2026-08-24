@@ -164,3 +164,17 @@ class InvoiceDraft(Base):
     total_cents: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(40), default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AgentSlot(Base):
+    __tablename__ = "agent_slots"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    role: Mapped[str] = mapped_column(String(80))
+    display_name: Mapped[str] = mapped_column(String(200))
+    job: Mapped[str] = mapped_column(String(200), default="")
+    program: Mapped[str] = mapped_column(String(200), default="da definire")
+    capabilities: Mapped[str] = mapped_column(Text, default="[]")
+    enrollment_code: Mapped[str] = mapped_column(String(80), default="")
+    device_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    __table_args__ = (UniqueConstraint("tenant_id", "role", name="uq_slot_role"),)

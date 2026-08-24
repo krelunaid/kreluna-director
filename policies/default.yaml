@@ -6,7 +6,7 @@ risk:
   invoice_prepare_demo: medium
   invoice_submit: high
   invoice_submit_demo: high
-  f24_prepare: high
+  f24_prepare: medium
   f24_submit: critical
   payment: critical
   email_send: high

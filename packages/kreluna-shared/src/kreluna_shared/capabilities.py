@@ -25,6 +25,11 @@ class InvoiceSubmitArgs(BaseModel):
     draft_id: str = Field(min_length=1, max_length=80)
 
 
+class F24PrepareArgs(BaseModel):
+    period: str = Field(default="in_scadenza", max_length=80)
+    note: str = Field(default="", max_length=500)
+
+
 class DocumentCheckArgs(BaseModel):
     scope: str = Field(default="missing_documents", max_length=80)
 
@@ -65,6 +70,13 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         default_risk="high",
         description="Cambia lo stato DEMO da BOZZA a EMESSA. Mai un portale fiscale reale.",
         irreversible=True,
+        demo_only=True,
+    ),
+    "f24_prepare": CapabilitySpec(
+        name="f24_prepare",
+        args_model=F24PrepareArgs,
+        default_risk="medium",
+        description="Prepara F24 in bozza. Non invia e non paga. Programma da collegare.",
         demo_only=True,
     ),
     "document_check": CapabilitySpec(

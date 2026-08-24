@@ -7,6 +7,7 @@ const SUGGESTIONS = [
   "Apri Blocco Note e scrivi: Kreluna Agent operativo",
   "Prepara una fattura demo a Rossi Mario per consulenza, EUR 1500 + IVA",
   "Controlla quali clienti hanno documenti mancanti",
+  "Prepara gli F24 in scadenza, ma non inviarli",
   "Ferma tutto",
 ];
 
@@ -220,7 +221,11 @@ export default function App() {
                   <span className={`dot ${agent.presence}`} />
                   <strong>{agent.display_name || agent.agent_id}</strong>
                   <div className="small">
-                    {agent.hostname} · {agent.platform} · {agent.capabilities.join(", ")}
+                    {agent.job ? `${agent.job} · ` : ""}
+                    {agent.program || "programma da definire"}
+                  </div>
+                  <div className="small">
+                    {agent.hostname} · {agent.connected ? agent.platform : "da installare sul PC"}
                   </div>
                 </div>
                 <div className="actions">

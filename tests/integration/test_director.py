@@ -48,6 +48,9 @@ async def test_health_and_login(client: AsyncClient):
     overview = await client.get("/overview", headers=auth(token))
     assert overview.status_code == 200
     assert "agents_online" in overview.json()
+    agents = await client.get("/agents", headers=auth(token))
+    names = {item["agent_id"] for item in agents.json()["agents"]}
+    assert {"pc-fatture", "pc-f24", "pc-contabilita", "pc-documenti", "pc-email"} <= names
 
 
 @pytest.mark.asyncio

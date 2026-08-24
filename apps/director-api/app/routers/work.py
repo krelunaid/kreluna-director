@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.deps import Actor, get_actor, get_policy
-from app.models import Approval, AuditEvent, Device, Evidence, InvoiceDraft, Task, as_utc, utcnow
+from app.models import AgentSlot, Approval, AuditEvent, Device, Evidence, InvoiceDraft, Task, as_utc, utcnow
 from app.services.audit import write_audit
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.orchestrator import dispatch_queued, dispatch_to_device, enqueue_planned
@@ -382,12 +382,15 @@ async def overview(
             select(Approval).where(Approval.tenant_id == actor.tenant_id, Approval.status == "pending")
         )
     ).scalars().all()
+    slots = (
+        await session.execute(select(AgentSlot).where(AgentSlot.tenant_id == actor.tenant_id))
+    ).scalars().all()
     online = sum(1 for device in devices if device.presence in {"online", "busy", "killed"} or device.id in hub.agents)
     return {
         "tenant_id": actor.tenant_id,
         "license_state": actor.license_state,
         "agents_online": online,
-        "agents_total": len(devices),
+        "agents_total": max(len(slots), len(devices)),
         "tasks_today": len(tasks),
         "running": sum(1 for task in tasks if task.status in {"assigned", "running"}),
         "pending_approvals": len(pending),
