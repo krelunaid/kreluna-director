@@ -1,43 +1,73 @@
-# Posti Agent dello studio. I programmi si collegano dopo.
-# Ogni Agent ha compiti divisi. I pagamenti veri restano bloccati.
+# Compiti Delta: un Agent, un lavoro, i programmi dello studio.
+# Nessun invio reale (Telematico, SPID, smart card, INPS, AdE) in questa versione.
 
 agents:
   - role: pc-fatture
     display_name: PC-FATTURE
-    job: Creare fatture
-    program: Gestionale fatture (demo visibile sul PC). Fatture in Cloud da collegare.
+    job: Fatture
+    program: Webdesk e sito Agenzia delle Entrate (utenza cliente, smart card / SPID)
     capabilities:
       - notepad_write
       - invoice_prepare_demo
       - invoice_submit_demo
-  - role: pc-pagamenti
-    display_name: PC-PAGAMENTI
-    job: Preparare pagamenti e controllare fatture (nessun bonifico reale)
-    program: da definire (home banking / gestionale)
-    capabilities:
-      - payment_prepare
-      - invoice_check
   - role: pc-f24
     display_name: PC-F24
-    job: Preparare F24 (nessun invio)
-    program: da definire (es. Entratel / Agenzia delle Entrate)
+    job: Deleghe F24
+    program: Creazione IPSOA, poi Invio Telematico (in demo non si invia)
     capabilities:
       - f24_prepare
   - role: pc-contabilita
     display_name: PC-CONTABILITA
     job: Contabilità
-    program: da definire
+    program: Scarico fatture AdE (SPID/smart card) XML/P7M, carico IPSOA, importatore contabile IPSOA
     capabilities:
+      - contabilita_prepare
+      - invoice_check
+  - role: pc-camerali
+    display_name: PC-CAMERALI
+    job: Pratiche camerali
+    program: Sito CGN, poi invio su Desktop ComUnica
+    capabilities:
+      - camera_prepare
+  - role: pc-contratti
+    display_name: PC-CONTRATTI
+    job: Contratti
+    program: Sito Agenzia delle Entrate di Samuele
+    capabilities:
+      - contratti_prepare
+  - role: pc-durc
+    display_name: PC-DURC
+    job: Richieste DURC
+    program: Sito INPS (utenza cliente, smart card / SPID)
+    capabilities:
+      - durc_prepare
+  - role: pc-visure
+    display_name: PC-VISURE
+    job: Visure
+    program: Sito CGN
+    capabilities:
+      - visure_prepare
       - document_check
+
+  # Vecchi posti: restano in database se già creati, non si scelgono più.
+  - role: pc-pagamenti
+    display_name: PC-PAGAMENTI
+    job: (non in elenco Delta)
+    program: non usato
+    retired: true
+    capabilities:
+      - payment_prepare
   - role: pc-documenti
     display_name: PC-DOCUMENTI
-    job: Documenti mancanti
-    program: da definire
+    job: (non in elenco Delta)
+    program: non usato
+    retired: true
     capabilities:
       - document_check
   - role: pc-email
     display_name: PC-EMAIL
-    job: Posta e bozze (nessun invio)
-    program: da definire (es. Outlook / PEC)
+    job: (non in elenco Delta)
+    program: non usato
+    retired: true
     capabilities:
       - email_draft

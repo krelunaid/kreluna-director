@@ -50,7 +50,21 @@ async def test_health_and_login(client: AsyncClient):
     assert "agents_online" in overview.json()
     agents = await client.get("/agents", headers=auth(token))
     names = {item["agent_id"] for item in agents.json()["agents"]}
-    assert {"pc-fatture", "pc-pagamenti", "pc-f24", "pc-contabilita", "pc-documenti", "pc-email"} <= names
+    assert {
+        "pc-fatture",
+        "pc-f24",
+        "pc-contabilita",
+        "pc-camerali",
+        "pc-contratti",
+        "pc-durc",
+        "pc-visure",
+    } <= names
+    assert "pc-pagamenti" not in names
+    assert "pc-email" not in names
+    programs = {item["agent_id"]: item.get("program") or "" for item in agents.json()["agents"]}
+    assert "Webdesk" in programs["pc-fatture"]
+    assert "IPSOA" in programs["pc-f24"]
+    assert "CGN" in programs["pc-visure"]
 
 
 @pytest.mark.asyncio

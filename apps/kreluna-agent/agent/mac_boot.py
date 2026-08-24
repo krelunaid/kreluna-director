@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from kreluna_shared.agents import default_agents_path, load_agent_roles
+from kreluna_shared.agents import default_agents_path, load_live_agent_roles
 
 
 def support_dir() -> Path:
@@ -68,8 +68,8 @@ def apply_config(data: dict[str, str]) -> None:
 
 
 def ask_osascript() -> dict[str, str] | None:
-    roles = load_agent_roles(roles_yaml())
-    labels = [role.display_name for role in roles]
+    roles = load_live_agent_roles(roles_yaml())
+    labels = [f"{role.display_name} — {role.job}" for role in roles]
     listed = ", ".join(f'"{item}"' for item in labels)
     script = f'''
 set picked to choose from list {{{listed}}} with prompt "Questo Mac quale lavoro fa? Un Agent, un ruolo." OK button name "Avanti" cancel button name "Annulla"
@@ -80,7 +80,7 @@ return item 1 of picked
     label = choose.stdout.strip()
     if choose.returncode != 0 or label in {"", "CANCEL"}:
         return None
-    found = next((item for item in roles if item.display_name == label), None)
+    found = next((item for item in roles if f"{item.display_name} — {item.job}" == label), None)
     if found is None:
         return None
     url_script = f'''
@@ -100,7 +100,7 @@ def confirm_existing(data: dict[str, str]) -> dict[str, str] | None:
         return data
     name = data.get("display_name") or data.get("role") or "questo Mac"
     script = f'''
-set picked to display dialog "Questo Mac è {name}. Per le fatture scegli PC-FATTURE." buttons {{"Cambia lavoro", "Avvia"}} default button "Avvia" with title "Kreluna Agent"
+set picked to display dialog "Questo Mac è {name}. Scegli il lavoro di questo computer (fatture, F24, visure…)." buttons {{"Cambia lavoro", "Avvia"}} default button "Avvia" with title "Kreluna Agent"
 if button returned of picked is "Cambia lavoro" then return "CHANGE"
 return "KEEP"
 '''

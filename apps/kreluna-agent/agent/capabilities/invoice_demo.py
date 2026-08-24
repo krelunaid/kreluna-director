@@ -48,7 +48,7 @@ async def prepare(
         "ok": True,
         **data,
         "method": "ui_visible",
-        "program": "Gestionale Fatture",
+        "program": "Webdesk / sito Agenzia delle Entrate (demo locale)",
         "agent": "pc-fatture",
         "evidence": evidence,
     }
@@ -92,7 +92,7 @@ async def submit(
         "ok": True,
         **data,
         "method": "ui_visible",
-        "program": "Gestionale Fatture",
+        "program": "Webdesk / sito Agenzia delle Entrate (demo locale)",
         "agent": "pc-fatture",
         "evidence": evidence,
     }

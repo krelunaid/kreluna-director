@@ -209,10 +209,121 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
+    if "f24" in lowered or "deleghe f24" in lowered or "delega f24" in lowered:
+        return PlanResult(
+            ok=True,
+            summary="Mando PC-F24: creazione in IPSOA. Invio Telematico non parte.",
+            tasks=[
+                PlannedTask(
+                    goal="Preparare F24 in IPSOA, senza inviarli",
+                    capability="f24_prepare",
+                    args={"period": "in_scadenza", "note": raw[:500]},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    if any(
+        word in lowered
+        for word in (
+            "contabilit",
+            "ipsoa",
+            "p7m",
+            "importatore",
+            "scarico fattur",
+            "carico fattur",
+            "cassetto fiscale",
+        )
+    ):
+        client = _client_name(raw) or _client_name(lowered) or "Cliente"
+        return PlanResult(
+            ok=True,
+            summary=(
+                f"Mando PC-CONTABILITA per {client}: scarico AdE XML/P7M, carico IPSOA, "
+                "importatore contabile. Demo: niente SPID."
+            ),
+            tasks=[
+                PlannedTask(
+                    goal=f"Preparare lo scarico e il carico IPSOA per {client}",
+                    capability="contabilita_prepare",
+                    args={"client_name": client, "notes": raw[:500], "period": ""},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    if "durc" in lowered or ("sito inps" in lowered):
+        client = _client_name(raw) or _client_name(lowered) or "Cliente"
+        return PlanResult(
+            ok=True,
+            summary=f"Mando PC-DURC: sito INPS per {client}. Demo: niente SPID, nessuna richiesta vera.",
+            tasks=[
+                PlannedTask(
+                    goal=f"Preparare richiesta DURC per {client}",
+                    capability="durc_prepare",
+                    args={"client_name": client, "notes": raw[:500]},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    if any(word in lowered for word in ("visura", "visure")):
+        client = _client_name(raw) or _client_name(lowered) or "Cliente"
+        return PlanResult(
+            ok=True,
+            summary=f"Mando PC-VISURE: sito CGN per {client}. Nessun download reale.",
+            tasks=[
+                PlannedTask(
+                    goal=f"Preparare visura per {client}",
+                    capability="visure_prepare",
+                    args={"client_name": client, "notes": raw[:500], "visura_type": ""},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    if any(word in lowered for word in ("cameral", "comunica", "pratica camerale")):
+        client = _client_name(raw) or _client_name(lowered) or "Cliente"
+        return PlanResult(
+            ok=True,
+            summary=f"Mando PC-CAMERALI: sito CGN e Desktop ComUnica per {client}. Nessun invio.",
+            tasks=[
+                PlannedTask(
+                    goal=f"Preparare pratica camerale per {client}",
+                    capability="camera_prepare",
+                    args={"client_name": client, "notes": raw[:500], "practice_type": ""},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    if "samuele" in lowered or (
+        any(word in lowered for word in ("contratto", "contratti")) and "fattur" not in lowered
+    ):
+        client = _client_name(raw) or _client_name(lowered) or "Cliente"
+        return PlanResult(
+            ok=True,
+            summary=f"Mando PC-CONTRATTI: sito AdE di Samuele per {client}. Nessun invio.",
+            tasks=[
+                PlannedTask(
+                    goal=f"Preparare contratto per {client}",
+                    capability="contratti_prepare",
+                    args={"client_name": client, "notes": raw[:500], "contract_type": ""},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
     if ("controlla" in lowered or "controllo" in lowered) and "fattur" in lowered:
         return PlanResult(
             ok=True,
-            summary="Assegno il controllo fatture (sola lettura) all'Agent PC-PAGAMENTI.",
+            summary="Assegno il controllo fatture (sola lettura) all'Agent PC-CONTABILITA.",
             tasks=[
                 PlannedTask(
                     goal="Controllare le fatture, senza modificarle",
@@ -231,7 +342,7 @@ def plan_deterministic(text: str) -> PlanResult:
         return PlanResult(
             ok=True,
             summary=(
-                f"Mando PC-FATTURE: apre il gestionale, scrive la fattura a {client} "
+                f"Mando PC-FATTURE (Webdesk / sito AdE, demo locale): fattura a {client} "
                 f"per {description}, € {net:,.2f} + IVA. Poi ti chiedo conferma prima di emetterla."
             ),
             tasks=[
@@ -295,21 +406,6 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
-    if any(word in lowered for word in ("f24",)):
-        return PlanResult(
-            ok=True,
-            summary="Assegno la preparazione F24 all'Agent PC-F24. Non invio nulla: il programma Agenzia non è ancora collegato.",
-            tasks=[
-                PlannedTask(
-                    goal="Preparare F24 in scadenza, senza inviarli",
-                    capability="f24_prepare",
-                    args={"period": "in_scadenza", "note": raw[:500]},
-                    risk=Risk.MEDIUM,
-                    needs_approval=False,
-                )
-            ],
-        )
-
     if any(word in lowered for word in ("pagamento", "bonifico", "paga ")):
         return PlanResult(
             ok=True,
@@ -336,8 +432,8 @@ def plan_deterministic(text: str) -> PlanResult:
     return PlanResult(
         ok=False,
         summary=(
-            "Non ho capito. PC-FATTURE è il PC delle fatture: clicca Fattura Gadducci, "
-            "oppure scrivi: fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera."
+            "Non ho capito. Prova: Fattura Gadducci, prepara F24, scarica fatture in IPSOA, "
+            "visura, DURC, pratica camerale, contratto Samuele."
         ),
         denied=False,
         deny_reason="",

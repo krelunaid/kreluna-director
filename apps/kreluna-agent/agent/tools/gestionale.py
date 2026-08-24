@@ -1,4 +1,4 @@
-"""Finestra gestionale visibile: mouse, campi, testo. Stand-in finché non si collega Fatture in Cloud."""
+"""Finestra gestionale visibile: mouse, campi, testo. Stand-in di Webdesk / sito Agenzia delle Entrate."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def render_invoice_window(
     draw.rounded_rectangle((40, 36, 1060, 684), radius=16, fill=PANEL)
     draw.rounded_rectangle((40, 36, 1060, 92), radius=16, fill=NAVY)
     draw.rectangle((40, 76, 1060, 92), fill=NAVY)
-    draw.text((64, 52), "Gestionale Fatture  ·  PC-FATTURE", fill=(244, 239, 228), font=_font(18, bold=True))
+    draw.text((64, 52), "Webdesk / AdE  ·  PC-FATTURE (demo)", fill=(244, 239, 228), font=_font(18, bold=True))
     draw.ellipse((1008, 54, 1024, 70), fill=(224, 90, 80))
     draw.text((64, 112), "Nuova fattura", fill=INK, font=_font(26, bold=True))
     draw.text((64, 148), subtitle, fill=(90, 96, 108), font=_font(14))
@@ -158,7 +158,7 @@ def fill_invoice_on_pc(
             "typed_net": "",
             "focus": "client",
             "pointer": (90, 230),
-            "subtitle": "Apro il programma fatture sul PC-FATTURE…",
+            "subtitle": "Apro Webdesk / sito AdE (demo) sul PC-FATTURE…",
         },
         {
             "typed_client": client_name[: max(1, len(client_name) // 2)],

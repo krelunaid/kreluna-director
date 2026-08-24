@@ -27,9 +27,13 @@ router = APIRouter()
 
 ROLE_LABEL = {
     "pc-fatture": "PC-FATTURE",
-    "pc-pagamenti": "PC-PAGAMENTI",
     "pc-f24": "PC-F24",
     "pc-contabilita": "PC-CONTABILITA",
+    "pc-camerali": "PC-CAMERALI",
+    "pc-contratti": "PC-CONTRATTI",
+    "pc-durc": "PC-DURC",
+    "pc-visure": "PC-VISURE",
+    "pc-pagamenti": "PC-PAGAMENTI",
     "pc-documenti": "PC-DOCUMENTI",
     "pc-email": "PC-EMAIL",
 }
@@ -46,13 +50,11 @@ def _waiting_pc_note(tasks: list[Task]) -> str:
             names.append(label)
     if not names:
         return ""
-    if names == ["PC-FATTURE"]:
-        return (
-            " PC-FATTURE non è acceso su questo Mac. "
-            "All'apertura di Kreluna Agent clicca Cambia lavoro e scegli PC-FATTURE."
-        )
     who = ", ".join(names)
-    return f" {who} non è acceso: il lavoro resta in attesa."
+    return (
+        f" {who} non è acceso su questo Mac. "
+        "All'apertura di Kreluna Agent clicca Cambia lavoro e scegli quel lavoro."
+    )
 
 
 class ChatBody(BaseModel):

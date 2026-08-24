@@ -19,7 +19,7 @@ def run(payload: dict) -> None:
     total_label = f"€ {total:,.2f}"
 
     root = tk.Tk()
-    root.title("Gestionale Fatture  ·  PC-FATTURE")
+    root.title("Webdesk / AdE  ·  PC-FATTURE (demo)")
     root.geometry("920x620+80+80")
     root.configure(bg="#ece8de")
     try:
@@ -31,7 +31,7 @@ def run(payload: dict) -> None:
     gold = "#c49a2a"
     ink = "#161c26"
 
-    tk.Label(root, text="Gestionale Fatture", bg=navy, fg="#f4efe4", font=("Helvetica", 18, "bold"), anchor="w", padx=20, pady=14).pack(fill="x")
+    tk.Label(root, text="Webdesk / Agenzia delle Entrate (demo)", bg=navy, fg="#f4efe4", font=("Helvetica", 18, "bold"), anchor="w", padx=20, pady=14).pack(fill="x")
     status = tk.Label(root, text="Apro il programma sul tuo Mac…", bg="#ece8de", fg="#5a606c", font=("Helvetica", 13), anchor="w", padx=24, pady=8)
     status.pack(fill="x")
 

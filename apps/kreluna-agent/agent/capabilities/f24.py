@@ -6,29 +6,29 @@ from kreluna_shared.crypto import sha256_hex
 
 def prepare(period: str = "in_scadenza", note: str = "") -> dict:
     image = render_card(
-        "PC-F24 — programma non collegato",
+        "PC-F24 — IPSOA (demo)",
         [
-            "Agent: creato e pronto.",
-            "Lavoro: preparare F24, senza inviare.",
+            "Lavoro: deleghe F24.",
             f"Periodo: {period}",
-            "Programma: da definire (Agenzia delle Entrate).",
+            "Programma: creazione in IPSOA, poi Invio Telematico.",
             "",
-            "Nessun click, nessun invio, nessun pagamento.",
+            "In demo: nessun click su Telematico, nessun invio, nessun pagamento.",
             note[:200],
         ],
     )
     return {
         "ok": True,
         "connected": False,
+        "sent": False,
         "period": period,
-        "program": "da definire",
-        "message": "Agent PC-F24 esiste. Manca solo il programma da usare su quel PC.",
+        "program": "Creazione IPSOA, poi Invio Telematico (in demo non si invia)",
+        "message": "Scheda F24 pronta in IPSOA demo. Nessun Invio Telematico.",
         "evidence": [
             {
                 "kind": "screenshot",
                 "sha256": sha256_hex(image),
                 "png": image,
-                "metadata": {"connected": False, "role": "pc-f24"},
+                "metadata": {"connected": False, "role": "pc-f24", "program": "IPSOA"},
             }
         ],
     }

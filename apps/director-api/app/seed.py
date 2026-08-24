@@ -76,6 +76,9 @@ async def seed_agent_slots(session: AsyncSession, tenant_id: str) -> None:
             slot.job = role.job
             slot.program = role.program
             slot.display_name = role.display_name
+            slot.capabilities = json.dumps(role.capabilities)
+            continue
+        if role.retired:
             continue
         code = f"KRELUNA-{role.role.upper().replace('_', '-')}"
         already = (

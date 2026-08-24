@@ -17,6 +17,7 @@ from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
 from app.services.registry import hub, mark_offline_stale, parse_caps
 from kreluna_shared.crypto import b64d, fingerprint_device
+from kreluna_shared.agents import load_live_agent_roles
 from kreluna_shared.update import APP_VERSION, manifest_payload, sign_manifest
 
 router = APIRouter()
@@ -229,6 +230,7 @@ async def list_agents(
         await session.execute(select(AgentSlot).where(AgentSlot.tenant_id == actor.tenant_id))
     ).scalars().all()
     await session.commit()
+    live_roles = {item.role for item in load_live_agent_roles()}
     by_device = {row.id: row for row in rows}
     by_agent_id = {row.agent_id: row for row in rows}
     agents = []
@@ -239,6 +241,8 @@ async def list_agents(
             live = by_device[slot.device_id]
         elif slot.role in by_agent_id:
             live = by_agent_id[slot.role]
+        if slot.role not in live_roles and live is None:
+            continue
         if live:
             seen_devices.add(live.id)
             agents.append(_agent_out(live, slot))

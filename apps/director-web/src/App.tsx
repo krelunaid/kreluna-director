@@ -5,11 +5,12 @@ type ChatItem = { role: "user" | "director"; text: string; deny?: boolean };
 
 const SUGGESTIONS = [
   { short: "Fattura Gadducci", full: "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera" },
-  { short: "Blocco note", full: "Apri Blocco Note e scrivi: Kreluna Agent operativo" },
-  { short: "Controlla fatture", full: "Controlla le fatture" },
-  { short: "Pagamento", full: "Prepara un pagamento di 500 euro, non eseguirlo" },
-  { short: "F24", full: "Prepara gli F24 in scadenza, ma non inviarli" },
-  { short: "Bozza mail", full: "Prepara una bozza mail a Andrea Gadducci dicendo di aprire Kreluna" },
+  { short: "F24 IPSOA", full: "Prepara gli F24 in scadenza, ma non inviarli" },
+  { short: "Contabilità", full: "Scarica le fatture in IPSOA per Gadducci" },
+  { short: "Camerali", full: "Prepara la pratica camerale per Gadducci" },
+  { short: "Contratti", full: "Prepara il contratto sul sito AdE di Samuele per Gadducci" },
+  { short: "DURC", full: "Prepara la richiesta DURC per Gadducci" },
+  { short: "Visure", full: "Prepara la visura per Gadducci" },
   { short: "Ferma", full: "Ferma tutto" },
 ];
 
@@ -26,7 +27,7 @@ export default function App() {
   const [chat, setChat] = useState<ChatItem[]>([
     {
       role: "director",
-      text: "Sono Kreluna Director, non ChatGPT. Per la fattura questo Mac deve essere PC-FATTURE: clicca Fattura Gadducci, poi Approva.",
+      text: "Sono Kreluna Director. Ogni PC ha un lavoro e un programma (Webdesk, IPSOA, CGN, INPS…). Clicca un bottone, poi Approva se serve. Nessun invio reale.",
     },
   ]);
   const [draft, setDraft] = useState("");
@@ -287,6 +288,7 @@ export default function App() {
                     <span className={`dot ${agent.presence}`} />
                     <strong>{agent.display_name || agent.agent_id}</strong>
                     <span className="small"> · {agent.job}</span>
+                    {agent.program ? <div className="small">{agent.program}</div> : null}
                   </div>
                   <span className="pill">{agent.killed ? "fermo" : agent.presence}</span>
                 </div>

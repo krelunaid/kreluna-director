@@ -23,11 +23,12 @@ import sys
 out = Path(sys.argv[1])
 roles = [
     ("pc-fatture", "PC-FATTURE", "KRELUNA-PC-FATTURE"),
-    ("pc-pagamenti", "PC-PAGAMENTI", "KRELUNA-PC-PAGAMENTI"),
     ("pc-f24", "PC-F24", "KRELUNA-PC-F24"),
     ("pc-contabilita", "PC-CONTABILITA", "KRELUNA-PC-CONTABILITA"),
-    ("pc-documenti", "PC-DOCUMENTI", "KRELUNA-PC-DOCUMENTI"),
-    ("pc-email", "PC-EMAIL", "KRELUNA-PC-EMAIL"),
+    ("pc-camerali", "PC-CAMERALI", "KRELUNA-PC-CAMERALI"),
+    ("pc-contratti", "PC-CONTRATTI", "KRELUNA-PC-CONTRATTI"),
+    ("pc-durc", "PC-DURC", "KRELUNA-PC-DURC"),
+    ("pc-visure", "PC-VISURE", "KRELUNA-PC-VISURE"),
 ]
 for role, display, code in roles:
     bat = out / f"Installa {display}.bat"

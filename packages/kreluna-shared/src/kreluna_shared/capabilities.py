@@ -50,6 +50,20 @@ class EmailDraftArgs(BaseModel):
     to: str | None = None
 
 
+class StudioPrepareArgs(BaseModel):
+    client_name: str = Field(default="Cliente", min_length=1, max_length=200)
+    notes: str = Field(default="", max_length=500)
+    period: str = Field(default="", max_length=80)
+    practice_type: str = Field(default="", max_length=80)
+    contract_type: str = Field(default="", max_length=80)
+    visura_type: str = Field(default="", max_length=80)
+
+    @field_validator("client_name", "notes", "period", "practice_type", "contract_type", "visura_type")
+    @classmethod
+    def strip_studio(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
 class CapabilitySpec(BaseModel):
     name: str
     args_model: type[BaseModel]
@@ -71,7 +85,10 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         name="invoice_prepare_demo",
         args_model=InvoicePrepareArgs,
         default_risk="medium",
-        description="Prepara una fattura nello gestionale DEMO locale. Non invia nulla.",
+        description=(
+            "Prepara una fattura sul PC (in produzione: Webdesk / sito Agenzia delle Entrate, "
+            "utenza cliente smart card / SPID). In demo usa una finestra locale. Non invia."
+        ),
         demo_only=True,
     ),
     "invoice_submit_demo": CapabilitySpec(
@@ -86,7 +103,42 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         name="f24_prepare",
         args_model=F24PrepareArgs,
         default_risk="medium",
-        description="Prepara F24 in bozza. Non invia e non paga. Programma da collegare.",
+        description="Prepara F24 in IPSOA. Non esegue l'Invio Telematico.",
+        demo_only=True,
+    ),
+    "contabilita_prepare": CapabilitySpec(
+        name="contabilita_prepare",
+        args_model=StudioPrepareArgs,
+        default_risk="medium",
+        description="Prepara lo scarico AdE XML/P7M, il carico IPSOA e l'importatore contabile. Nessun SPID.",
+        demo_only=True,
+    ),
+    "camera_prepare": CapabilitySpec(
+        name="camera_prepare",
+        args_model=StudioPrepareArgs,
+        default_risk="medium",
+        description="Prepara una pratica camerale su sito CGN e Desktop ComUnica. Nessun invio.",
+        demo_only=True,
+    ),
+    "contratti_prepare": CapabilitySpec(
+        name="contratti_prepare",
+        args_model=StudioPrepareArgs,
+        default_risk="medium",
+        description="Prepara un contratto sul sito AdE (utenza Samuele). Nessun invio.",
+        demo_only=True,
+    ),
+    "durc_prepare": CapabilitySpec(
+        name="durc_prepare",
+        args_model=StudioPrepareArgs,
+        default_risk="medium",
+        description="Prepara una richiesta DURC sul sito INPS. Nessun SPID, nessun invio.",
+        demo_only=True,
+    ),
+    "visure_prepare": CapabilitySpec(
+        name="visure_prepare",
+        args_model=StudioPrepareArgs,
+        default_risk="medium",
+        description="Prepara una visura sul sito CGN. Nessun download reale.",
         demo_only=True,
     ),
     "document_check": CapabilitySpec(

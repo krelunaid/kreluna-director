@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
-from agent.capabilities import documents, email_draft, f24, invoice_demo, notepad, payments
+from agent.capabilities import documents, email_draft, f24, invoice_demo, notepad, payments, studio
 
 Handler = Callable[..., Awaitable[dict[str, Any]] | dict[str, Any]]
 
@@ -13,6 +13,11 @@ CAPABILITY_ALLOWLIST: dict[str, Handler] = {
     "document_check": documents.check,
     "email_draft": email_draft.draft,
     "f24_prepare": f24.prepare,
+    "contabilita_prepare": studio.contabilita,
+    "camera_prepare": studio.camera,
+    "contratti_prepare": studio.contratti,
+    "durc_prepare": studio.durc,
+    "visure_prepare": studio.visure,
     "payment_prepare": payments.prepare,
     "invoice_check": payments.check_invoices,
 }

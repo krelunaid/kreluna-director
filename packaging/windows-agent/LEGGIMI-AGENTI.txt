@@ -9,12 +9,13 @@ Ogni altro PC dello studio ha UN Agent, diverso.
    Esempio: http://192.168.1.10:8080
 
 2. Sul PC giusto fai DOPPIO CLIC su UN file solo:
-   - Installa PC-FATTURE.bat      → computer fatture
-   - Installa PC-PAGAMENTI.bat    → computer pagamenti
-   - Installa PC-F24.bat          → computer F24
-   - Installa PC-CONTABILITA.bat
-   - Installa PC-DOCUMENTI.bat
-   - Installa PC-EMAIL.bat
+   - Installa PC-FATTURE.bat      → Webdesk / sito AdE
+   - Installa PC-F24.bat          → IPSOA, poi Telematico
+   - Installa PC-CONTABILITA.bat  → scarico AdE, carico IPSOA
+   - Installa PC-CAMERALI.bat     → sito CGN, Desktop ComUnica
+   - Installa PC-CONTRATTI.bat    → sito AdE di Samuele
+   - Installa PC-DURC.bat         → sito INPS
+   - Installa PC-VISURE.bat       → sito CGN
 
 3. Se Windows avvisa: Altre informazioni → Esegui comunque.
 
@@ -23,5 +24,5 @@ In dashboard Kreluna quel PC diventa online.
 
 Non installare il Director su questi PC.
 Non installare due Agent sullo stesso PC.
-I programmi (Fatture in Cloud, Entratel, banca) si collegano dopo:
-per ora l'Agent usa il gestionale demo visibile sul PC.
+In demo l'Agent NON usa SPID, smart card, Telematico o INPS veri:
+mostra solo la scheda sul PC. L'invio reale resta spento.
