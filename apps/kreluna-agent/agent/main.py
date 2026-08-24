@@ -10,12 +10,12 @@ from uuid import UUID
 
 import httpx
 import websockets
+from kreluna_shared.agents import capabilities_for_role
+from kreluna_shared.crypto import b64d, b64e, sign_bytes, verify_grant
 
 from agent.capabilities import CAPABILITY_ALLOWLIST
 from agent.identity import AgentIdentity
 from agent.safety import SafetyState
-from kreluna_shared.agents import capabilities_for_role
-from kreluna_shared.crypto import b64d, b64e, sign_bytes, verify_grant
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -174,7 +174,11 @@ class AgentApp:
         try:
             accepted = set(inspect.signature(handler).parameters)
             call_args = {key: value for key, value in {**args, **extra}.items() if key in accepted}
-            outcome = handler(**call_args)
+            if inspect.iscoroutinefunction(handler):
+                return await handler(**call_args)
+            # I passi che muovono lo schermo possono durare: girano in un thread,
+            # così il battito verso il Director non si ferma e il PC non sembra spento.
+            outcome = await asyncio.to_thread(lambda: handler(**call_args))
             if inspect.isawaitable(outcome):
                 return await outcome
             return outcome

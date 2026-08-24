@@ -1,4 +1,4 @@
-KRELUNA AGENT PER MAC (Apple Silicon, versione 0.5.5)
+KRELUNA AGENT PER MAC (Apple Silicon, versione 0.5.6)
 =====================================================
 
 Questa NON è Kreluna Director. È l'Agent: il programma del PC.
@@ -21,9 +21,12 @@ PER IL LAVORO VERO SUI SITI (visure CGN, DURC INPS, AdE)
 L'Agent apre il browser e compila i campi al posto tuo. Servono due permessi,
 una volta sola:
 
-A. Google Chrome deve accettare i comandi:
-   Chrome → menu Visualizza → Sviluppo → "Consenti JavaScript dagli Apple Event".
-   (Se non vedi il menu Sviluppo: Chrome → Impostazioni → cerca "Sviluppo".)
+A. Il browser deve accettare i comandi.
+   Chrome: menu Visualizza → Sviluppo → "Consenti JavaScript dagli Apple Event".
+   Safari: menu Sviluppo → "Consenti JavaScript dagli Apple Event".
+   (Se non vedi il menu Sviluppo in Safari: Safari → Impostazioni → Avanzate →
+   "Mostra funzioni per sviluppatori web".)
+   Se Chrome non è installato, l'Agent usa Safari da solo.
 
 B. Il Mac deve dare il permesso all'Agent:
    La prima volta compare una richiesta "Kreluna Agent vuole controllare
@@ -34,6 +37,8 @@ B. Il Mac deve dare il permesso all'Agent:
 Cosa fa e cosa NON fa:
 - Apre il sito, aspetta che TU entri con SPID, CNS o credenziali, poi scrive
   nel campo di ricerca e si ferma.
+- Prima di scrivere controlla l'indirizzo della pagina: se davanti c'è un altro
+  sito non scrive niente, per non sbagliare finestra.
 - Non preme invio, non scarica, non invia, non paga.
 - Fa una foto dello schermo a ogni passaggio: resta come prova, cifrata.
   Le foto NON vengono mandate a nessuna intelligenza artificiale.

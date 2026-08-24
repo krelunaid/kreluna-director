@@ -4,8 +4,9 @@ import os
 import subprocess
 import time
 
-from agent.tools.render import render_card
 from kreluna_shared.crypto import sha256_hex
+
+from agent.tools.render import render_card
 
 
 def write_notepad(text: str) -> dict:
@@ -43,7 +44,7 @@ def write_notepad(text: str) -> dict:
 
 
 def _windows_notepad(text: str) -> str:
-    subprocess.Popen(["notepad.exe"])  # noqa: S603
+    subprocess.Popen(["notepad.exe"])
     time.sleep(1)
     from pywinauto import Application
 

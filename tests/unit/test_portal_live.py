@@ -11,15 +11,30 @@ from pydantic import ValidationError
 class FakeMac:
     """Finto Mac: registra i comandi invece di eseguirli."""
 
-    def __init__(self, field_after: int = 0, png: bytes = b"\x89PNG-finta"):
+    def __init__(
+        self,
+        field_after: int = 0,
+        png: bytes = b"\x89PNG-finta",
+        installed: tuple[str, ...] = ("Google Chrome", "Safari"),
+        page_url: str | None = None,
+    ):
         self.scripts: list[str] = []
         self.shots = 0
         self.field_after = field_after
         self.looks = 0
         self.png = png
+        self.installed = installed
+        self.page_url = page_url
 
     def osascript(self, script: str) -> str:
         self.scripts.append(script)
+        if script.strip().startswith("id of application"):
+            name = script.split('"')[1]
+            if name not in self.installed:
+                raise mac_browser.MacControlError(f'Application "{name}" not found (-1728)')
+            return "com.example." + name.lower().replace(" ", "")
+        if "return URL of" in script:
+            return self.page_url or "https://www.cgn.it/area"
         if "querySelector" in script and "value=" not in script:
             self.looks += 1
             return "TROVATO" if self.looks > self.field_after else mac_browser.JS_MISSING
@@ -108,6 +123,39 @@ def test_not_a_mac_says_so_instead_of_pretending():
 def test_unknown_portal_is_refused():
     with pytest.raises(ValueError):
         open_portal(portal="portale-finto", supported=lambda: True)
+
+
+def test_it_refuses_to_type_on_the_wrong_site():
+    fake = FakeMac(page_url="https://mail.google.com/mail/u/0")
+    result, _ = run(fake, portal="visure-cgn", query="Bianchi Laura")
+    assert result["filled"] is False
+    assert "altro sito" in result["message"]
+    assert "Bianchi Laura" not in " ".join(fake.scripts)
+    assert result["evidence"][-1]["metadata"]["step"] == "sito-sbagliato"
+
+
+def test_same_site_accepts_subdomains_and_refuses_strangers():
+    assert mac_browser.same_site("https://www.cgn.it", "https://area.cgn.it/visure")
+    assert mac_browser.same_site("https://www.inps.it", "https://serviziweb2.inps.it/x")
+    assert not mac_browser.same_site("https://www.cgn.it", "https://cgn.it.truffa.example")
+    assert not mac_browser.same_site("https://www.cgn.it", "https://www.inps.it")
+
+
+def test_it_uses_safari_when_chrome_is_missing():
+    fake = FakeMac(installed=("Safari",), page_url="https://www.cgn.it/visure")
+    result, _ = run(fake, portal="visure-cgn", query="Rossi Mario")
+    assert result["browser"] == "Safari"
+    assert result["filled"] is True
+    joined = " ".join(fake.scripts)
+    assert "do JavaScript" in joined
+    assert "execute javascript" not in joined
+
+
+def test_no_browser_at_all_says_what_to_install():
+    fake = FakeMac(installed=())
+    with pytest.raises(mac_browser.MacControlError) as err:
+        run(fake, portal="visure-cgn", query="x")
+    assert "Chrome" in str(err.value)
 
 
 def test_permission_errors_explain_what_to_switch_on():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from kreluna_shared.adapters import DraftResult, ObservedInvoice, SubmitResult
 from kreluna_shared.crypto import sha256_hex
+
 from agent.tools.automation import prefer_method
 from agent.tools.render import render_card
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from agent.tools.render import render_card
 from kreluna_shared.crypto import sha256_hex
+
+from agent.tools.render import render_card
 
 SPECS: dict[str, dict[str, str]] = {
     "contabilita_prepare": {

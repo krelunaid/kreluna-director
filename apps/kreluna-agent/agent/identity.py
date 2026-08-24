@@ -37,8 +37,8 @@ class AgentIdentity:
     def _load_or_create_keys(self) -> tuple[bytes, bytes]:
         if self.key_path.exists():
             private = self.key_path.read_bytes()
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
             from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
             public = Ed25519PrivateKey.from_private_bytes(private).public_key().public_bytes(
                 encoding=serialization.Encoding.Raw,

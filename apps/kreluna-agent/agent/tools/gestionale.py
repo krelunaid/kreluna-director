@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from io import BytesIO
-from pathlib import Path
 import json
 import subprocess
 import sys
-
-from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
+from pathlib import Path
 
 from kreluna_shared.crypto import sha256_hex
+from PIL import Image, ImageDraw, ImageFont
 
 NAVY = (16, 24, 40)
 PANEL = (236, 232, 222)
@@ -122,7 +121,7 @@ def show_invoice_on_this_mac(
         ensure_ascii=False,
     )
     try:
-        subprocess.Popen(  # noqa: S603
+        subprocess.Popen(
             [sys.executable, str(script), payload],
             start_new_session=True,
             stdout=subprocess.DEVNULL,

@@ -1,8 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from agent.capabilities import documents, email_draft, f24, invoice_demo, notepad, payments, portal, studio
+from agent.capabilities import (
+    documents,
+    email_draft,
+    f24,
+    invoice_demo,
+    notepad,
+    payments,
+    portal,
+    studio,
+)
 
 Handler = Callable[..., Awaitable[dict[str, Any]] | dict[str, Any]]
 

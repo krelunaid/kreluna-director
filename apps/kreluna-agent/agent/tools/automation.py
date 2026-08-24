@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from agent.tools.bounds import Bounds, GESTIONALE
+from agent.tools.bounds import GESTIONALE, Bounds
 
 Method = Literal["api", "ui_automation", "playwright", "mouse"]
 

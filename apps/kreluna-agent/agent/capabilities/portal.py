@@ -39,12 +39,27 @@ def open_portal(
         )
 
     settings = load_settings()
-    browser = settings.mac_browser
     run = runner or mac_browser.Runner()
+    browser = mac_browser.pick_browser(run, settings.mac_browser)
     evidence: list[dict[str, Any]] = []
 
     mac_browser.open_url(run, browser, spec.url)
     evidence.append(_evidence(mac_browser.screenshot(run), "portale-aperto", portal))
+
+    def stop(step: str, message: str, filled: bool = False) -> dict[str, Any]:
+        evidence.append(_evidence(mac_browser.screenshot(run), step, portal))
+        return {
+            "ok": True,
+            "live": True,
+            "sent": False,
+            "filled": filled,
+            "browser": browser,
+            "portal": spec.name,
+            "url": spec.url,
+            "query": query,
+            "message": message,
+            "evidence": evidence,
+        }
 
     waited = 0
     found = mac_browser.field_is_there(run, browser, spec.field) if spec.field else False
@@ -54,36 +69,31 @@ def open_portal(
         found = mac_browser.field_is_there(run, browser, spec.field)
 
     if not found:
-        evidence.append(_evidence(mac_browser.screenshot(run), "aspetto-login", portal))
-        return {
-            "ok": True,
-            "live": True,
-            "sent": False,
-            "filled": False,
-            "portal": spec.name,
-            "url": spec.url,
-            "message": (
-                f"Ho aperto {spec.name} sul tuo schermo. {spec.login_note} "
-                "Quando sei dentro, richiedimelo di nuovo e compilo io."
-            ),
-            "evidence": evidence,
-        }
+        return stop(
+            "aspetto-login",
+            f"Ho aperto {spec.name} sul tuo schermo. {spec.login_note} "
+            "Quando sei dentro, richiedimelo di nuovo e compilo io.",
+        )
 
-    written = mac_browser.fill_field(run, browser, spec.field, query) if query else False
-    evidence.append(_evidence(mac_browser.screenshot(run), "compilato" if written else "pronto", portal))
-    return {
-        "ok": True,
-        "live": True,
-        "sent": False,
-        "filled": written,
-        "portal": spec.name,
-        "url": spec.url,
-        "query": query,
-        "message": (
-            f"{spec.name}: ho scritto \"{query}\" nel campo di ricerca e mi sono fermato. "
-            "Non ho premuto invio, non ho scaricato niente."
-            if written
-            else f"{spec.name} è aperto e pronto. Non ho scritto niente."
-        ),
-        "evidence": evidence,
-    }
+    # Prima di scrivere: la pagina davanti deve essere quella del portale.
+    where = mac_browser.current_url(run, browser)
+    if not mac_browser.same_site(spec.url, where):
+        return stop(
+            "sito-sbagliato",
+            f"Sul {browser} adesso c'è un altro sito, non {spec.name}. "
+            "Non scrivo niente per non sbagliare finestra: apri la scheda giusta e richiedimelo.",
+        )
+
+    if not query:
+        return stop("pronto", f"{spec.name} è aperto e pronto. Non ho scritto niente.")
+
+    written = mac_browser.fill_field(run, browser, spec.field, query)
+    if not written:
+        return stop("campo-sparito", f"{spec.name}: il campo di ricerca non c'è più. Non ho scritto niente.")
+
+    return stop(
+        "compilato",
+        f'{spec.name}: ho scritto "{query}" nel campo di ricerca e mi sono fermato. '
+        "Non ho premuto invio, non ho scaricato niente.",
+        filled=True,
+    )

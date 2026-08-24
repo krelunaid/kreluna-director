@@ -1,7 +1,9 @@
-"""Guida il browser vero del Mac: apre, cerca il campo per nome, scrive, fotografa.
+"""Guida il browser vero del Mac: apre, controlla l'indirizzo, scrive nel campo, fotografa.
 
-Niente coordinate del mouse a caso: il campo si trova nella pagina.
-Nessun invio: si scrive e si smette. L'invio resta un gesto umano.
+Tre regole di questo file:
+- il campo si trova nella pagina, non a coordinate del mouse;
+- non si scrive niente se la pagina aperta non è quella del portale giusto;
+- non si preme mai invio e non si invia mai un modulo.
 """
 
 from __future__ import annotations
@@ -12,9 +14,11 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 JS_MISSING = "NON_TROVATO"
-JS_BLOCKED = "APPLE_EVENTS_SPENTI"
+CHROME_FAMILY = ("Google Chrome", "Brave Browser", "Microsoft Edge", "Chromium", "Vivaldi")
+SAFARI = "Safari"
 
 
 class MacControlError(RuntimeError):
@@ -56,7 +60,42 @@ def is_supported() -> bool:
     return sys.platform == "darwin"
 
 
+def _is_installed(runner: Runner, browser: str) -> bool:
+    try:
+        runner.osascript(f'id of application "{browser}"')
+    except MacControlError:
+        return False
+    return True
+
+
+def pick_browser(runner: Runner, preferred: str) -> str:
+    """Usa il browser scelto nella configurazione, se c'è. Altrimenti quello che c'è."""
+
+    for candidate in (preferred, *CHROME_FAMILY, SAFARI):
+        if candidate and _is_installed(runner, candidate):
+            return candidate
+    raise MacControlError(
+        "Non trovo un browser da guidare. Installa Google Chrome, oppure scrivi "
+        "'mac_browser: Safari' in policies/programs.yaml."
+    )
+
+
+def _is_safari(browser: str) -> bool:
+    return browser.strip().lower() == "safari"
+
+
 def open_url_script(browser: str, url: str) -> str:
+    if _is_safari(browser):
+        return f'''
+tell application "{browser}"
+  activate
+  if (count of windows) is 0 then
+    make new document
+  end if
+  set URL of current tab of front window to "{url}"
+end tell
+return "APERTO"
+'''
     return f'''
 tell application "{browser}"
   activate
@@ -69,8 +108,24 @@ return "APERTO"
 '''
 
 
+def current_url_script(browser: str) -> str:
+    tab = "current tab" if _is_safari(browser) else "active tab"
+    return f'''
+tell application "{browser}"
+  return URL of {tab} of front window
+end tell
+'''
+
+
 def _js(browser: str, javascript: str) -> str:
     payload = javascript.replace("\\", "\\\\").replace('"', '\\"')
+    if _is_safari(browser):
+        return f'''
+tell application "{browser}"
+  activate
+  do JavaScript "{payload}" in current tab of front window
+end tell
+'''
     return f'''
 tell application "{browser}"
   activate
@@ -102,20 +157,25 @@ def fill_field_script(browser: str, selector: str, text: str) -> str:
     )
 
 
-def type_with_keyboard_script(text: str) -> str:
-    """Tastiera vera, per i programmi che non sono pagine web."""
-
-    safe = text.replace("\\", "\\\\").replace('"', '\\"')
-    return f'''
-tell application "System Events"
-  keystroke "{safe}"
-end tell
-return "DIGITATO"
-'''
-
-
 def open_url(runner: Runner, browser: str, url: str) -> None:
     runner.osascript(open_url_script(browser, url))
+
+
+def current_url(runner: Runner, browser: str) -> str:
+    try:
+        return runner.osascript(current_url_script(browser))
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+
+
+def same_site(expected: str, actual: str) -> bool:
+    """Vero solo se la pagina aperta è dello stesso sito del portale."""
+
+    want = (urlparse(expected).hostname or "").lower().removeprefix("www.")
+    got = (urlparse(actual).hostname or "").lower().removeprefix("www.")
+    if not want or not got:
+        return False
+    return got == want or got.endswith("." + want)
 
 
 def field_is_there(runner: Runner, browser: str, selector: str) -> bool:
@@ -144,6 +204,7 @@ def _translate(exc: MacControlError) -> MacControlError:
     if "apple events" in text or "not allowed" in text or "-1743" in text:
         return MacControlError(
             "Il browser non accetta i comandi. In Chrome: Visualizza, Sviluppo, "
+            "Consenti JavaScript dagli Apple Event. In Safari: Sviluppo, "
             "Consenti JavaScript dagli Apple Event. Poi riprova."
         )
     if "assistive" in text or "accessibility" in text or "-25211" in text:

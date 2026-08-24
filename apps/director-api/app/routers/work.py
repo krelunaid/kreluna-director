@@ -124,8 +124,8 @@ async def chat(
             session,
             tenant_id=actor.tenant_id,
             actor=actor.user_id,
-            action="planner.deny",
-            result="deny",
+            action="planner.deny" if plan.denied else "planner.ask",
+            result="deny" if plan.denied else "ask",
             detail=plan.deny_reason or plan.summary,
         )
         await session.commit()

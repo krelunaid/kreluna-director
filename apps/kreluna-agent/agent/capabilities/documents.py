@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from agent.tools.render import render_card
 from kreluna_shared.crypto import sha256_hex
+
+from agent.tools.render import render_card
 
 MISSING = [
     {"client": "Bianchi Laura", "document": "Visura camerale", "age_days": 18},
