@@ -149,6 +149,7 @@ export default function App() {
 
   const pending = useMemo(() => approvals.filter((item) => item.status === "pending"), [approvals]);
   const blocked = useMemo(() => agents.filter((item) => item.killed || item.paused), [agents]);
+  const wrongJob = useMemo(() => agents.filter((item) => item.retired && item.connected), [agents]);
 
   async function resumeAll() {
     await Promise.all(blocked.map((item) => api.resume(item.device_id).catch(() => undefined)));
@@ -243,6 +244,16 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {wrongJob.map((item) => (
+        <div className="banner" key={item.device_id}>
+          <span>
+            {item.hostname} è acceso come {item.display_name || item.agent_id}, un ruolo vecchio: nessun lavoro dello
+            studio gli arriva. Apri Kreluna Agent su quel computer, clicca Cambia lavoro e scegli il lavoro che deve
+            fare.
+          </span>
+        </div>
+      ))}
 
       {blocked.length ? (
         <div className="banner">

@@ -11,8 +11,9 @@ from app.models import AgentSlot, Device
 from app.services.registry import hub, parse_caps
 
 
-def _from_device(row: Device, slot: AgentSlot | None) -> dict[str, Any]:
+def _from_device(row: Device, slot: AgentSlot | None, retired: bool = False) -> dict[str, Any]:
     return {
+        "retired": retired,
         "device_id": row.id,
         "agent_id": row.agent_id,
         "hostname": row.hostname,
@@ -35,6 +36,7 @@ def _from_device(row: Device, slot: AgentSlot | None) -> dict[str, Any]:
 
 def _from_slot(slot: AgentSlot) -> dict[str, Any]:
     return {
+        "retired": False,
         "device_id": slot.id,
         "agent_id": slot.role,
         "hostname": "non-installato",
@@ -73,12 +75,12 @@ def compose_agent_rows(devices: Iterable[Device], slots: Iterable[AgentSlot]) ->
             continue
         if live is not None:
             seen.add(live.id)
-            rows.append(_from_device(live, slot))
+            rows.append(_from_device(live, slot, retired=slot.role not in live_roles))
         else:
             rows.append(_from_slot(slot))
     for row in device_list:
         if row.id not in seen:
-            rows.append(_from_device(row, None))
+            rows.append(_from_device(row, None, retired=row.agent_id not in live_roles))
     return rows
 
 
