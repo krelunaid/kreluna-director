@@ -64,12 +64,29 @@ def test_planner_routes_invoice_to_pc_fatture_with_range():
 
 
 def test_planner_gadducci_spoken_italian():
-    plan = plan_deterministic("mi fai una fattura per gadducci di manodopera")
+    plan = plan_deterministic("mi fai una fattura per gadducci di manodopera da 5.000 euro")
     assert plan.ok
     task = plan.tasks[0]
     assert task.args["client_name"] == "Andrea Gadducci"
     assert task.args["description"] == "Manodopera"
+    assert task.args["net_eur"] == 5000.0
     assert "Mario Rossi" not in plan.summary
+
+
+def test_planner_asks_instead_of_inventing_the_amount():
+    plan = plan_deterministic("mi fai una fattura per gadducci")
+    assert not plan.ok
+    assert not plan.denied
+    assert plan.tasks == []
+    assert "importo" in plan.summary
+    assert "lavoro" in plan.summary
+    assert "Andrea Gadducci" in plan.summary
+    assert "1.500" not in plan.summary
+
+    only_amount = plan_deterministic("mi fai una fattura per gadducci di manodopera")
+    assert not only_amount.ok
+    assert "importo" in only_amount.summary
+    assert "il lavoro" not in only_amount.summary
 
 
 def test_planner_understands_italian_mail_as_draft():

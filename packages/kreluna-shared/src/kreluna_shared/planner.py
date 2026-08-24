@@ -337,8 +337,26 @@ def plan_deterministic(text: str) -> PlanResult:
 
     if "fattura" in lowered or re.search(r"\binvoice\b", lowered):
         client = _client_name(raw) or _client_name(lowered) or "Cliente"
-        net = _money(raw) or _money(lowered) or 1500.0
+        net = _money(raw) or _money(lowered)
         description = _description(raw)
+        if description.lower() in client.lower() or client.lower() in description.lower():
+            description = ""
+        missing = []
+        if net is None:
+            missing.append("l'importo")
+        if not description:
+            missing.append("il lavoro")
+        if missing:
+            who = client if client != "Cliente" else "il cliente"
+            return PlanResult(
+                ok=False,
+                summary=(
+                    f"Mi manca {' e '.join(missing)}. Non invento cifre. "
+                    f"Scrivi per esempio: fattura a {who} per 5.000 euro di manodopera."
+                ),
+                denied=False,
+                deny_reason="",
+            )
         return PlanResult(
             ok=True,
             summary=(

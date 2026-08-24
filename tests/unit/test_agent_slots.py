@@ -88,5 +88,5 @@ def test_planner_routes_delta_programs():
     assert camera.tasks[0].capability == "camera_prepare"
     contratto = plan_deterministic("Prepara il contratto sul sito AdE di Samuele per Gadducci")
     assert contratto.tasks[0].capability == "contratti_prepare"
-    fattura = plan_deterministic("mi fai una fattura per gadducci di manodopera")
+    fattura = plan_deterministic("mi fai una fattura per gadducci di manodopera da 5.000 euro")
     assert fattura.tasks[0].capability == "invoice_prepare_demo"

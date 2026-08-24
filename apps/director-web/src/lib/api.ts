@@ -100,6 +100,7 @@ export const api = {
       body: JSON.stringify({ message }),
     }),
   kill: () => request<{ ok: boolean; stopped_devices: number }>("/kill-switch", { method: "POST" }),
+  cancelTask: (id: string) => request<{ ok: boolean; status: string }>(`/tasks/${id}/cancel`, { method: "POST" }),
   resume: (deviceId: string) => request(`/agents/${deviceId}/resume`, { method: "POST" }),
   approve: (id: string) => request(`/approvals/${id}/approve`, { method: "POST", body: JSON.stringify({}) }),
   reject: (id: string) => request(`/approvals/${id}/reject`, { method: "POST", body: JSON.stringify({}) }),

@@ -273,7 +273,14 @@ export default function App() {
                     <div className="task-goal">{task.goal}</div>
                     <EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} />
                   </div>
-                  <span className={`pill ${task.status} ${task.risk}`}>{task.status}</span>
+                  <div className="actions">
+                    <span className={`pill ${task.status} ${task.risk}`}>{task.status}</span>
+                    {task.status === "queued" || task.status === "assigned" ? (
+                      <button className="btn ghost" onClick={() => api.cancelTask(task.id).then(refresh)}>
+                        Annulla
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
