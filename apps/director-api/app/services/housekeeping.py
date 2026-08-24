@@ -37,6 +37,22 @@ async def heal_stopped_tasks(session: AsyncSession) -> int:
     return len(rows)
 
 
+OLD_CODES = {
+    "CAPABILITY_NOT_ALLOWED": "Quel PC non sa fare questo lavoro: probabilmente ha un Kreluna Agent vecchio.",
+    "NOT_READY": "Quel PC si era appena collegato: riprova.",
+    "CAPABILITY_NOT_ALLOWED_ROLE": "Quel PC non è quello che fa questo lavoro.",
+}
+
+
+async def translate_old_errors(session: AsyncSession) -> int:
+    """Errori vecchi scritti in gergo: li riscrive in italiano."""
+
+    rows = (await session.execute(select(Task).where(Task.error.in_(tuple(OLD_CODES))))).scalars().all()
+    for task in rows:
+        task.error = OLD_CODES[task.error]
+    return len(rows)
+
+
 async def close_expired_approvals(session: AsyncSession) -> int:
     """Una conferma scaduta non deve restare in "Da approvare" per sempre."""
 
@@ -63,6 +79,7 @@ async def housekeeping_loop(session_factory, every_seconds: int = 3600) -> None:
             async with session_factory() as session:
                 await purge_old_evidence(session)
                 await heal_stopped_tasks(session)
+                await translate_old_errors(session)
                 await close_expired_approvals(session)
                 await session.commit()
         except asyncio.CancelledError:

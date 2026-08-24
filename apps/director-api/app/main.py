@@ -23,6 +23,7 @@ from app.services.housekeeping import (
     heal_stopped_tasks,
     housekeeping_loop,
     purge_old_evidence,
+    translate_old_errors,
 )
 
 
@@ -36,6 +37,7 @@ async def lifespan(_app: FastAPI):
         await seed_if_empty(session)
         await purge_old_evidence(session)
         await heal_stopped_tasks(session)
+        await translate_old_errors(session)
         await close_expired_approvals(session)
         await session.commit()
     keeper = asyncio.create_task(housekeeping_loop(SessionLocal))

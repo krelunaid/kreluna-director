@@ -88,6 +88,19 @@ async def test_purging_twice_is_harmless(session):
 
 
 @pytest.mark.asyncio
+async def test_old_errors_get_rewritten_in_italian(session):
+    from app.services.housekeeping import translate_old_errors
+
+    gergo = await a_task(session, "gergo", status="failed", error="CAPABILITY_NOT_ALLOWED")
+    chiaro = await a_task(session, "chiaro", status="failed", error="PORTALE_SCONOSCIUTO:x")
+    changed = await translate_old_errors(session)
+    await session.flush()
+    assert changed == 1
+    assert "Agent vecchio" in gergo.error
+    assert chiaro.error == "PORTALE_SCONOSCIUTO:x"
+
+
+@pytest.mark.asyncio
 async def test_an_expired_confirmation_leaves_the_approval_list(session):
     task = await a_task(session, "scaduta", status="waiting_approval")
     still_good = await a_task(session, "buona", status="waiting_approval")
