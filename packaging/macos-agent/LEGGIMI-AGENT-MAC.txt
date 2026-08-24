@@ -1,7 +1,13 @@
-KRELUNA AGENT PER MAC
-=====================
+KRELUNA AGENT PER MAC (Apple Silicon, versione 0.5.2)
+=====================================================
 
 Questa NON è Kreluna Director. È l'Agent: il programma del PC.
+Solo Mac con chip Apple (M1, M2, M3, M4). Niente Intel.
+
+Se hai già una versione vecchia:
+- Chiudi Kreluna Agent.
+- Cestina l'app in Applicazioni.
+- Installa questa.
 
 1. Trascina "Kreluna Agent" su Applicazioni.
 2. Aprila. Finestra gialla: Fine, poi Privacy e sicurezza → Apri comunque.
@@ -9,3 +15,5 @@ Questa NON è Kreluna Director. È l'Agent: il programma del PC.
 4. L'indirizzo del Director è già scritto. Cambia solo se il cervello sta su un altro computer.
 
 Lasciala accesa. In dashboard quel PC diventa online.
+
+Se compare "App basate su Intel", stai ancora usando lo zip vecchio: cestina e reinstalla questo.

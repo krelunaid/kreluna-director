@@ -19,11 +19,11 @@ fail() {
 }
 
 ARCH="$(uname -m)"
-if [[ "$ARCH" == "arm64" ]]; then
-  PYTHON="$APP_DIR/Resources/python-arm64/bin/python3.12"
-else
-  PYTHON="$APP_DIR/Resources/python-x64/bin/python3.12"
+if [[ "$ARCH" != "arm64" ]]; then
+  fail "Kreluna Director è solo per Mac con chip Apple (M1, M2, M3, M4). Questo computer non è supportato."
 fi
+
+PYTHON="$APP_DIR/Resources/python-arm64/bin/python3.12"
 
 if [[ ! -x "$PYTHON" ]]; then
   fail "Kreluna è incompleta. Chiudi e reinstalla dallo zip nuovo."

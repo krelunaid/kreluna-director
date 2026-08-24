@@ -19,13 +19,15 @@ BASE = f"https://github.com/astral-sh/python-build-standalone/releases/download/
 PLATFORMS = {
     "macos-arm64": {
         "archive": f"cpython-{PY_VER}+{RELEASE}-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        "pip_platforms": ["macosx_11_0_arm64", "macosx_12_0_arm64", "macosx_10_15_universal2"],
-        "extra": ["uvloop>=0.21.0"],
+        # Never include universal2: macOS treats those wheels as Intel and shows
+        # "App basate su Intel non più supportate" on Apple Silicon.
+        "pip_platforms": ["macosx_11_0_arm64", "macosx_12_0_arm64", "macosx_13_0_arm64", "macosx_14_0_arm64"],
+        "extra": [],
     },
     "macos-x64": {
         "archive": f"cpython-{PY_VER}+{RELEASE}-x86_64-apple-darwin-install_only_stripped.tar.gz",
         "pip_platforms": ["macosx_11_0_x86_64", "macosx_10_13_x86_64", "macosx_10_9_x86_64"],
-        "extra": ["uvloop>=0.21.0"],
+        "extra": [],
     },
     "windows-x64": {
         "archive": f"cpython-{PY_VER}+{RELEASE}-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
@@ -94,6 +96,25 @@ def site_packages(python_home: Path) -> Path:
     return unix
 
 
+def assert_no_intel_artifacts(python_home: Path, key: str) -> None:
+    """Fail the Mac arm64 bundle if any Intel/universal2 slice leaked in."""
+    if key != "macos-arm64":
+        return
+    offenders: list[str] = []
+    for path in python_home.rglob("*"):
+        name = path.name.lower()
+        if any(marker in name for marker in ("x86_64", "universal2")):
+            offenders.append(str(path.relative_to(python_home)))
+            continue
+        if path.is_file() and path.name == "WHEEL":
+            text = path.read_text(errors="ignore").lower()
+            if "x86_64" in text or "universal2" in text:
+                offenders.append(str(path.relative_to(python_home)))
+    if offenders:
+        preview = "\n".join(offenders[:40])
+        raise SystemExit(f"Intel/universal2 nel runtime arm64:\n{preview}")
+
+
 def vendor_wheels(python_home: Path, pip_platforms: list[str], extra: list[str]) -> None:
     target = site_packages(python_home)
     pkgs = COMMON_PKGS + extra
@@ -136,6 +157,7 @@ def bundle(root: Path, key: str, dest: Path) -> Path:
     archive = fetch_archive(root, spec["archive"])
     extract_python(archive, dest)
     vendor_wheels(dest, spec["pip_platforms"], spec["extra"])
+    assert_no_intel_artifacts(dest, key)
     marker = dest / "KRELUNA_RUNTIME.txt"
     marker.write_text(f"{key}\n{spec['archive']}\nsha256={sha256(archive)}\n")
     return dest

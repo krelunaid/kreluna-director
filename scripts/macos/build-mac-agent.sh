@@ -18,9 +18,9 @@ bash "$ROOT/scripts/lib/copy-agent-tree.sh" "$RES"
 cp "$ROOT/packaging/macos-agent/director.url" "$RES/director.url"
 cp "$ROOT/packaging/macos-agent/director.url" "$APP/Contents/Resources/director.url"
 
-echo "Includo Python nell'Agent Mac…"
+echo "Includo Python Apple Silicon (niente Intel)…"
 python3 "$ROOT/scripts/lib/bundle_python.py" macos-arm64 "$APP/Contents/Resources/python-arm64"
-python3 "$ROOT/scripts/lib/bundle_python.py" macos-x64 "$APP/Contents/Resources/python-x64"
+rm -rf "$APP/Contents/Resources/python-x64"
 
 python3 "$ROOT/scripts/lib/make_app_icon.py"
 cp "$ROOT/packaging/macos/AppIcon.png" "$APP/Contents/Resources/AppIcon.png"

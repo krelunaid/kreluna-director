@@ -2,6 +2,7 @@ KRELUNA DIRECTOR PER MAC
 ========================
 
 Cerca l'icona scura con la K oro: "Kreluna Director".
+Solo Mac con chip Apple (M1, M2, M3, M4). Niente Intel.
 
 1. Trascinala sulla cartella Applicazioni.
 2. Aprila. Finestra gialla: Fine (non Cestino).

@@ -19,9 +19,9 @@ chmod +x "$APP/Contents/MacOS/Kreluna"
 
 bash "$ROOT/scripts/lib/copy-app-tree.sh" "$RES"
 
-echo "Includo Python nell'app (non serve installarlo)…"
+echo "Includo Python Apple Silicon (niente Intel)…"
 python3 "$ROOT/scripts/lib/bundle_python.py" macos-arm64 "$APP/Contents/Resources/python-arm64"
-python3 "$ROOT/scripts/lib/bundle_python.py" macos-x64 "$APP/Contents/Resources/python-x64"
+rm -rf "$APP/Contents/Resources/python-x64"
 
 echo "Creo l'icona visibile in Finder…"
 python3 "$ROOT/scripts/lib/make_app_icon.py"
