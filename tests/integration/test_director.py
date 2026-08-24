@@ -65,6 +65,7 @@ async def test_health_and_login(client: AsyncClient):
     assert "Webdesk" in programs["pc-fatture"]
     assert "IPSOA" in programs["pc-f24"]
     assert "CGN" in programs["pc-visure"]
+    assert overview.json()["agents_total"] == len(agents.json()["agents"])
 
 
 @pytest.mark.asyncio

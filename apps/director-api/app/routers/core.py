@@ -4,6 +4,8 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from kreluna_shared.crypto import b64d, fingerprint_device
+from kreluna_shared.update import APP_VERSION, manifest_payload, sign_manifest
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,12 +15,10 @@ from app.database import get_session
 from app.deps import Actor, get_actor, get_policy
 from app.models import AgentSlot, Device, EnrollmentCode, User
 from app.security import issue_session, verify_password
+from app.services.agents import compose_agent_rows
 from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
-from app.services.registry import hub, mark_offline_stale, parse_caps
-from kreluna_shared.crypto import b64d, fingerprint_device
-from kreluna_shared.agents import load_live_agent_roles
-from kreluna_shared.update import APP_VERSION, manifest_payload, sign_manifest
+from app.services.registry import hub, mark_offline_stale
 
 router = APIRouter()
 
@@ -195,28 +195,6 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
     }
 
 
-def _agent_out(row: Device, slot: AgentSlot | None) -> dict:
-    return {
-        "device_id": row.id,
-        "agent_id": row.agent_id,
-        "hostname": row.hostname,
-        "display_name": row.display_name,
-        "capabilities": parse_caps(row.capabilities),
-        "status": row.status,
-        "presence": row.presence,
-        "busy": row.busy,
-        "killed": row.killed,
-        "paused": row.paused,
-        "platform": row.platform,
-        "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
-        "active_task_id": row.active_task_id,
-        "connected": row.id in hub.agents,
-        "job": slot.job if slot else "",
-        "program": slot.program if slot else "",
-        "enrollment_code": slot.enrollment_code if slot else "",
-    }
-
-
 @router.get("/agents")
 async def list_agents(
     actor: Annotated[Actor, Depends(get_actor)],
@@ -230,48 +208,7 @@ async def list_agents(
         await session.execute(select(AgentSlot).where(AgentSlot.tenant_id == actor.tenant_id))
     ).scalars().all()
     await session.commit()
-    live_roles = {item.role for item in load_live_agent_roles()}
-    by_device = {row.id: row for row in rows}
-    by_agent_id = {row.agent_id: row for row in rows}
-    agents = []
-    seen_devices: set[str] = set()
-    for slot in slots:
-        live = None
-        if slot.device_id and slot.device_id in by_device:
-            live = by_device[slot.device_id]
-        elif slot.role in by_agent_id:
-            live = by_agent_id[slot.role]
-        if slot.role not in live_roles and live is None:
-            continue
-        if live:
-            seen_devices.add(live.id)
-            agents.append(_agent_out(live, slot))
-        else:
-            agents.append(
-                {
-                    "device_id": slot.id,
-                    "agent_id": slot.role,
-                    "hostname": "non-installato",
-                    "display_name": slot.display_name,
-                    "capabilities": parse_caps(slot.capabilities),
-                    "status": "waiting_install",
-                    "presence": "waiting_install",
-                    "busy": False,
-                    "killed": False,
-                    "paused": False,
-                    "platform": "windows",
-                    "last_seen_at": None,
-                    "active_task_id": None,
-                    "connected": False,
-                    "job": slot.job,
-                    "program": slot.program,
-                    "enrollment_code": slot.enrollment_code,
-                }
-            )
-    for row in rows:
-        if row.id not in seen_devices:
-            agents.append(_agent_out(row, None))
-    return {"agents": agents}
+    return {"agents": compose_agent_rows(rows, slots)}
 
 
 @router.post("/devices/{device_id}/revoke")

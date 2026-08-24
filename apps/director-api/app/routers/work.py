@@ -27,6 +27,7 @@ from app.models import (
     as_utc,
     utcnow,
 )
+from app.services.agents import compose_agent_rows, count_online
 from app.services.audit import write_audit
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.orchestrator import dispatch_queued, enqueue_planned
@@ -431,12 +432,12 @@ async def overview(
     slots = (
         await session.execute(select(AgentSlot).where(AgentSlot.tenant_id == actor.tenant_id))
     ).scalars().all()
-    online = sum(1 for device in devices if device.presence in {"online", "busy", "killed"} or device.id in hub.agents)
+    agent_rows = compose_agent_rows(devices, slots)
     return {
         "tenant_id": actor.tenant_id,
         "license_state": actor.license_state,
-        "agents_online": online,
-        "agents_total": max(len(slots), len(devices)),
+        "agents_online": count_online(agent_rows),
+        "agents_total": len(agent_rows),
         "tasks_today": len(tasks),
         "running": sum(1 for task in tasks if task.status in {"assigned", "running"}),
         "pending_approvals": len(pending),
