@@ -271,6 +271,16 @@ async def test_ready_viewer_and_billing(client: AsyncClient):
 
     ready = await client.get("/ready")
     assert ready.status_code == 200
+    health = await client.get("/health")
+    assert health.json()["version"]
+    manifest = await client.get("/update/manifest")
+    assert manifest.status_code == 200
+    body = manifest.json()
+    from kreluna_shared.crypto import b64d
+    from kreluna_shared.update import APP_VERSION, verify_manifest
+
+    assert body["manifest"]["version"] == APP_VERSION
+    assert verify_manifest(b64d(health.json()["server_pubkey"]), body["manifest"], body["signature"])
     viewer = await login(client, "viewer@studio.demo")
     denied = await client.post("/chat", headers=auth(viewer), json={"message": "ciao"})
     assert denied.status_code == 403

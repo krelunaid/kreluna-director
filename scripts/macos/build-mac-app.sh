@@ -7,10 +7,7 @@ APP="$OUT/Kreluna Director.app"
 RES="$APP/Contents/Resources/app"
 
 echo "Compilo la dashboard…"
-if [[ ! -d "$ROOT/apps/director-web/node_modules" ]]; then
-  (cd "$ROOT/apps/director-web" && npm install)
-fi
-(cd "$ROOT/apps/director-web" && npm run build)
+bash "$ROOT/scripts/lib/build-web.sh"
 
 rm -rf "$OUT"
 mkdir -p "$APP/Contents/MacOS" "$RES"
@@ -19,26 +16,7 @@ cp "$ROOT/packaging/macos/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/packaging/macos/Kreluna" "$APP/Contents/MacOS/Kreluna"
 chmod +x "$APP/Contents/MacOS/Kreluna"
 
-mkdir -p "$RES"
-# Copia il progetto senza dipendenze di sviluppo.
-tar -C "$ROOT" -cf - \
-  --exclude '.git' \
-  --exclude '.venv' \
-  --exclude 'node_modules' \
-  --exclude 'data' \
-  --exclude 'dist-macos' \
-  --exclude '__pycache__' \
-  --exclude '.pytest_cache' \
-  --exclude '.cursor' \
-  --exclude '*.pyc' \
-  --exclude '.env' \
-  . | tar -C "$RES" -xf -
-
-# La dist della UI serve a runtime; rsync l'ha copiata se presente.
-if [[ ! -f "$RES/apps/director-web/dist/index.html" ]]; then
-  echo "Manca la dashboard compilata" >&2
-  exit 1
-fi
+bash "$ROOT/scripts/lib/copy-app-tree.sh" "$RES"
 
 python3 - "$OUT" <<'PY'
 import sys
@@ -75,6 +53,9 @@ Serve Python 3.11 o più nuovo (https://www.python.org/downloads/macos/).
 La prima apertura scarica i componenti e può richiedere uno o due minuti.
 
 Questa è la demo: fattura finta, non F24 veri.
+
+Aggiornamenti: all'avvio Kreluna legge /update/manifest e ti avvisa.
+Non scarica file da sola.
 TXT
 
 cat > "$OUT/Installa Kreluna.command" <<'TXT'
@@ -87,13 +68,21 @@ open "/Applications/Kreluna Director.app"
 TXT
 chmod +x "$OUT/Installa Kreluna.command"
 
-# Rimuovi la quarantena dallo zip locale (utile dopo il download).
 xattr -cr "$APP" >/dev/null 2>&1 || true
 
 (
   cd "$OUT"
   zip -qry "Kreluna-Director-Mac.zip" "Kreluna Director.app" "Installa Kreluna.command" "LEGGIMI-MAC.txt"
 )
+
+python3 - "$OUT/Kreluna-Director-Mac.zip" <<'PY'
+import hashlib, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+digest = hashlib.sha256(path.read_bytes()).hexdigest()
+path.with_suffix(".zip.sha256").write_text(digest + "  " + path.name + "\n")
+print(digest)
+PY
 
 echo "Pronto: $OUT/Kreluna-Director-Mac.zip"
 ls -lh "$OUT/Kreluna-Director-Mac.zip"

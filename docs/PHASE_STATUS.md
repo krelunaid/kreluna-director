@@ -22,8 +22,8 @@ Legenda: PASS = implementato e testato. SANDBOX = adapter locale, non software f
 | 15 | Hardening grant | PASS | Ed25519, nonce, device-bound |
 | 16 | Audit / retention | PASS | append-only, redaction, retention |
 | 17 | Adapter gestionale | SANDBOX | Fatture sandbox locale, mai Agenzia reale |
-| 18 | Production readiness | NOT-CERTIFIED | script Windows, manuali, /ready; no firma codice / pentest |
+| 18 | Production readiness | NOT-CERTIFIED | zip Mac/Windows, /ready, canale update; no firma codice / pentest |
 
 Fuori perimetro voluto: invio F24/PEC/pagamenti reali, portali Agenzia, mouse libero del modello.
 
-Versione 0.3.0 — roadmap PDF completata in codice fino al limite di sicurezza.
+Versione 0.4.0 — installer Mac e Windows; aggiornamenti avvisati da `/update/manifest`.

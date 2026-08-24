@@ -12,8 +12,8 @@ Checklist coperta in codice/documenti:
 - [x] Retention evidenze
 - [x] Licenza cloud ACTIVE/GRACE/SUSPENDED
 - [x] Installer Agent Windows (script)
-- [x] App Mac
-- [x] `/health` e `/ready`
+- [x] App Mac e Windows (zip installabili)
+- [x] `/health`, `/ready`, `/update/manifest`
 - [ ] Code signing MSIX / notarize Apple
 - [ ] Stripe live
 - [ ] Adapter Fatture in Cloud / Agenzia **reali**

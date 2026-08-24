@@ -2,7 +2,20 @@
 
 IA centrale dello studio: **tu parli solo con il Director**. Lui decide quali PC servono, manda task strutturati, raccoglie prove e ti chiede approvazione prima delle azioni sensibili.
 
-Questa versione parte dal piano Codex e la rende usabile: contratti tipizzati, policy più forte del modello, agent anche su Linux, gestionale DEMO interno, dashboard in italiano.
+## Installa sul computer (Mac o Windows)
+
+Istruzioni: `docs/INSTALL.md`
+
+- Mac: `Kreluna-Director-Mac.zip` → **Installa Kreluna.command**
+- Windows: `Kreluna-Director-Windows.zip` → **Installa.bat**
+
+Login demo: `andrea@studio.demo` / `demo`
+
+Per ricreare gli zip:
+
+```bash
+make installers
+```
 
 ## Cosa fa
 
@@ -24,7 +37,7 @@ Esempi che capisce già:
 - Nessuna licenza `paid=true` sul PC
 - Nessun sequestro di Windows o dei file del cliente se manca il pagamento
 
-## Avvio sul computer (sviluppo)
+## Avvio in sviluppo
 
 ```bash
 make demo
@@ -32,16 +45,9 @@ make demo
 
 Poi apri [http://127.0.0.1:5173](http://127.0.0.1:5173)
 
-## App scaricabile per Mac
+## Aggiornamenti
 
-```bash
-make mac
-```
-
-Esce `dist-macos/Kreluna-Director-Mac.zip`. Sul Mac: apri lo zip, doppio clic su **Installa Kreluna.command**.  
-Istruzioni complete: `docs/MAC.md`.
-
-Login demo: `andrea@studio.demo` / `demo`
+Il programma legge `GET /update/manifest` (firma Ed25519) e avvisa se c’è una versione nuova. Non scarica zip da sola. Per collegare un canale pubblico: variabili `KRELUNA_UPDATE_*` in `.env.example`.
 
 ## Test
 

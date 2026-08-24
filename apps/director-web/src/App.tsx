@@ -31,6 +31,8 @@ export default function App() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
+  const [version, setVersion] = useState("");
+  const [updateNote, setUpdateNote] = useState("");
 
   async function refresh() {
     const [over, ag, ts, ap] = await Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals()]);
@@ -39,6 +41,23 @@ export default function App() {
     setTasks(ts.tasks);
     setApprovals(ap.approvals);
   }
+
+  useEffect(() => {
+    api
+      .health()
+      .then((health) => {
+        setVersion(health.version);
+        return api.updateManifest().then((data) => ({ health, data }));
+      })
+      .then((result) => {
+        if (!result) return;
+        const remote = result.data.manifest?.version;
+        if (remote && remote !== result.health.version) {
+          setUpdateNote(`Aggiornamento ${remote} disponibile. Scarica il nuovo zip: Kreluna non lo scarica da sola.`);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -117,7 +136,7 @@ export default function App() {
               Entra nello studio
             </button>
           </form>
-          <p className="hint">Demo: andrea@studio.demo / demo</p>
+          <p className="hint">Demo: andrea@studio.demo / demo{version ? ` · v${version}` : ""}</p>
         </div>
       </div>
     );
@@ -131,6 +150,8 @@ export default function App() {
           <h1>Director</h1>
           <div className="small">
             {name} · licenza {overview?.license_state ?? "…"}
+            {version ? ` · v${version}` : ""}
+            {updateNote ? ` · ${updateNote}` : ""}
           </div>
         </div>
         <div className="actions">

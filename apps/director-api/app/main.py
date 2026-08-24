@@ -17,6 +17,7 @@ from app.routers.billing import router as billing_router
 from app.routers.ws import router as ws_router
 from app.seed import seed_if_empty
 from app.database import SessionLocal
+from kreluna_shared.update import APP_VERSION
 
 
 @asynccontextmanager
@@ -30,7 +31,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Kreluna Director", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Kreluna Director", version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins + ["http://127.0.0.1:8080", "http://localhost:8080"],
@@ -82,6 +83,7 @@ async def spa_fallback(full_path: str):
         "demo",
         "billing",
         "ready",
+        "update",
         "docs",
         "redoc",
         "openapi.json",

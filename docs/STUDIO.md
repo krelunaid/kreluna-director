@@ -11,3 +11,5 @@ Tu parli solo con **Kreluna Director**.
 Non registri il monitor. Non insegni i click. I programmi si collegano dopo, un PC alla volta.
 
 Login demo: `andrea@studio.demo` / `demo`
+
+Installazione sul computer: `docs/INSTALL.md` (zip Mac e zip Windows).

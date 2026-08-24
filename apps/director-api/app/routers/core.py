@@ -17,6 +17,7 @@ from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
 from app.services.registry import hub, mark_offline_stale, parse_caps
 from kreluna_shared.crypto import b64d, fingerprint_device
+from kreluna_shared.update import APP_VERSION, manifest_payload, sign_manifest
 
 router = APIRouter()
 
@@ -44,8 +45,18 @@ async def health() -> dict:
     return {
         "ok": True,
         "service": "director-api",
-        "version": "0.3.0",
+        "version": APP_VERSION,
         "server_pubkey": b64e(server_public_bytes(settings.director_signing_seed)),
+    }
+
+
+@router.get("/update/manifest")
+async def update_manifest() -> dict:
+    payload = manifest_payload()
+    return {
+        "manifest": payload,
+        "signature": sign_manifest(settings.director_signing_seed, payload),
+        "algorithm": "ed25519",
     }
 
 

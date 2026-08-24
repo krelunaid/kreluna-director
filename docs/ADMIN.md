@@ -8,5 +8,5 @@
 - Webhook billing: `POST /billing/webhook` con `X-Kreluna-Signature` HMAC-SHA256.
 - Revoca device: il PC non ottiene più grant.
 - Evidence: cifrate, tenant-scoped, retention 72h.
-- Agent Windows: `scripts/windows/Install-KrelunaAgent.ps1`.
-- Agent Mac: `docs/MAC.md`.
+- App Mac e Windows: `docs/INSTALL.md`
+- Agent Windows (un PC, un ruolo): `scripts/windows/Install-KrelunaAgent.ps1`.

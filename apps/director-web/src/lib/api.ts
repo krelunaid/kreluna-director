@@ -86,6 +86,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
+  health: () => request<{ ok: boolean; version: string }>("/health"),
+  updateManifest: () =>
+    request<{ manifest: { version: string; notes: string }; signature: string }>("/update/manifest"),
   me: () => request<{ name: string; email: string; role: string; license_state: string }>("/me"),
   overview: () => request<Overview>("/overview"),
   agents: () => request<{ agents: Agent[] }>("/agents"),

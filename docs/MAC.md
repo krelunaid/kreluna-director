@@ -26,7 +26,9 @@ Non invia F24 veri. Per i gestionali italiani dello studio serve in seguito un P
 ## Ricreare lo zip
 
 ```bash
-bash scripts/macos/build-mac-app.sh
+make mac
 ```
 
 Il file esce in `dist-macos/Kreluna-Director-Mac.zip`.
+
+Istruzioni complete Mac + Windows: `docs/INSTALL.md`.

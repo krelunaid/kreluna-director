@@ -1,0 +1,22 @@
+KRELUNA DIRECTOR PER WINDOWS
+============================
+
+1. Estrai questo zip.
+2. Doppio clic su Installa.bat
+   (se Windows chiede conferma: Altre informazioni → Esegui comunque)
+3. Sul desktop compare "Kreluna Director". Aprilo.
+4. Entra con:
+   email:    andrea@studio.demo
+   password: demo
+
+Serve Python 3.11 o più nuovo:
+https://www.python.org/downloads/windows/
+Durante l'installazione spunta "Add python.exe to PATH".
+
+La prima apertura prepara i componenti e può richiedere uno o due minuti.
+
+Questa è la demo: fattura finta, non F24 veri, non Fatture in Cloud reale.
+
+Aggiornamenti: Kreluna controlla il canale /update/manifest e ti avvisa.
+Non scarica file da sola. Quando pubblichi un nuovo zip, imposta
+KRELUNA_UPDATE_URL e gli URL Mac/Windows nel file .env.

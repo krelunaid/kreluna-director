@@ -8,6 +8,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/health": "http://127.0.0.1:8080",
+      "/ready": "http://127.0.0.1:8080",
+      "/update": "http://127.0.0.1:8080",
       "/auth": "http://127.0.0.1:8080",
       "/me": "http://127.0.0.1:8080",
       "/chat": "http://127.0.0.1:8080",
