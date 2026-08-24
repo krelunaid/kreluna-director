@@ -34,6 +34,16 @@ class DocumentCheckArgs(BaseModel):
     scope: str = Field(default="missing_documents", max_length=80)
 
 
+class PaymentPrepareArgs(BaseModel):
+    beneficiary: str = Field(default="da definire", max_length=200)
+    reason: str = Field(default="pagamento", max_length=500)
+    amount_eur: float = Field(default=0, ge=0, le=1_000_000)
+
+
+class InvoiceCheckArgs(BaseModel):
+    scope: str = Field(default="fatture_da_controllare", max_length=80)
+
+
 class EmailDraftArgs(BaseModel):
     subject: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1, max_length=8000)
@@ -84,6 +94,20 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         args_model=DocumentCheckArgs,
         default_risk="low",
         description="Controllo in sola lettura dei documenti mancanti demo.",
+        operational=True,
+    ),
+    "payment_prepare": CapabilitySpec(
+        name="payment_prepare",
+        args_model=PaymentPrepareArgs,
+        default_risk="medium",
+        description="Prepara un pagamento in bozza. Non esegue bonifici.",
+        demo_only=True,
+    ),
+    "invoice_check": CapabilitySpec(
+        name="invoice_check",
+        args_model=InvoiceCheckArgs,
+        default_risk="low",
+        description="Controlla fatture in sola lettura. Non modifica e non invia.",
         operational=True,
     ),
     "email_draft": CapabilitySpec(

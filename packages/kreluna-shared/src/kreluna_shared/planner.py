@@ -121,6 +121,21 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
+    if ("controlla" in lowered or "controllo" in lowered) and "fattur" in lowered:
+        return PlanResult(
+            ok=True,
+            summary="Assegno il controllo fatture (sola lettura) all'Agent PC-PAGAMENTI.",
+            tasks=[
+                PlannedTask(
+                    goal="Controllare le fatture, senza modificarle",
+                    capability="invoice_check",
+                    args={"scope": "fatture_da_controllare"},
+                    risk=Risk.LOW,
+                    needs_approval=False,
+                )
+            ],
+        )
+
     if "fattura" in lowered:
         client = _client_name(lowered) or "Mario Rossi"
         net = _money(lowered) or 1500.0
@@ -199,9 +214,22 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
-    if any(word in lowered for word in ("pagamento", "bonifico")) or (
-        "pec" in lowered and any(word in lowered for word in ("invia", "manda", "spedisci"))
-    ):
+    if any(word in lowered for word in ("pagamento", "bonifico", "paga ")):
+        return PlanResult(
+            ok=True,
+            summary="Assegno la preparazione del pagamento all'Agent PC-PAGAMENTI. Nessun bonifico parte.",
+            tasks=[
+                PlannedTask(
+                    goal="Preparare pagamento in bozza, senza eseguirlo",
+                    capability="payment_prepare",
+                    args={"reason": raw[:500], "beneficiary": "da definire", "amount_eur": _money(lowered) or 0},
+                    risk=Risk.MEDIUM,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    if "pec" in lowered and any(word in lowered for word in ("invia", "manda", "spedisci")):
         return PlanResult(
             ok=False,
             summary="Pagamenti e invio PEC non sono abilitati.",

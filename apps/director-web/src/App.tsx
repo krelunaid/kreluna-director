@@ -6,7 +6,8 @@ type ChatItem = { role: "user" | "director"; text: string; deny?: boolean };
 const SUGGESTIONS = [
   "Apri Blocco Note e scrivi: Kreluna Agent operativo",
   "Prepara una fattura demo a Rossi Mario per consulenza, EUR 1500 + IVA",
-  "Controlla quali clienti hanno documenti mancanti",
+  "Controlla le fatture",
+  "Prepara un pagamento di 500 euro, non eseguirlo",
   "Prepara gli F24 in scadenza, ma non inviarli",
   "Ferma tutto",
 ];

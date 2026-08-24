@@ -8,6 +8,8 @@ risk:
   invoice_submit_demo: high
   f24_prepare: medium
   f24_submit: critical
+  payment_prepare: medium
+  invoice_check: low
   payment: critical
   email_send: high
   pec_send: critical
