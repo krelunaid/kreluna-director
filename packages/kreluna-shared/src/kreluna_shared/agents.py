@@ -36,7 +36,7 @@ CAPABILITY_TO_ROLE: dict[str, str] = {
 def preferred_role(capability: str, args: dict | None = None) -> str | None:
     """Quale PC deve farlo. Per i portali veri dipende dal portale chiesto."""
 
-    if capability == "portal_open":
+    if capability in {"portal_open", "portal_learn"}:
         from kreluna_shared.programs import portal_for_key
 
         portal = portal_for_key(str((args or {}).get("portal") or ""))

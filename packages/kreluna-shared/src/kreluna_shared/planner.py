@@ -196,7 +196,24 @@ LIVE_PORTALS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("fatture-webdesk", "Fatture su Webdesk", ("fattur", "webdesk")),
 )
 
-LIVE_WORDS = ("vero", "vera", "davvero", "apri il sito", "apri il portale", "nel browser")
+LIVE_WORDS = (
+    "vero",
+    "vera",
+    "davvero",
+    "apri il sito",
+    "apri il portale",
+    "nel browser",
+    "impara",
+    "imparare",
+    "guarda la pagina",
+    "studia la pagina",
+)
+
+TEACH_WORDS = ("impara", "imparare", "guarda la pagina", "studia la pagina", "insegn")
+
+
+def _wants_to_teach(lowered: str) -> bool:
+    return any(word in lowered for word in TEACH_WORDS)
 
 
 def _live_portal(lowered: str) -> tuple[str, str] | None:
@@ -304,6 +321,25 @@ def plan_deterministic(text: str) -> PlanResult:
         )
 
     live = _live_portal(lowered)
+    if live is not None and _wants_to_teach(lowered):
+        portal, portal_name = live
+        return PlanResult(
+            ok=True,
+            summary=(
+                f"Studio la pagina di {portal_name} che hai davanti sul PC e ti scrivo i nomi dei campi. "
+                "Non scrivo e non clicco niente."
+            ),
+            tasks=[
+                PlannedTask(
+                    goal=f"Imparare la pagina di {portal_name}",
+                    capability="portal_learn",
+                    args={"portal": portal},
+                    risk=Risk.LOW,
+                    needs_approval=False,
+                )
+            ],
+        )
+
     if live is not None:
         portal, portal_name = live
         client = _client_name(raw) or _client_name(lowered) or ""

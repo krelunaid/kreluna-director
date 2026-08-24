@@ -29,6 +29,7 @@ CAPABILITY_ALLOWLIST: dict[str, Handler] = {
     "durc_prepare": studio.durc,
     "visure_prepare": studio.visure,
     "portal_open": portal.open_portal,
+    "portal_learn": portal.learn_portal,
     "payment_prepare": payments.prepare,
     "invoice_check": payments.check_invoices,
 }

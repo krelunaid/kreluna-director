@@ -1,0 +1,47 @@
+INSEGNARE UN PROGRAMMA A KRELUNA
+================================
+
+Ci sono due cose diverse, e si insegnano in due modi diversi.
+
+1. LE PAROLE: come parli tu
+---------------------------
+Serve perché "mi serve quel certificato dei contributi" voglia dire DURC.
+Questo lo impara l'IA, e si insegna scrivendo esempi:
+- nel planner a regole, `LIVE_PORTALS` e le parole chiave;
+- nel prompt dell'IA, la lista "Come parla il titolare, e cosa vuol dire".
+Aggiungere un modo di dire e' una riga.
+
+2. I PASSI DENTRO IL PROGRAMMA: dove si clicca
+----------------------------------------------
+Questo NON lo impara l'IA da sola, e non deve: se indovina, sbaglia riga, e in
+uno studio quello e' un danno. Si scrive una ricetta, una volta, in
+`policies/programs.yaml`:
+
+  fatture-webdesk:
+    role: pc-fatture
+    name: Fatture — Webdesk
+    url: https://indirizzo-vero-di-webdesk
+    field: "#codiceCliente"        <- il campo dove scrivere
+    login_note: come si entra
+
+Il campo si indica per NOME, non per posizione del mouse: se il sito sposta i
+riquadri, l'Agent trova ancora il campo giusto.
+
+COME SI RICAVA LA RICETTA, SENZA ESSERE INFORMATICI
+---------------------------------------------------
+1. Sul PC di quel lavoro apri il programma e arriva alla pagina che ti serve
+   (fai il login tu: SPID, smart card, utenza dello studio).
+2. In Kreluna scrivi: "impara la pagina di Webdesk".
+3. L'Agent guarda la pagina e ti riporta l'elenco dei campi con il loro nome
+   tecnico, piu' una foto della pagina. Non scrive e non clicca niente.
+4. Tu mi dici quale campo va compilato con cosa; io lo scrivo in programs.yaml.
+   Dalla volta dopo lo fa da solo.
+
+Un programma alla volta, e ogni pagina e' una ricetta a se': la ricerca del
+cliente, la nuova fattura, le righe, il totale.
+
+COSA RESTA SEMPRE FUORI
+-----------------------
+- Il login con credenziali personali: lo fai tu.
+- Il tasto che invia, paga o trasmette: si ferma prima e chiede Approva.
+- Le foto delle pagine restano come prova, cifrate, e non vanno a nessuna IA.

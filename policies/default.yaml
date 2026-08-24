@@ -9,6 +9,7 @@ risk:
   f24_prepare: medium
   f24_submit: critical
   portal_open: medium
+  portal_learn: low
   contabilita_prepare: medium
   camera_prepare: medium
   contratti_prepare: medium

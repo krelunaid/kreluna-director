@@ -11,6 +11,7 @@ agents:
       - invoice_prepare_demo
       - invoice_submit_demo
       - portal_open
+      - portal_learn
   - role: pc-f24
     display_name: PC-F24
     job: Deleghe F24

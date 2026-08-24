@@ -21,6 +21,52 @@ def _evidence(png: bytes, step: str, portal_key: str) -> dict[str, Any]:
     }
 
 
+def learn_portal(
+    portal: str,
+    *,
+    runner: mac_browser.Runner | None = None,
+    supported: Callable[[], bool] = mac_browser.is_supported,
+) -> dict[str, Any]:
+    """Guarda la pagina che hai davanti e scrive i nomi dei campi. Non tocca niente."""
+
+    spec = portal_for_key(portal)
+    if spec is None:
+        raise ValueError(f"PORTALE_SCONOSCIUTO:{portal}")
+    if not supported():
+        raise RuntimeError("Questo passo legge il browser di un Mac. Su questo PC non è disponibile.")
+
+    settings = load_settings()
+    run = runner or mac_browser.Runner()
+    browser = mac_browser.pick_browser(run, settings.mac_browser)
+    page = mac_browser.page_fields(run, browser)
+    campi = page.get("campi") or []
+    proposte = [
+        {
+            "nome": item.get("label") or item.get("placeholder") or item.get("aria") or item.get("name") or item.get("testo"),
+            "tipo": item.get("tag"),
+            "selettore": mac_browser.suggest_selector(item),
+        }
+        for item in campi
+    ]
+    scritti = [p for p in proposte if p["tipo"] in {"input", "textarea", "select"}]
+    return {
+        "ok": True,
+        "live": True,
+        "sent": False,
+        "portal": spec.name,
+        "pagina": page.get("url") or "",
+        "titolo": page.get("titolo") or "",
+        "campi_trovati": len(campi),
+        "campi": scritti[:20],
+        "bottoni": [p for p in proposte if p["tipo"] == "button"][:10],
+        "message": (
+            f'Ho guardato "{page.get("titolo") or "la pagina"}" e ho trovato {len(scritti)} campi. '
+            "Non ho scritto e non ho cliccato niente."
+        ),
+        "evidence": [_evidence(mac_browser.screenshot(run), "pagina-studiata", portal)],
+    }
+
+
 def open_portal(
     portal: str,
     query: str = "",

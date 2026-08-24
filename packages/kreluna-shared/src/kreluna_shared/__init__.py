@@ -17,17 +17,17 @@ from kreluna_shared.policy import PolicyEngine, load_policy
 
 __all__ = [
     "CAPABILITIES",
-    "CapabilitySpec",
     "AgentPresence",
     "AgentStatus",
+    "CapabilitySpec",
     "EvidenceKind",
     "LicenseState",
-    "PlannedTask",
     "PlanResult",
+    "PlannedTask",
     "PolicyDecision",
+    "PolicyEngine",
     "Risk",
     "Role",
     "TaskStatus",
-    "PolicyEngine",
     "load_policy",
 ]

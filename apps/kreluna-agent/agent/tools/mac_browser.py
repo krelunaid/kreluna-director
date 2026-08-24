@@ -136,6 +136,56 @@ end tell
 '''
 
 
+LEARN_JS = (
+    "(function(){var out=[];var els=document.querySelectorAll('input,select,textarea,button');"
+    "for(var i=0;i<els.length&&out.length<40;i++){var e=els[i];var r=e.getBoundingClientRect();"
+    "if(r.width===0||r.height===0)continue;var lab='';"
+    "if(e.labels&&e.labels.length)lab=e.labels[0].innerText||'';"
+    "out.push({tag:e.tagName.toLowerCase(),type:e.type||'',name:e.name||'',id:e.id||'',"
+    "placeholder:e.placeholder||'',aria:e.getAttribute('aria-label')||'',"
+    "label:(lab||'').trim().slice(0,60),testo:(e.innerText||'').trim().slice(0,40)});}"
+    "return JSON.stringify({url:location.href,titolo:document.title,campi:out});})()"
+)
+
+
+def page_fields(runner: Runner, browser: str) -> dict:
+    """Guarda la pagina aperta e dice quali campi ci sono, per imparare il programma."""
+
+    try:
+        answer = runner.osascript(_js(browser, LEARN_JS))
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+    start, end = answer.find("{"), answer.rfind("}")
+    if start == -1 or end <= start:
+        return {"url": "", "titolo": "", "campi": []}
+    try:
+        data = json.loads(answer[start : end + 1])
+    except json.JSONDecodeError:
+        return {"url": "", "titolo": "", "campi": []}
+    return data if isinstance(data, dict) else {"url": "", "titolo": "", "campi": []}
+
+
+def suggest_selector(field: dict) -> str:
+    """Il modo più stabile per ritrovare quel campo domani."""
+
+    tag = field.get("tag") or "input"
+    for key, shape in (("id", "#{}"), ("name", '{}[name="{}"]')):
+        value = (field.get(key) or "").strip()
+        if not value:
+            continue
+        if key == "id":
+            return shape.format(value)
+        return shape.format(tag, value)
+    placeholder = (field.get("placeholder") or "").strip()
+    if placeholder:
+        return f'{tag}[placeholder="{placeholder}"]'
+    aria = (field.get("aria") or "").strip()
+    if aria:
+        return f'{tag}[aria-label="{aria}"]'
+    kind = (field.get("type") or "").strip()
+    return f'{tag}[type="{kind}"]' if kind else tag
+
+
 def find_field_script(browser: str, selector: str) -> str:
     css = selector.replace("'", "\\'")
     return _js(

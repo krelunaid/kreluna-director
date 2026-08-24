@@ -169,6 +169,16 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         ),
         demo_only=False,
     ),
+    "portal_learn": CapabilitySpec(
+        name="portal_learn",
+        args_model=PortalOpenArgs,
+        default_risk="low",
+        description=(
+            "Guarda la pagina del portale aperta sul PC e scrive i nomi dei campi, "
+            "per imparare il programma. Non scrive, non clicca, non invia."
+        ),
+        demo_only=False,
+    ),
     "document_check": CapabilitySpec(
         name="document_check",
         args_model=DocumentCheckArgs,

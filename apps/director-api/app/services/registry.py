@@ -121,7 +121,7 @@ def score_agent(device: Device, capability: str, args: dict | None = None) -> in
         return -10_000
     role = preferred_role(capability, args)
     # Un portale vero si apre solo sul PC che fa quel lavoro.
-    if capability == "portal_open" and role and device.agent_id != role:
+    if capability in {"portal_open", "portal_learn"} and role and device.agent_id != role:
         return -10_000
     score = 100
     if not device.busy:
