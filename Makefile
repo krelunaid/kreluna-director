@@ -33,3 +33,4 @@ installers:
 
 agents:
 	bash scripts/windows/build-agent-zip.sh
+	bash scripts/macos/build-mac-agent.sh

@@ -1,0 +1,42 @@
+#!/bin/bash
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$APP_DIR/Resources/app"
+SUPPORT="$HOME/Library/Application Support/KrelunaAgent"
+LOG="$SUPPORT/kreluna-agent.log"
+
+mkdir -p "$SUPPORT"
+exec > >(tee -a "$LOG") 2>&1
+
+notify() {
+  osascript -e "display notification \"$1\" with title \"Kreluna Agent\"" >/dev/null 2>&1 || true
+}
+
+fail() {
+  osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"Kreluna Agent\"" >/dev/null 2>&1 || true
+  exit 1
+}
+
+ARCH="$(uname -m)"
+if [[ "$ARCH" == "arm64" ]]; then
+  PYTHON="$APP_DIR/Resources/python-arm64/bin/python3.12"
+else
+  PYTHON="$APP_DIR/Resources/python-x64/bin/python3.12"
+fi
+
+if [[ ! -x "$PYTHON" ]]; then
+  fail "L’Agent è incompleto. Scarica di nuovo lo zip Mac."
+fi
+
+if [[ -f "$APP_DIR/Resources/director.url" ]]; then
+  export AGENT_DIRECTOR_URL="$(head -n 1 "$APP_DIR/Resources/director.url" | tr -d '[:space:]')"
+fi
+
+export PYTHONHOME="$(cd "$(dirname "$PYTHON")/.." && pwd)"
+export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/kreluna-agent"
+export KRELUNA_AGENT_DATA_DIR="$SUPPORT/data"
+
+notify "Avvio Kreluna Agent…"
+cd "$ROOT"
+exec "$PYTHON" -m agent.mac_boot

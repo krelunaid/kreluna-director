@@ -1,0 +1,11 @@
+KRELUNA AGENT PER MAC
+=====================
+
+Questa NON è Kreluna Director. È l'Agent: il programma del PC.
+
+1. Trascina "Kreluna Agent" su Applicazioni.
+2. Aprila. Finestra gialla: Fine, poi Privacy e sicurezza → Apri comunque.
+3. Scegli il lavoro DI QUESTO Mac (es. PC-FATTURE).
+4. L'indirizzo del Director è già scritto. Cambia solo se il cervello sta su un altro computer.
+
+Lasciala accesa. In dashboard quel PC diventa online.

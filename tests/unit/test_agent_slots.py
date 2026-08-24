@@ -41,7 +41,9 @@ def test_payments_and_invoice_check_are_split():
     assert preferred_role("invoice_prepare_demo") == "pc-fatture"
     assert preferred_role("payment_prepare") == "pc-pagamenti"
     from kreluna_shared.agents import capabilities_for_role
+    from agent.mac_boot import enroll_code_for_role
 
     assert "invoice_prepare_demo" in capabilities_for_role("pc-fatture")
     assert "payment_prepare" not in capabilities_for_role("pc-fatture")
     assert "invoice_prepare_demo" not in capabilities_for_role("pc-pagamenti")
+    assert enroll_code_for_role("pc-fatture") == "KRELUNA-PC-FATTURE"

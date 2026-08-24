@@ -6,9 +6,10 @@ IA centrale dello studio: **tu parli solo con il Director**. Lui decide quali PC
 
 Istruzioni: `docs/INSTALL.md`
 
-- Mac: `Kreluna-Director-Mac.zip` → trascina `Kreluna Director.app` in Applicazioni
+- Mac Director: `Kreluna-Director-Mac.zip` → trascina `Kreluna Director.app` in Applicazioni
+- Mac Agent: `Kreluna-Agent-Mac.zip` → `Kreluna Agent.app` (scegli il ruolo)
 - Windows Director: `Kreluna-Director-Windows.zip` → **Installa.bat**
-- Windows Agent (un PC uno): `Kreluna-Agenti-Windows.zip` → **Installa PC-FATTURE.bat** (ecc.)
+- Windows Agent: `Kreluna-Agenti-Windows.zip` → **Installa PC-FATTURE.bat** (ecc.)
 
 **Non serve installare Python.** È già dentro il programma.
 

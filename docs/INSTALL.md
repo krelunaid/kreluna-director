@@ -19,16 +19,14 @@ Dettagli: `docs/MAC.md`.
 
 Dettagli: `docs/WINDOWS.md`.
 
-## Agent sui PC dello studio (a parte dal Director)
+## Agent (programma a parte dal Director)
 
-Zip: `Kreluna-Agenti-Windows.zip`. Un file per PC, **non** è il cervello.
+- **Mac:** `Kreluna-Agent-Mac.zip` → trascina **Kreluna Agent** in Applicazioni → scegli il ruolo (PC-FATTURE, …)
+- **Windows:** `Kreluna-Agenti-Windows.zip` → **Installa PC-FATTURE.bat** (un file per PC)
 
-1. Scrivi in `director.url` l’indirizzo del Director
-2. Sul PC fatture: **Installa PC-FATTURE.bat**
-3. Sul PC pagamenti: **Installa PC-PAGAMENTI.bat**
-   (e così via)
+Un Agent per computer. Non è il cervello.
 
-Dettagli: `docs/WINDOWS.md`.
+## Accesso
 
 - Si apre da sola la finestra su `http://127.0.0.1:8080`
 - Email: `andrea@studio.demo`

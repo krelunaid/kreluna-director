@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sys
 from pathlib import Path
 
 from kreluna_shared.crypto import b64e, generate_device_keypair
@@ -15,7 +16,12 @@ class AgentIdentity:
         self.agent_id = agent_id
         self.display_name = display_name
         self.hostname = socket.gethostname()
-        self.platform = "windows" if os.name == "nt" else "linux"
+        if sys.platform == "darwin":
+            self.platform = "macos"
+        elif os.name == "nt":
+            self.platform = "windows"
+        else:
+            self.platform = "linux"
         self.private_key, self.public_key = self._load_or_create_keys()
         self.device_id: str | None = self._read_state().get("device_id")
         self.tenant_id: str | None = self._read_state().get("tenant_id")
