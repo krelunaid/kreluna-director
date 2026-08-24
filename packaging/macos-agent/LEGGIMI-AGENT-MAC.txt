@@ -1,4 +1,4 @@
-KRELUNA AGENT PER MAC (Apple Silicon, versione 0.5.6)
+KRELUNA AGENT PER MAC (Apple Silicon, versione 0.5.7)
 =====================================================
 
 Questa NON è Kreluna Director. È l'Agent: il programma del PC.

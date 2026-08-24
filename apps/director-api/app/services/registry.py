@@ -4,7 +4,7 @@ import json
 from datetime import UTC, timedelta
 
 from fastapi import WebSocket
-from kreluna_shared.agents import preferred_role
+from kreluna_shared.agents import capabilities_for_role, preferred_role
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,9 +100,20 @@ async def mark_offline_stale(session: AsyncSession) -> None:
             await requeue_device_tasks(session, device.id)
 
 
+def allowed_capabilities(device: Device) -> list[str]:
+    """Comanda la policy dello studio, non la lista che dichiara il PC.
+
+    Un Agent vecchio dichiara i lavori di un'altra versione: il Director
+    continua a mandargli il lavoro del suo ruolo, e sarà l'Agent a rifiutare
+    se non lo sa fare.
+    """
+
+    by_role = capabilities_for_role(device.agent_id)
+    return by_role or parse_caps(device.capabilities)
+
+
 def score_agent(device: Device, capability: str, args: dict | None = None) -> int:
-    caps = parse_caps(device.capabilities)
-    if capability not in caps:
+    if capability not in allowed_capabilities(device):
         return -10_000
     if device.status != "active":
         return -10_000

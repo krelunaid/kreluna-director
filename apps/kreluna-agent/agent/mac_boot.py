@@ -64,7 +64,12 @@ def apply_config(data: dict[str, str]) -> None:
     os.environ["KRELUNA_ENROLLMENT_CODE"] = enroll_code_for_role(role)
     os.environ["AGENT_DIRECTOR_URL"] = url
     os.environ["AGENT_DIRECTOR_WSS"] = url.replace("http://", "ws://").replace("https://", "wss://") + "/ws/agent"
-    os.environ.setdefault("KRELUNA_AGENT_DATA_DIR", str(support_dir() / "data" / role))
+    # Ogni lavoro ha la sua cartella: cambiando lavoro l'Agent si presenta come
+    # quel PC, invece di riusare l'identità del ruolo di prima.
+    base = Path(os.environ.get("KRELUNA_AGENT_DATA_DIR") or (support_dir() / "data"))
+    if base.name != role:
+        base = base / role
+    os.environ["KRELUNA_AGENT_DATA_DIR"] = str(base)
 
 
 def ask_osascript() -> dict[str, str] | None:
@@ -76,7 +81,7 @@ set picked to choose from list {{{listed}}} with prompt "Questo Mac quale lavoro
 if picked is false then return "CANCEL"
 return item 1 of picked
 '''
-    choose = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    choose = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, check=False)
     label = choose.stdout.strip()
     if choose.returncode != 0 or label in {"", "CANCEL"}:
         return None
@@ -88,7 +93,7 @@ set answer to display dialog "Indirizzo del Director (cervello)" default answer 
 if button returned of answer is "Annulla" then return "CANCEL"
 return text returned of answer
 '''
-    typed = subprocess.run(["osascript", "-e", url_script], capture_output=True, text=True)
+    typed = subprocess.run(["osascript", "-e", url_script], capture_output=True, text=True, check=False)
     url = typed.stdout.strip()
     if typed.returncode != 0 or url in {"", "CANCEL"}:
         return None
@@ -104,7 +109,7 @@ set picked to display dialog "Questo Mac è {name}. Scegli il lavoro di questo c
 if button returned of picked is "Cambia lavoro" then return "CHANGE"
 return "KEEP"
 '''
-    choice = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    choice = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, check=False)
     if choice.returncode != 0:
         return None
     if choice.stdout.strip() != "CHANGE":

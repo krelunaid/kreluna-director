@@ -16,6 +16,7 @@ export type Agent = {
   program?: string;
   enrollment_code?: string;
   retired?: boolean;
+  needs_update?: boolean;
 };
 
 export type Task = {

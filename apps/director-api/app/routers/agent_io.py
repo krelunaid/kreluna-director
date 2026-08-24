@@ -97,7 +97,7 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
         task.error = None
     else:
         task.status = "failed"
-        task.error = body.error
+        task.error = _readable_error(body.error, device)
         device.recent_errors += 1
     task.result_json = json.dumps(body.result)
     device.busy = False
@@ -190,6 +190,21 @@ async def agent_submit_invoice(payload: dict[str, Any], session: Annotated[Async
     draft.status = "issued"
     await session.commit()
     return {"observed": observed_from_draft(draft)}
+
+
+def _readable_error(error: str | None, device: Device) -> str:
+    """Gli errori li legge il titolare, non un programmatore."""
+
+    raw = (error or "").strip()
+    if raw == "CAPABILITY_NOT_ALLOWED":
+        from app.services.agents import _needs_update
+
+        if _needs_update(device):
+            return f"{device.display_name or device.agent_id} ha un Kreluna Agent vecchio: installa la versione nuova."
+        return f"{device.display_name or device.agent_id} non è il PC che fa questo lavoro."
+    if raw == "NOT_READY":
+        return "Quel PC si è appena collegato: riprova."
+    return raw or "Errore senza spiegazione dal PC."
 
 
 async def _require_device(session: AsyncSession, payload: dict[str, Any]) -> Device:

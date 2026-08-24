@@ -150,6 +150,7 @@ export default function App() {
   const pending = useMemo(() => approvals.filter((item) => item.status === "pending"), [approvals]);
   const blocked = useMemo(() => agents.filter((item) => item.killed || item.paused), [agents]);
   const wrongJob = useMemo(() => agents.filter((item) => item.retired && item.connected), [agents]);
+  const oldAgent = useMemo(() => agents.filter((item) => item.needs_update && item.connected), [agents]);
 
   async function resumeAll() {
     await Promise.all(blocked.map((item) => api.resume(item.device_id).catch(() => undefined)));
@@ -251,6 +252,16 @@ export default function App() {
             {item.hostname} è acceso come {item.display_name || item.agent_id}, un ruolo vecchio: nessun lavoro dello
             studio gli arriva. Apri Kreluna Agent su quel computer, clicca Cambia lavoro e scegli il lavoro che deve
             fare.
+          </span>
+        </div>
+      ))}
+
+      {oldAgent.map((item) => (
+        <div className="banner" key={`vecchio-${item.device_id}`}>
+          <span>
+            {item.display_name || item.agent_id} ({item.hostname}) ha un Kreluna Agent vecchio: sa fare i lavori di una
+            versione precedente. Installa l'Agent nuovo su quel computer, altrimenti i lavori di{" "}
+            {item.job || "questo ruolo"} arrivano ma vengono rifiutati.
           </span>
         </div>
       ))}

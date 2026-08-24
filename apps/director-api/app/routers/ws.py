@@ -6,11 +6,53 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from app.database import SessionLocal
-from app.models import Device, utcnow
+from app.models import AgentSlot, Device, utcnow
 from app.services.orchestrator import dispatch_queued
 from app.services.registry import hub, parse_caps, requeue_device_tasks
 
 router = APIRouter()
+
+
+async def rebind_role(session, device: Device, claimed_role: str | None) -> bool:
+    """Il PC dice che lavoro fa adesso. Se quel posto è libero, glielo diamo davvero."""
+
+    role = (claimed_role or "").strip().lower()
+    if not role or role == device.agent_id:
+        return False
+    slot = (
+        await session.execute(
+            select(AgentSlot).where(AgentSlot.tenant_id == device.tenant_id, AgentSlot.role == role)
+        )
+    ).scalar_one_or_none()
+    if slot is None:
+        return False
+    if slot.device_id and slot.device_id != device.id:
+        # Quel lavoro è già di un altro computer: non lo si porta via da qui.
+        return False
+    taken = (
+        await session.execute(
+            select(Device).where(
+                Device.tenant_id == device.tenant_id,
+                Device.agent_id == role,
+                Device.id != device.id,
+                Device.status == "active",
+            )
+        )
+    ).scalars().first()
+    if taken is not None:
+        return False
+    old = (
+        await session.execute(
+            select(AgentSlot).where(AgentSlot.tenant_id == device.tenant_id, AgentSlot.device_id == device.id)
+        )
+    ).scalars().all()
+    for previous in old:
+        if previous.role != role:
+            previous.device_id = None
+    device.agent_id = role
+    device.display_name = slot.display_name or device.display_name
+    slot.device_id = device.id
+    return True
 
 
 @router.websocket("/ws/agent")
@@ -39,6 +81,7 @@ async def agent_socket(ws: WebSocket) -> None:
                     device.platform = message.get("platform") or device.platform
                     device.last_seen_at = utcnow()
                     device.display_name = message.get("display_name") or device.display_name
+                    await rebind_role(session, device, message.get("agent_id"))
                     await session.commit()
                     await hub.register_agent(device.id, ws)
                     await ws.send_json({"type": "welcome", "device_id": device.id})

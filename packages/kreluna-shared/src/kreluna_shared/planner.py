@@ -71,6 +71,34 @@ def _money(text: str) -> float | None:
     return _parse_amount(match.group(1) or match.group(2))
 
 
+NOT_A_NAME = {
+    "mano",
+    "fine",
+    "mese",
+    "anno",
+    "giorni",
+    "credito",
+    "debito",
+    "posta",
+    "rate",
+    "saldo",
+    "acconto",
+    "scadenza",
+    "manodopera",
+    "consulenza",
+    "prestazione",
+    "iva",
+    "euro",
+    "cliente",
+    "ditta",
+    "impresa",
+    "societa",
+    "società",
+    "davvero",
+    "mano d'opera",
+}
+
+
 KNOWN_CLIENTS = (
     ("andrea gadducci", "Andrea Gadducci"),
     ("gadducci", "Andrea Gadducci"),
@@ -90,21 +118,17 @@ def _client_name(text: str) -> str | None:
         r"(?:cliente)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
         r"(?:la\s+ditta|l['’]impresa|la\s+societ[aà])\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+)?)",
         r"(?:per|di)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ']{2,}(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ']+)?)\s*[.!?]?\s*$",
+        # "…a giorgio tesi", anche scritto tutto minuscolo: due parole a fine frase.
+        r"\b(?:a|ad|al|per)\s+([A-Za-zÀ-ÿ']{3,}\s+[A-Za-zÀ-ÿ']{3,})\s*[.!?]?\s*$",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
-            name = " ".join(match.group(1).split()).title()
-            if name.lower() in {
-                "demo",
-                "una",
-                "la",
-                "the",
-                "fattura",
-                "manodopera",
-                "consulenza",
-                "prestazione",
-            }:
+            words = match.group(1).split()
+            name = " ".join(words).title()
+            if name.lower() in {"demo", "una", "la", "the", "fattura"} | NOT_A_NAME:
+                continue
+            if any(word.lower() in NOT_A_NAME for word in words):
                 continue
             return name
     return None
@@ -431,22 +455,24 @@ def plan_deterministic(text: str) -> PlanResult:
         )
 
     if "fattura" in lowered or re.search(r"\binvoice\b", lowered):
-        client = _client_name(raw) or _client_name(lowered) or "Cliente"
+        client = _client_name(raw) or _client_name(lowered) or ""
         net = _money(raw) or _money(lowered)
         description = _description(raw)
-        if description.lower() in client.lower() or client.lower() in description.lower():
+        if client and (description.lower() in client.lower() or client.lower() in description.lower()):
             description = ""
         missing = []
+        if not client:
+            missing.append("il cliente")
         if net is None:
             missing.append("l'importo")
         if not description:
             missing.append("il lavoro")
         if missing:
-            who = client if client != "Cliente" else "il cliente"
+            who = client or "Andrea Gadducci"
             return PlanResult(
                 ok=False,
                 summary=(
-                    f"Mi manca {' e '.join(missing)}. Non invento cifre. "
+                    f"Mi manca {' e '.join(missing)}. Non invento niente. "
                     f"Scrivi per esempio: fattura a {who} per 5.000 euro di manodopera."
                 ),
                 denied=False,
