@@ -506,6 +506,17 @@ def plan_deterministic(text: str) -> PlanResult:
         )
 
     if "fattura" in lowered or re.search(r"\binvoice\b", lowered):
+        if _about_this_invoice(lowered) and not (_client_name(raw) or _money(raw)):
+            return PlanResult(
+                ok=False,
+                summary=(
+                    "Non ho una fattura aperta in questo momento. "
+                    "Scrivi per esempio: fattura a Andrea Gadducci per 5.000 euro di manodopera."
+                ),
+                denied=False,
+                deny_reason="",
+                source="deterministic-ask",
+            )
         client = _client_name(raw) or _client_name(lowered) or ""
         net = _money(raw) or _money(lowered)
         description = _description(raw)
@@ -770,6 +781,78 @@ def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
             },
         )
     return invoice_plan(client, description, float(net))
+
+
+THIS_INVOICE = (
+    "questa fattura",
+    "questa qui",
+    "in fattura",
+    "nella fattura",
+    "stessa fattura",
+    "su questa",
+    "in questa",
+)
+
+TAX_NOTE = (
+    "esenzione",
+    "dichiarazione d'intento",
+    "dichiarazione di intento",
+    "senza iva",
+    "non imponibile",
+    "reverse charge",
+    "iva 0",
+    "iva zero",
+    "plafond",
+)
+
+
+def _about_this_invoice(lowered: str) -> bool:
+    return any(phrase in lowered for phrase in THIS_INVOICE)
+
+
+def continue_open_invoice(invoice: dict[str, Any] | None, text: str) -> PlanResult | None:
+    """Segue la fattura già aperta: esenzione IVA, 'in questa fattura', senza rifare tutto."""
+
+    if not invoice:
+        return None
+    raw = text.strip()
+    lowered = raw.lower()
+    if any(phrase in lowered for phrase in DENY_PHRASES) or _asks_what_i_can_do(lowered):
+        return None
+    if _client_name(raw) and (_money(raw) or _amount_in_reply(raw)):
+        return None
+    new_job = any(
+        word in lowered for word in ("visura", "durc", "f24", "cameral", "contratt", "ferma tutto", "contabilit")
+    )
+    if new_job and "fattur" not in lowered:
+        return None
+    tax = any(note in lowered for note in TAX_NOTE)
+    refers = _about_this_invoice(lowered)
+    if not tax and not refers:
+        return None
+
+    client = str(invoice.get("client_name") or "il cliente")
+    net = invoice.get("net_eur")
+    money = f", € {float(net):,.2f}" if net not in (None, "") else ""
+    if tax:
+        return PlanResult(
+            ok=True,
+            summary=(
+                f"Ok, lo segno su questa fattura a {client}{money}: "
+                "esenzione IVA / dichiarazione d'intento. "
+                "In demo non mando niente all'Agenzia. Confermi da Approva, sulla destra."
+            ),
+            tasks=[],
+            source="deterministic",
+        )
+    return PlanResult(
+        ok=True,
+        summary=(
+            f"Resto su questa fattura a {client}{money}. Dimmi solo cosa cambiare: importo, lavoro o IVA."
+        ),
+        tasks=[],
+        source="deterministic",
+    )
 
 
 def parse_llm_plan(payload: Any) -> PlanResult:

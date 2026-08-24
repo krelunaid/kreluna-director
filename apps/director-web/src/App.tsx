@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Agent, api, Approval, Overview, setToken, Task, token } from "./lib/api";
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
@@ -27,17 +27,20 @@ const TASK_LABEL: Record<string, string> = {
   blocked: "bloccato",
 };
 
-const PC_LABEL: Record<string, string> = {
-  online: "acceso",
-  busy: "occupato",
-  offline: "spento",
-  waiting_install: "da installare",
-  killed: "fermo",
-  paused: "in pausa",
-};
-
 function label(map: Record<string, string>, value: string): string {
   return map[value] || value.replace(/_/g, " ");
+}
+
+function currentWork(agent: Agent, tasks: Task[]): Task | undefined {
+  if (agent.active_task_id) {
+    const hit = tasks.find((item) => item.id === agent.active_task_id);
+    if (hit) return hit;
+  }
+  return tasks.find(
+    (item) =>
+      item.assigned_device_id === agent.device_id &&
+      ["queued", "assigned", "running", "waiting_approval"].includes(item.status),
+  );
 }
 
 export default function App() {
@@ -62,6 +65,9 @@ export default function App() {
   const [version, setVersion] = useState("");
   const [updateNote, setUpdateNote] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
+  const logRef = useRef<HTMLDivElement | null>(null);
+  const talkTimer = useRef<number>(0);
 
   async function refresh() {
     const [over, ag, ts, ap] = await Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals()]);
@@ -106,6 +112,12 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [ready]);
 
+  useEffect(() => {
+    const node = logRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [chat, busy]);
+
   async function onLogin(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -124,6 +136,7 @@ export default function App() {
     if (!message) return;
     setDraft("");
     setBusy(true);
+    setOrb("think");
     setChat((items) => [...items, { role: "user", text: message }]);
     try {
       const result = await api.chat(message);
@@ -136,12 +149,16 @@ export default function App() {
           source: result.source,
         },
       ]);
+      setOrb("talk");
+      window.clearTimeout(talkTimer.current);
+      talkTimer.current = window.setTimeout(() => setOrb("listen"), 4200);
       await refresh();
     } catch (err) {
       setChat((items) => [
         ...items,
         { role: "director", text: err instanceof Error ? err.message : "Errore Director", deny: true },
       ]);
+      setOrb("listen");
     } finally {
       setBusy(false);
     }
@@ -164,6 +181,10 @@ export default function App() {
     return (
       <div className="login">
         <div className="login-card">
+          <div className="orb listen login-orb" aria-hidden="true">
+            <span className="orb-core" />
+            <span className="orb-ring" />
+          </div>
           <div className="eyebrow">Studio · Cloud</div>
           <h1>Kreluna Director</h1>
           <p>Entra nello studio demo. L’intelligenza sta qui; i PC eseguono solo ciò che la policy permette.</p>
@@ -278,13 +299,64 @@ export default function App() {
         </div>
       ) : null}
 
+      <section className="agent-board" aria-label="PC dello studio">
+        {agents.map((agent) => {
+          const work = currentWork(agent, tasks);
+          const working = Boolean(agent.busy || work);
+          return (
+            <article
+              key={agent.device_id}
+              className={`agent-card ${agent.presence} ${working ? "working" : ""} ${agent.killed ? "stopped" : ""}`}
+            >
+              <div className="agent-card-top">
+                <span className={`dot ${agent.killed ? "killed" : working ? "busy" : agent.presence}`} />
+                <strong>{agent.display_name || agent.agent_id}</strong>
+              </div>
+              <div className="small">{agent.job}</div>
+              <div className={`agent-now ${working ? "live" : ""}`}>
+                {agent.killed
+                  ? "Fermo"
+                  : working && work
+                    ? work.goal
+                    : agent.presence === "waiting_install"
+                      ? "Da installare"
+                      : agent.connected || agent.presence === "online"
+                        ? "In ascolto"
+                        : "Spento"}
+              </div>
+              {agent.killed || agent.paused ? (
+                <button className="btn ok" onClick={() => api.resume(agent.device_id).then(refresh)}>
+                  Riprendi
+                </button>
+              ) : null}
+            </article>
+          );
+        })}
+      </section>
+
       <main className="layout">
         <section className="chat">
-          <div className="chat-log">
+          <div className="chat-head">
+            <div className={`orb ${busy ? "think" : orb}`} aria-hidden="true">
+              <span className="orb-core" />
+              <span className="orb-ring" />
+            </div>
+            <div>
+              <div className="orb-title">Kreluna</div>
+              <div className="orb-caption">
+                {busy || orb === "think"
+                  ? "Sta pensando"
+                  : orb === "talk"
+                    ? "Ti parla"
+                    : "Ti ascolta"}
+              </div>
+            </div>
+          </div>
+          <div className="chat-log" ref={logRef}>
             {chat.map((item, index) => (
               <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}>
                 <strong>
-                  {item.role === "user" ? "Tu" : "Director"}
+                  {item.role === "user" ? "Tu" : "Kreluna"}
                   {item.role === "director" && item.source
                     ? item.source.startsWith("llm")
                       ? " · IA"
@@ -366,36 +438,6 @@ export default function App() {
                     {task.status === "queued" || task.status === "assigned" ? (
                       <button className="btn ghost" onClick={() => api.cancelTask(task.id).then(refresh)}>
                         Annulla
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel slim">
-            <h2>PC</h2>
-            <div className="panel-body">
-              {agents.map((agent) => (
-                <div className="row compact" key={agent.device_id}>
-                  <div className="row-main">
-                    <span className={`dot ${agent.presence}`} title={label(PC_LABEL, agent.presence)} />
-                    <strong>{agent.display_name || agent.agent_id}</strong>
-                    <span className="small"> · {agent.job}</span>
-                    {agent.program ? (
-                      <div className="small program" title={agent.program}>
-                        {agent.program}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="actions">
-                    <span className={`pill ${agent.killed ? "killed" : agent.presence}`}>
-                      {agent.killed ? "fermo" : label(PC_LABEL, agent.presence)}
-                    </span>
-                    {agent.killed || agent.paused ? (
-                      <button className="btn ok" onClick={() => api.resume(agent.device_id).then(refresh)}>
-                        Riprendi
                       </button>
                     ) : null}
                   </div>

@@ -11,6 +11,7 @@ export type Agent = {
   paused: boolean;
   platform: string;
   last_seen_at: string | null;
+  active_task_id?: string | null;
   connected: boolean;
   job?: string;
   program?: string;
@@ -27,6 +28,7 @@ export type Task = {
   risk: string;
   status: string;
   needs_approval: boolean;
+  assigned_device_id?: string | null;
   result: Record<string, unknown>;
   error: string | null;
   created_at: string | null;

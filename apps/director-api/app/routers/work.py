@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from kreluna_shared.agents import preferred_role
 from kreluna_shared.crypto import decrypt_bytes
-from kreluna_shared.planner import apply_policy, complete_pending
+from kreluna_shared.planner import apply_policy, complete_pending, continue_open_invoice
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +109,9 @@ async def chat(
         raise HTTPException(status_code=403, detail="Il visore può solo leggere")
     waiting = followups.take(actor.user_id)
     answered = complete_pending(waiting, body.message) if waiting else None
+    if answered is None:
+        opened = followups.last_invoice(actor.user_id)
+        answered = continue_open_invoice(opened, body.message) if opened else None
     plan = answered if answered is not None else await plan_message(body.message)
     plan = apply_policy(plan, get_policy(), actor.license_state)
     if plan.pending:
@@ -120,6 +123,13 @@ async def chat(
         followups.remember(actor.user_id, waiting)
     else:
         followups.forget(actor.user_id)
+    invoice_task = next((item for item in plan.tasks if item.capability == "invoice_prepare_demo"), None)
+    if invoice_task:
+        followups.remember_invoice(actor.user_id, dict(invoice_task.args) | {"capability": "invoice_prepare_demo"})
+    elif answered is not None:
+        still = followups.last_invoice(actor.user_id)
+        if still:
+            followups.remember_invoice(actor.user_id, still)
     if plan.source == "deterministic-kill":
         from app.services.orchestrator import kill_all
 

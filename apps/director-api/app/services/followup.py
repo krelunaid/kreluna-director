@@ -24,9 +24,13 @@ class Waiting:
 class FollowUps:
     def __init__(self) -> None:
         self._by_user: dict[str, Waiting] = {}
+        self._invoice: dict[str, Waiting] = {}
 
     def remember(self, user_id: str, pending: dict[str, Any]) -> None:
         self._by_user[user_id] = Waiting(pending=pending, asked_at=utcnow())
+
+    def remember_invoice(self, user_id: str, invoice: dict[str, Any]) -> None:
+        self._invoice[user_id] = Waiting(pending=invoice, asked_at=utcnow())
 
     def take(self, user_id: str) -> dict[str, Any] | None:
         waiting = self._by_user.get(user_id)
@@ -34,6 +38,15 @@ class FollowUps:
             return None
         if utcnow() - waiting.asked_at > TTL:
             self.forget(user_id)
+            return None
+        return waiting.pending
+
+    def last_invoice(self, user_id: str) -> dict[str, Any] | None:
+        waiting = self._invoice.get(user_id)
+        if waiting is None:
+            return None
+        if utcnow() - waiting.asked_at > TTL:
+            self._invoice.pop(user_id, None)
             return None
         return waiting.pending
 

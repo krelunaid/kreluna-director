@@ -76,3 +76,22 @@ def test_a_long_rambling_question_from_the_model_is_replaced():
 
     good = _short_question("Per quale cliente?")
     assert good == "Per quale cliente?"
+
+
+def test_a_note_on_the_open_invoice_does_not_start_over():
+    from kreluna_shared.planner import continue_open_invoice
+
+    opened = {"capability": "invoice_prepare_demo", "client_name": "Andrea Gadducci", "net_eur": 5000.0, "description": "Manodopera"}
+    note = continue_open_invoice(opened, "esenzione iva con dichiarazione di intento")
+    assert note is not None and note.ok
+    assert note.tasks == []
+    assert "Andrea Gadducci" in note.summary
+    assert "5,000" in note.summary or "5000" in note.summary
+
+    same = continue_open_invoice(opened, "in questa fattura")
+    assert same is not None and same.ok
+    assert "Andrea Gadducci" in same.summary
+    assert same.tasks == []
+
+    other = continue_open_invoice(opened, "prepara la visura per Gadducci")
+    assert other is None
