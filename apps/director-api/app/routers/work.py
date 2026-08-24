@@ -46,11 +46,13 @@ def _waiting_pc_note(tasks: list[Task]) -> str:
             names.append(label)
     if not names:
         return ""
+    if names == ["PC-FATTURE"]:
+        return (
+            " PC-FATTURE non è acceso su questo Mac. "
+            "All'apertura di Kreluna Agent clicca Cambia lavoro e scegli PC-FATTURE."
+        )
     who = ", ".join(names)
-    return (
-        f" {who} non è acceso: il lavoro resta in attesa. "
-        "Hai acceso PC-FATTURE: clicca Fattura Gadducci."
-    )
+    return f" {who} non è acceso: il lavoro resta in attesa."
 
 
 class ChatBody(BaseModel):
