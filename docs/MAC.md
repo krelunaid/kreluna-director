@@ -4,6 +4,9 @@ Non è un sito da iPhone. È un’**app per computer Mac**.
 
 **Non serve installare Python.** È già dentro il programma.
 
+Non è necessario installare subito gli Agent. Kreluna Director si apre e funziona
+da solo; i riquadri dei PC restano su **Da installare** finché non colleghi gli Agent.
+
 Su macOS nuovo la finestra gialla ha solo **Sposta nel Cestino** e **Fine**. Non c’è Apri. Non è rotta.
 
 ## Installazione

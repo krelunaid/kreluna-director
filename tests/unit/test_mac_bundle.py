@@ -25,6 +25,15 @@ def test_thin_fat_macho_keeps_only_arm64(tmp_path):
     assert path.read_bytes() == arm_payload
 
 
+def test_macos_site_packages_uses_python_version_directory(tmp_path):
+    module = _load_bundle_module()
+    (tmp_path / "lib").mkdir()
+
+    target = module.site_packages(tmp_path)
+
+    assert target == tmp_path / "lib" / "python3.12" / "site-packages"
+
+
 def _load_bundle_module():
     import importlib.util
 
@@ -36,7 +45,7 @@ def _load_bundle_module():
     return module
 
 
-def test_macos_arm64_bundle_has_no_intel_or_universal2():
+def test_macos_arm64_director_bundle_has_server_runtime_and_no_intel():
     module = _load_bundle_module()
     spec = module.PLATFORMS["macos-arm64"]
     joined = " ".join(spec["pip_platforms"])
@@ -45,6 +54,18 @@ def test_macos_arm64_bundle_has_no_intel_or_universal2():
     assert all("arm64" in tag for tag in spec["pip_platforms"])
     extra = " ".join(spec["extra"]).lower()
     assert "uvloop" not in extra
+    packages = " ".join(spec.get("packages") or module.COMMON_PKGS).lower()
+    assert "sqlalchemy" in packages
+    assert "greenlet" in packages
+    assert "fastapi" in packages
+    assert "argon2-cffi" in packages
+    assert "aarch64-apple-darwin" in spec["archive"]
+    assert "x86_64" not in spec["archive"]
+
+
+def test_macos_arm64_agent_bundle_stays_small_and_has_no_server():
+    module = _load_bundle_module()
+    spec = module.PLATFORMS["macos-arm64-agent"]
     packages = " ".join(spec.get("packages") or []).lower()
     assert "sqlalchemy" not in packages
     assert "greenlet" not in packages
@@ -56,7 +77,7 @@ def test_macos_arm64_bundle_has_no_intel_or_universal2():
 
 def test_mac_agent_build_script_skips_intel_python():
     script = (ROOT / "scripts" / "macos" / "build-mac-agent.sh").read_text()
-    assert "macos-arm64" in script
+    assert "macos-arm64-agent" in script
     assert "macos-x64" not in script
     launcher = (ROOT / "packaging" / "macos-agent" / "Kreluna").read_text()
     assert "python-x64" not in launcher

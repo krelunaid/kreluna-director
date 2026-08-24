@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Avvio Kreluna come applicazione: API + Agent + finestra."""
+"""Avvio Kreluna Director come applicazione autonoma: API + finestra."""
 
 from __future__ import annotations
 
@@ -26,7 +26,11 @@ def support_dir() -> Path:
 
 
 SUPPORT = support_dir()
-API_URL = os.environ.get("AGENT_DIRECTOR_URL", "http://127.0.0.1:8080").rstrip("/")
+API_URL = (
+    os.environ.get("KRELUNA_DIRECTOR_URL")
+    or os.environ.get("AGENT_DIRECTOR_URL")
+    or "http://127.0.0.1:8080"
+).rstrip("/")
 
 
 def prepare_env() -> None:
@@ -34,22 +38,9 @@ def prepare_env() -> None:
     (SUPPORT / "data").mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("DIRECTOR_DATABASE_URL", f"sqlite+aiosqlite:///{SUPPORT / 'data' / 'kreluna.db'}")
     os.environ.setdefault("DIRECTOR_EVIDENCE_DIR", str(SUPPORT / "data" / "evidence"))
-    os.environ.setdefault("KRELUNA_AGENT_DATA_DIR", str(SUPPORT / "data" / "agent"))
-    os.environ.setdefault("AGENT_DIRECTOR_URL", API_URL)
-    os.environ.setdefault("AGENT_DIRECTOR_WSS", API_URL.replace("http://", "ws://").replace("https://", "wss://") + "/ws/agent")
-    os.environ.setdefault("KRELUNA_ENROLLMENT_CODE", "KRELUNA-DEV-ENROLL")
-    if sys.platform == "win32":
-        os.environ.setdefault("KRELUNA_AGENT_ID", "pc-studio")
-        os.environ.setdefault("KRELUNA_AGENT_DISPLAY_NAME", "PC-STUDIO")
-    elif sys.platform == "darwin":
-        os.environ.setdefault("KRELUNA_AGENT_ID", "mac-studio")
-        os.environ.setdefault("KRELUNA_AGENT_DISPLAY_NAME", "MAC-STUDIO")
-    else:
-        os.environ.setdefault("KRELUNA_AGENT_ID", "linux-studio")
-        os.environ.setdefault("KRELUNA_AGENT_DISPLAY_NAME", "LINUX-STUDIO")
+    os.environ.setdefault("KRELUNA_DIRECTOR_URL", API_URL)
     sys.path.insert(0, str(ROOT / "packages" / "kreluna-shared" / "src"))
     sys.path.insert(0, str(ROOT / "apps" / "director-api"))
-    sys.path.insert(0, str(ROOT / "apps" / "kreluna-agent"))
 
 
 def port_open(port: int) -> bool:
@@ -68,6 +59,15 @@ def wait_health(timeout: float = 20) -> bool:
         except Exception:
             time.sleep(0.25)
     return False
+
+
+def health_info() -> dict | None:
+    try:
+        with urllib.request.urlopen(f"{API_URL}/health", timeout=1) as response:
+            payload = json.loads(response.read().decode())
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
 
 
 def notify(text: str, *, dialog: bool = False) -> None:
@@ -99,6 +99,21 @@ def open_window(url: str) -> None:
         subprocess.Popen(["open", url])
         return
     if sys.platform == "win32":
+        local = Path(os.environ.get("LOCALAPPDATA") or "")
+        program_files = Path(os.environ.get("PROGRAMFILES") or "")
+        program_files_x86 = Path(os.environ.get("PROGRAMFILES(X86)") or "")
+        candidates = [
+            program_files_x86 / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+            program_files / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+            local / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+            program_files / "Google" / "Chrome" / "Application" / "chrome.exe",
+            program_files_x86 / "Google" / "Chrome" / "Application" / "chrome.exe",
+            local / "Google" / "Chrome" / "Application" / "chrome.exe",
+        ]
+        browser = next((path for path in candidates if path.is_file()), None)
+        if browser is not None:
+            subprocess.Popen([str(browser), f"--app={url}", "--start-maximized"])
+            return
         try:
             os.startfile(url)  # type: ignore[attr-defined]
             return
@@ -151,10 +166,17 @@ def check_updates() -> None:
 def main() -> int:
     prepare_env()
     url = API_URL
-    started_api = False
     agent_proc: subprocess.Popen | None = None
     try:
-        if not port_open(8080):
+        if port_open(8080):
+            health = health_info()
+            if health is None or health.get("service") != "director-api":
+                notify("La porta 8080 è già usata da un altro programma. Chiudilo e riapri Kreluna.", dialog=True)
+                return 1
+            open_window(url)
+            notify("Kreluna Director è già aperto.")
+            return 0
+        else:
             import threading
 
             import uvicorn
@@ -168,33 +190,38 @@ def main() -> int:
             server = uvicorn.Server(config)
             thread = threading.Thread(target=server.run, daemon=True)
             thread.start()
-            started_api = True
         if not wait_health():
             notify("Kreluna non è partita. Reinstalla lo zip nuovo.", dialog=True)
             print("Kreluna: /health non risponde", file=sys.stderr)
             return 1
 
+        start_local_agent = os.environ.get("KRELUNA_START_LOCAL_AGENT", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         env = os.environ.copy()
-        env["PYTHONPATH"] = os.pathsep.join(
-            [
-                str(ROOT / "packages" / "kreluna-shared" / "src"),
-                str(ROOT / "apps" / "kreluna-agent"),
-                str(ROOT / "apps" / "director-api"),
-                env.get("PYTHONPATH", ""),
-            ]
-        )
-        agent_proc = subprocess.Popen(
-            [sys.executable, "-m", "agent.main"],
-            cwd=str(ROOT),
-            env=env,
-        )
+        if start_local_agent and (ROOT / "apps" / "kreluna-agent").is_dir():
+            env["PYTHONPATH"] = os.pathsep.join(
+                [
+                    str(ROOT / "packages" / "kreluna-shared" / "src"),
+                    str(ROOT / "apps" / "kreluna-agent"),
+                    str(ROOT / "apps" / "director-api"),
+                    env.get("PYTHONPATH", ""),
+                ]
+            )
+            agent_proc = subprocess.Popen(
+                [sys.executable, "-m", "agent.main"],
+                cwd=str(ROOT),
+                env=env,
+            )
         open_window(url)
         notify("Kreluna è aperta. Entra con andrea@studio.demo / demo")
         print("Kreluna Director:", url)
         print("Login: andrea@studio.demo / demo")
         check_updates()
         while True:
-            if agent_proc.poll() is not None:
+            if agent_proc is not None and agent_proc.poll() is not None:
                 agent_proc = subprocess.Popen(
                     [sys.executable, "-m", "agent.main"],
                     cwd=str(ROOT),
@@ -206,7 +233,6 @@ def main() -> int:
     finally:
         if agent_proc and agent_proc.poll() is None:
             agent_proc.terminate()
-        _ = started_api
     return 0
 
 

@@ -2,6 +2,10 @@
 
 App per **Mac** e **Windows**. Non è un sito da telefono. **Non serve Python.**
 
+Il **Director funziona anche senza Agent installati**: mostra i sette ruoli come
+"Da installare" e permette di usare dashboard, richieste, regole e configurazione IA.
+Gli Agent sono programmi separati e si aggiungono in seguito, uno per computer.
+
 ## Mac
 
 1. Apri `Kreluna-Director-Mac.zip`

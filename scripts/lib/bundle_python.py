@@ -34,6 +34,7 @@ COMMON_PKGS = [
     "httptools>=0.6.0",
     "watchfiles>=1.0.0",
     "sqlalchemy>=2.0.36",
+    "greenlet>=3.1.0",
     "aiosqlite>=0.20.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
@@ -43,10 +44,16 @@ COMMON_PKGS = [
     "pillow>=11.0.0",
     "websockets>=14.0",
     "python-multipart>=0.0.18",
+    "argon2-cffi>=23.1.0",
 ]
 
 PLATFORMS = {
     "macos-arm64": {
+        "archive": f"cpython-{PY_VER}+{RELEASE}-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        "pip_platforms": ["macosx_11_0_arm64", "macosx_12_0_arm64", "macosx_13_0_arm64", "macosx_14_0_arm64"],
+        "extra": [],
+    },
+    "macos-arm64-agent": {
         "archive": f"cpython-{PY_VER}+{RELEASE}-aarch64-apple-darwin-install_only_stripped.tar.gz",
         # Never include universal2: macOS treats those wheels as Intel.
         "pip_platforms": ["macosx_11_0_arm64", "macosx_12_0_arm64", "macosx_13_0_arm64", "macosx_14_0_arm64"],
@@ -89,7 +96,21 @@ def extract_python(archive: Path, dest: Path) -> Path:
         shutil.rmtree(dest)
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:gz") as tar:
-        tar.extractall(dest, filter="data")
+        try:
+            tar.extractall(dest, filter="data")
+        except TypeError:
+            # Python < 3.12 non espone ancora filter=. Prima di estrarre,
+            # rifiuta comunque path traversal e link che uscirebbero da dest.
+            root = dest.resolve()
+            for member in tar.getmembers():
+                target = (dest / member.name).resolve()
+                if target != root and root not in target.parents:
+                    raise ValueError(f"Percorso non sicuro nell'archivio: {member.name}")
+                if member.issym() or member.islnk():
+                    link_target = (target.parent / member.linkname).resolve()
+                    if link_target != root and root not in link_target.parents:
+                        raise ValueError(f"Link non sicuro nell'archivio: {member.name}")
+            tar.extractall(dest)
     nested = dest / "python"
     if nested.is_dir() and not (dest / "bin").exists() and not (dest / "python.exe").exists():
         for child in nested.iterdir():
@@ -100,7 +121,9 @@ def extract_python(archive: Path, dest: Path) -> Path:
 
 def site_packages(python_home: Path) -> Path:
     win = python_home / "Lib" / "site-packages"
-    if win.parent.is_dir() or (python_home / "python.exe").exists():
+    # Su macOS il filesystem predefinito è case-insensitive: verificare
+    # win.parent confonderebbe Lib con lib e installerebbe nel posto sbagliato.
+    if (python_home / "python.exe").exists():
         win.mkdir(parents=True, exist_ok=True)
         return win
     unix = python_home / "lib" / "python3.12" / "site-packages"
@@ -158,6 +181,7 @@ def thin_fat_macho_to_arm64(path: Path) -> bool:
 
 
 def strip_universal2(python_home: Path) -> None:
+    """Riduce eventuali wheel universal2 alla sola slice Apple Silicon."""
     for path in python_home.rglob("*"):
         if not path.is_file():
             continue
@@ -181,7 +205,7 @@ def strip_universal2(python_home: Path) -> None:
 
 def assert_no_intel_artifacts(python_home: Path, key: str) -> None:
     """Fail the Mac arm64 bundle if any Intel/universal2 slice leaked in."""
-    if key != "macos-arm64":
+    if not key.startswith("macos-arm64"):
         return
     offenders: list[str] = []
     for path in python_home.rglob("*"):

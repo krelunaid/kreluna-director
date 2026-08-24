@@ -12,6 +12,7 @@ tar -C "$ROOT" -cf - \
   --exclude '.cache' \
   --exclude 'dist-macos' \
   --exclude 'dist-windows' \
+  --exclude 'apps/kreluna-agent' \
   --exclude '__pycache__' \
   --exclude '.pytest_cache' \
   --exclude '.cursor' \
