@@ -356,6 +356,7 @@ def plan_deterministic(text: str) -> PlanResult:
                 ),
                 denied=False,
                 deny_reason="",
+                source="deterministic-ask",
             )
         return PlanResult(
             ok=True,
@@ -455,6 +456,7 @@ def plan_deterministic(text: str) -> PlanResult:
         ),
         denied=False,
         deny_reason="",
+        source="deterministic-unknown",
     )
 
 

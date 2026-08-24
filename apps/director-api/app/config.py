@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     evidence_retention_hours: int = 72
 
     @property
+    def llm_ready(self) -> bool:
+        return bool(self.kreluna_llm_base_url.strip() and self.kreluna_llm_api_key.strip())
+
+    @property
     def cors_origins(self) -> list[str]:
         return [item.strip() for item in self.director_cors_origins.split(",") if item.strip()]
 

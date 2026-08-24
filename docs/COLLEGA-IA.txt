@@ -1,0 +1,46 @@
+COLLEGARE L'IA AL DIRECTOR
+==========================
+
+Cosa cambia
+-----------
+Senza IA: il Director capisce solo le frasi con le parole giuste
+(fattura, F24, IPSOA, DURC, visura, camerale, contratto).
+Con IA: capisce anche l'italiano parlato, per esempio
+"senti, per la ditta Bianchi mi serve quel certificato dei contributi".
+
+Cosa NON cambia
+---------------
+- L'IA propone. Decide la policy dello studio.
+- L'IA non puo' inventare importi: se manca l'importo, chiede.
+- L'IA non puo' usare programmi fuori elenco, ne' inviare F24, PEC o pagamenti.
+- L'IA non puo' decidere da sola cosa non ha bisogno di approvazione.
+- Se il modello e' spento o sbaglia, il Director torna alle regole di prima.
+- Le schermate dei PC non vengono mandate al modello. Va solo la tua frase.
+
+Come si collega
+---------------
+1. Prendi una chiave API (OpenAI, Anthropic, Mistral, Groq, oppure un modello
+   installato in studio che parla come OpenAI).
+2. Nella cartella del Director copia .env.example in .env
+3. Scrivi tre righe:
+      KRELUNA_LLM_BASE_URL=https://api.openai.com/v1
+      KRELUNA_LLM_API_KEY=la-tua-chiave
+      KRELUNA_LLM_MODEL=gpt-4o-mini
+4. Riavvia il Director.
+
+Come si controlla
+-----------------
+In alto nella dashboard c'e' scritto "IA: gpt-4o-mini" se e' collegata,
+oppure "IA: non collegata".
+Sotto ogni risposta della chat c'e' scritto chi ha risposto:
+"Director - regole" oppure "Director - IA".
+
+Quanto costa
+------------
+Si paga a consumo, per frase, ed e' pochissimo testo: parte solo quando le
+regole non capiscono. Le richieste normali (i bottoni) non chiamano il modello
+e non costano niente.
+
+Se vuoi tornare indietro
+------------------------
+Svuota KRELUNA_LLM_API_KEY e riavvia. Torna tutto a regole.

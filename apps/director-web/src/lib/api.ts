@@ -48,6 +48,8 @@ export type Overview = {
   pending_approvals: number;
   errors: number;
   kill_armed: boolean;
+  ai_connected?: boolean;
+  ai_model?: string;
 };
 
 const TOKEN_KEY = "kreluna.token";
@@ -95,10 +97,13 @@ export const api = {
   tasks: () => request<{ tasks: Task[] }>("/tasks"),
   approvals: () => request<{ approvals: Approval[] }>("/approvals"),
   chat: (message: string) =>
-    request<{ ok: boolean; summary: string; denied?: boolean; deny_reason?: string; tasks: Task[] }>("/chat", {
-      method: "POST",
-      body: JSON.stringify({ message }),
-    }),
+    request<{ ok: boolean; summary: string; denied?: boolean; deny_reason?: string; source?: string; tasks: Task[] }>(
+      "/chat",
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      },
+    ),
   kill: () => request<{ ok: boolean; stopped_devices: number }>("/kill-switch", { method: "POST" }),
   cancelTask: (id: string) => request<{ ok: boolean; status: string }>(`/tasks/${id}/cancel`, { method: "POST" }),
   resume: (deviceId: string) => request(`/agents/${deviceId}/resume`, { method: "POST" }),

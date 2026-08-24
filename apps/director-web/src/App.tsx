@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Agent, api, Approval, Overview, setToken, Task, token } from "./lib/api";
 
-type ChatItem = { role: "user" | "director"; text: string; deny?: boolean };
+type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
 
 const SUGGESTIONS = [
   { short: "Fattura Gadducci", full: "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera" },
@@ -103,7 +103,12 @@ export default function App() {
       const result = await api.chat(message);
       setChat((items) => [
         ...items,
-        { role: "director", text: result.summary + (result.deny_reason ? `\n${result.deny_reason}` : ""), deny: result.denied },
+        {
+          role: "director",
+          text: result.summary + (result.deny_reason ? `\n${result.deny_reason}` : ""),
+          deny: result.denied,
+          source: result.source,
+        },
       ]);
       await refresh();
     } catch (err) {
@@ -154,6 +159,7 @@ export default function App() {
           <div className="small">
             {name} · {overview?.license_state ?? "…"}
             {version ? ` · v${version}` : ""}
+            {overview ? ` · IA: ${overview.ai_connected ? overview.ai_model : "non collegata"}` : ""}
             {updateNote ? ` · ${updateNote}` : ""}
           </div>
         </div>
@@ -204,7 +210,14 @@ export default function App() {
           <div className="chat-log">
             {chat.map((item, index) => (
               <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}>
-                <strong>{item.role === "user" ? "Tu" : "Director"}</strong>
+                <strong>
+                  {item.role === "user" ? "Tu" : "Director"}
+                  {item.role === "director" && item.source
+                    ? item.source.startsWith("llm")
+                      ? " · IA"
+                      : " · regole"
+                    : ""}
+                </strong>
                 <div>{item.text}</div>
               </div>
             ))}
