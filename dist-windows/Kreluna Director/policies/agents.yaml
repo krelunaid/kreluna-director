@@ -1,0 +1,43 @@
+# Posti Agent dello studio. I programmi si collegano dopo.
+# Ogni Agent ha compiti divisi. I pagamenti veri restano bloccati.
+
+agents:
+  - role: pc-fatture
+    display_name: PC-FATTURE
+    job: Creare fatture
+    program: da definire (es. Fatture in Cloud)
+    capabilities:
+      - notepad_write
+      - invoice_prepare_demo
+      - invoice_submit_demo
+  - role: pc-pagamenti
+    display_name: PC-PAGAMENTI
+    job: Preparare pagamenti e controllare fatture (nessun bonifico reale)
+    program: da definire (home banking / gestionale)
+    capabilities:
+      - payment_prepare
+      - invoice_check
+  - role: pc-f24
+    display_name: PC-F24
+    job: Preparare F24 (nessun invio)
+    program: da definire (es. Entratel / Agenzia delle Entrate)
+    capabilities:
+      - f24_prepare
+  - role: pc-contabilita
+    display_name: PC-CONTABILITA
+    job: Contabilità
+    program: da definire
+    capabilities:
+      - document_check
+  - role: pc-documenti
+    display_name: PC-DOCUMENTI
+    job: Documenti mancanti
+    program: da definire
+    capabilities:
+      - document_check
+  - role: pc-email
+    display_name: PC-EMAIL
+    job: Posta e bozze (nessun invio)
+    program: da definire (es. Outlook / PEC)
+    capabilities:
+      - email_draft

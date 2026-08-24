@@ -17,5 +17,5 @@ apps/director-web/dist/
 *.sqlite3
 .coverage
 dist-macos/
-dist-windows/
+dist-agents/
 .cache/

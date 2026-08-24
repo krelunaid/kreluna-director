@@ -23,15 +23,21 @@ L’app va in `%LOCALAPPDATA%\KrelunaDirector` (cartella utente, senza amministr
 
 Chiudi Kreluna, poi di nuovo **Installa.bat** sullo zip nuovo. Sostituisce il programma, lascia la cartella `data`.
 
-## Agent su un altro PC dello studio
+## Agent su un altro PC dello studio (programma a parte)
 
-Dallo stesso zip, in PowerShell:
+Non usare Installa.bat del Director. Usa lo zip **Kreluna-Agenti-Windows**.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Install-KrelunaAgent.ps1 -Role pc-fatture -DirectorUrl http://IP-DEL-DIRECTOR:8080 -EnrollCode KRELUNA-PC-FATTURE
-```
+1. Apri `director.url` e metti l’IP del computer dove gira il Director
+2. Doppio clic su **un** installer, quello del PC:
+   - `Installa PC-FATTURE.bat`
+   - `Installa PC-PAGAMENTI.bat`
+   - `Installa PC-F24.bat`
+   - `Installa PC-CONTABILITA.bat`
+   - `Installa PC-DOCUMENTI.bat`
+   - `Installa PC-EMAIL.bat`
+3. Se Windows blocca: Altre informazioni → Esegui comunque
 
-Un ruolo per PC. I programmi gestionali restano **da definire**.
+Sul desktop compare **Kreluna Agent …**. Lascialo acceso.
 
 ## Ricreare lo zip
 

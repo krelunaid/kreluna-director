@@ -100,8 +100,6 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
     ).scalar_one_or_none()
     if code is None:
         raise HTTPException(status_code=404, detail="Codice di enrollment sconosciuto")
-    if code.used:
-        raise HTTPException(status_code=409, detail="Codice di enrollment già usato")
     try:
         raw_pub = b64d(body.public_key)
         if len(raw_pub) != 32:
@@ -109,28 +107,11 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Chiave pubblica non valida") from exc
 
-    fingerprint = body.fingerprint or fingerprint_device(body.hostname, body.agent_id)
-    device = Device(
-        tenant_id=code.tenant_id,
-        agent_id=body.agent_id,
-        hostname=body.hostname,
-        display_name=body.display_name or body.agent_id,
-        public_key=body.public_key,
-        fingerprint=fingerprint,
-        capabilities=json.dumps(body.capabilities),
-        platform=body.platform,
-        status="active",
-        presence="offline",
-    )
-    session.add(device)
-    await session.flush()
-    code.used = True
-    code.used_by_device_id = device.id
     slot = (
         await session.execute(
             select(AgentSlot).where(
                 AgentSlot.tenant_id == code.tenant_id,
-                AgentSlot.role == body.agent_id,
+                AgentSlot.enrollment_code == body.enrollment_code,
             )
         )
     ).scalar_one_or_none()
@@ -139,10 +120,59 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
             await session.execute(
                 select(AgentSlot).where(
                     AgentSlot.tenant_id == code.tenant_id,
-                    AgentSlot.enrollment_code == body.enrollment_code,
+                    AgentSlot.role == body.agent_id,
                 )
             )
         ).scalar_one_or_none()
+
+    if slot is None and code.used:
+        raise HTTPException(status_code=409, detail="Codice di enrollment già usato")
+    if slot is not None and body.agent_id and body.agent_id != slot.role:
+        raise HTTPException(status_code=400, detail="Questo codice è per un altro PC")
+
+    fingerprint = body.fingerprint or fingerprint_device(body.hostname, body.agent_id)
+    device = None
+    if slot is not None and slot.device_id:
+        device = (
+            await session.execute(select(Device).where(Device.id == slot.device_id, Device.tenant_id == code.tenant_id))
+        ).scalar_one_or_none()
+    if device is None and slot is not None:
+        device = (
+            await session.execute(
+                select(Device).where(Device.tenant_id == code.tenant_id, Device.agent_id == slot.role)
+            )
+        ).scalar_one_or_none()
+
+    if device is None:
+        device = Device(
+            tenant_id=code.tenant_id,
+            agent_id=slot.role if slot is not None else body.agent_id,
+            hostname=body.hostname,
+            display_name=(slot.display_name if slot else None) or body.display_name or body.agent_id,
+            public_key=body.public_key,
+            fingerprint=fingerprint,
+            capabilities=json.dumps(body.capabilities),
+            platform=body.platform,
+            status="active",
+            presence="offline",
+        )
+        session.add(device)
+        await session.flush()
+        if slot is None:
+            code.used = True
+            code.used_by_device_id = device.id
+    else:
+        device.public_key = body.public_key
+        device.hostname = body.hostname
+        device.capabilities = json.dumps(body.capabilities)
+        device.platform = body.platform
+        device.status = "active"
+        device.killed = False
+        device.paused = False
+        if slot is not None:
+            device.display_name = slot.display_name or device.display_name
+            device.agent_id = slot.role
+
     if slot is not None:
         slot.device_id = device.id
         device.display_name = slot.display_name or device.display_name

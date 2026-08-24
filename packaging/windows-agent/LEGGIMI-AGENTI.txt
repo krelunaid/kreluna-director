@@ -1,0 +1,27 @@
+KRELUNA AGENTI — UN PROGRAMMA PER OGNI PC
+=========================================
+
+Il Director (cervello) sta su UN computer o sul link web.
+Ogni altro PC dello studio ha UN Agent, diverso.
+
+1. Apri director.url con il Blocco note.
+   Scrivi l'indirizzo del Director, una riga sola.
+   Esempio: http://192.168.1.10:8080
+
+2. Sul PC giusto fai DOPPIO CLIC su UN file solo:
+   - Installa PC-FATTURE.bat      → computer fatture
+   - Installa PC-PAGAMENTI.bat    → computer pagamenti
+   - Installa PC-F24.bat          → computer F24
+   - Installa PC-CONTABILITA.bat
+   - Installa PC-DOCUMENTI.bat
+   - Installa PC-EMAIL.bat
+
+3. Se Windows avvisa: Altre informazioni → Esegui comunque.
+
+Sul desktop compare "Kreluna Agent …". Lascialo acceso.
+In dashboard Kreluna quel PC diventa online.
+
+Non installare il Director su questi PC.
+Non installare due Agent sullo stesso PC.
+I programmi (Fatture in Cloud, Entratel, banca) si collegano dopo:
+per ora l'Agent usa il gestionale demo visibile sul PC.

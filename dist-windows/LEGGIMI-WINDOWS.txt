@@ -1,0 +1,17 @@
+KRELUNA DIRECTOR PER WINDOWS
+============================
+
+1. Estrai questo zip.
+2. Doppio clic su Installa.bat
+   (se Windows chiede conferma: Altre informazioni → Esegui comunque)
+3. Sul desktop compare "Kreluna Director". Aprilo.
+4. Entra con:
+   email:    andrea@studio.demo
+   password: demo
+
+Non serve installare Python. È già dentro Kreluna.
+
+Questa è la demo: fattura finta, non F24 veri, non Fatture in Cloud reale.
+
+Aggiornamenti: se Kreluna è già installata, chiudila e rilancia
+Installa.bat sullo zip nuovo. Il programma si sostituisce, i dati restano.

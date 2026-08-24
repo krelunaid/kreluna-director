@@ -1,0 +1,3 @@
+windows-x64
+cpython-3.12.13+20260325-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
+sha256=cae9e9b6e8c997f0377d3b3f8740c435144cda37f3ab66c0df6ad597b4ae7ef5

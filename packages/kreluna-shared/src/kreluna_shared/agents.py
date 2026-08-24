@@ -31,6 +31,23 @@ def preferred_role(capability: str) -> str | None:
     return CAPABILITY_TO_ROLE.get(capability)
 
 
+def capabilities_for_role(role: str, path: str | Path | None = None) -> list[str]:
+    roles = load_agent_roles(path or default_agents_path())
+    for item in roles:
+        if item.role == role:
+            return list(item.capabilities)
+    return []
+
+
+def default_agents_path() -> Path:
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "policies" / "agents.yaml"
+        if candidate.exists():
+            return candidate
+    return Path("policies/agents.yaml")
+
+
 def load_agent_roles(path: str | Path) -> list[AgentRole]:
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     rows = raw.get("agents") or []

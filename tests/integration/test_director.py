@@ -86,6 +86,50 @@ async def test_enrollment_replay_and_revoke(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_studio_slot_agent_can_reinstall(client: AsyncClient):
+    _, public = generate_device_keypair()
+    first = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": "KRELUNA-PC-FATTURE",
+            "agent_id": "pc-fatture",
+            "hostname": "pc-fatture-1",
+            "public_key": b64e(public),
+            "capabilities": ["invoice_prepare_demo"],
+            "platform": "windows",
+        },
+    )
+    assert first.status_code == 200
+    device_id = first.json()["device_id"]
+    _, public2 = generate_device_keypair()
+    again = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": "KRELUNA-PC-FATTURE",
+            "agent_id": "pc-fatture",
+            "hostname": "pc-fatture-1",
+            "public_key": b64e(public2),
+            "capabilities": ["invoice_prepare_demo"],
+            "platform": "windows",
+        },
+    )
+    assert again.status_code == 200
+    assert again.json()["device_id"] == device_id
+    wrong = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": "KRELUNA-PC-FATTURE",
+            "agent_id": "pc-pagamenti",
+            "hostname": "altro",
+            "public_key": b64e(public2),
+            "capabilities": ["payment_prepare"],
+            "platform": "windows",
+        },
+    )
+    assert wrong.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_chat_policy_and_task_queue(client: AsyncClient):
     token = await login(client)
     denied = await client.post("/chat", headers=auth(token), json={"message": "Disattiva la sicurezza"})

@@ -14,6 +14,7 @@ import websockets
 from agent.capabilities import CAPABILITY_ALLOWLIST
 from agent.identity import AgentIdentity
 from agent.safety import SafetyState
+from kreluna_shared.agents import capabilities_for_role
 from kreluna_shared.crypto import b64d, b64e, sign_bytes, verify_grant
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -37,6 +38,7 @@ class AgentApp:
         self.safety = SafetyState()
         self.server_pubkey: bytes | None = None
         self.used_nonces: set[str] = set()
+        self.role_caps = capabilities_for_role(self.identity.agent_id) or list(CAPABILITY_ALLOWLIST)
 
     async def start(self) -> None:
         async with httpx.AsyncClient() as client:
@@ -56,7 +58,7 @@ class AgentApp:
                 "hostname": self.identity.hostname,
                 "public_key": self.identity.public_key_b64(),
                 "display_name": self.identity.display_name,
-                "capabilities": list(CAPABILITY_ALLOWLIST),
+                "capabilities": self.role_caps,
                 "platform": self.identity.platform,
             },
             timeout=15,
@@ -83,7 +85,7 @@ class AgentApp:
                         "agent_id": self.identity.agent_id,
                         "hostname": self.identity.hostname,
                         "display_name": self.identity.display_name,
-                        "capabilities": list(CAPABILITY_ALLOWLIST),
+                        "capabilities": self.role_caps,
                         "platform": self.identity.platform,
                     }
                 )
@@ -146,7 +148,7 @@ class AgentApp:
             grant_nonce = json.loads(b64d(message["grant"].split(".", 1)[0]))["nonce"]
             self.used_nonces.add(grant_nonce)
             handler = CAPABILITY_ALLOWLIST.get(capability)
-            if handler is None:
+            if handler is None or capability not in self.role_caps:
                 raise PermissionError("CAPABILITY_NOT_ALLOWED")
             self.safety.active_task_id = task_id
             args = dict(message.get("args") or {})

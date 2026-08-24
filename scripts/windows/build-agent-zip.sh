@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Zip Windows: solo Agent, da installare sui PC dello studio (non il cervello).
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OUT="$ROOT/dist-agents"
+APP="$OUT/Kreluna Agent"
+
+rm -rf "$OUT"
+mkdir -p "$APP"
+bash "$ROOT/scripts/lib/copy-agent-tree.sh" "$APP"
+
+echo "Includo Python nell'Agent Windows…"
+python3 "$ROOT/scripts/lib/bundle_python.py" windows-x64 "$APP/runtime"
+
+cp "$ROOT/packaging/windows-agent/Installa-Agent.ps1" "$OUT/Installa-Agent.ps1"
+cp "$ROOT/packaging/windows-agent/LEGGIMI-AGENTI.txt" "$OUT/LEGGIMI-AGENTI.txt"
+cp "$ROOT/packaging/windows-agent/director.url" "$OUT/director.url"
+
+python3 - "$OUT" <<'PY'
+from pathlib import Path
+import sys
+
+out = Path(sys.argv[1])
+roles = [
+    ("pc-fatture", "PC-FATTURE", "KRELUNA-PC-FATTURE"),
+    ("pc-pagamenti", "PC-PAGAMENTI", "KRELUNA-PC-PAGAMENTI"),
+    ("pc-f24", "PC-F24", "KRELUNA-PC-F24"),
+    ("pc-contabilita", "PC-CONTABILITA", "KRELUNA-PC-CONTABILITA"),
+    ("pc-documenti", "PC-DOCUMENTI", "KRELUNA-PC-DOCUMENTI"),
+    ("pc-email", "PC-EMAIL", "KRELUNA-PC-EMAIL"),
+]
+for role, display, code in roles:
+    bat = out / f"Installa {display}.bat"
+    bat.write_text(
+        "\r\n".join(
+            [
+                "@echo off",
+                f"title Installa Kreluna Agent {display}",
+                (
+                    'powershell -NoProfile -ExecutionPolicy Bypass -File '
+                    '"%~dp0Installa-Agent.ps1"'
+                    f" -Role {role} -DisplayName {display} -EnrollCode {code}"
+                ),
+                "if errorlevel 1 pause",
+                "",
+            ]
+        ),
+        encoding="ascii",
+    )
+print("installer bat:", len(roles))
+PY
+
+(
+  cd "$OUT"
+  zip -qry "Kreluna-Agenti-Windows.zip" \
+    "Kreluna Agent" \
+    "Installa-Agent.ps1" \
+    "LEGGIMI-AGENTI.txt" \
+    "director.url" \
+    Installa*.bat
+)
+
+python3 - "$OUT/Kreluna-Agenti-Windows.zip" <<'PY'
+import hashlib, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+digest = hashlib.sha256(path.read_bytes()).hexdigest()
+path.with_suffix(".zip.sha256").write_text(digest + "  " + path.name + "\n")
+print(digest)
+PY
+
+echo "Pronto: $OUT/Kreluna-Agenti-Windows.zip"
+ls -lh "$OUT/Kreluna-Agenti-Windows.zip"

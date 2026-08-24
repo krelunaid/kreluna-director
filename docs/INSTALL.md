@@ -19,7 +19,16 @@ Dettagli: `docs/MAC.md`.
 
 Dettagli: `docs/WINDOWS.md`.
 
-## Accesso
+## Agent sui PC dello studio (a parte dal Director)
+
+Zip: `Kreluna-Agenti-Windows.zip`. Un file per PC, **non** è il cervello.
+
+1. Scrivi in `director.url` l’indirizzo del Director
+2. Sul PC fatture: **Installa PC-FATTURE.bat**
+3. Sul PC pagamenti: **Installa PC-PAGAMENTI.bat**
+   (e così via)
+
+Dettagli: `docs/WINDOWS.md`.
 
 - Si apre da sola la finestra su `http://127.0.0.1:8080`
 - Email: `andrea@studio.demo`

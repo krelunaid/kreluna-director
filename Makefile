@@ -1,4 +1,4 @@
-.PHONY: install test demo api agent web lint mac windows installers
+.PHONY: install test demo api agent web lint mac windows agents installers
 
 install:
 	python3 -m pip install -e ".[dev]"
@@ -30,3 +30,6 @@ windows:
 
 installers:
 	bash scripts/build-installers.sh
+
+agents:
+	bash scripts/windows/build-agent-zip.sh
