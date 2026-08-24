@@ -88,6 +88,8 @@ def _client_name(text: str) -> str | None:
         r"(?:fattura|invoice)(?:\s+demo)?\s+(?:ad|al cliente|a|per|to)\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+){0,3}?)(?=\s+(?:per|di|for|da|euro|eur|€|\d)|[,.]|$)",
         r"(?:per)\s+([A-Za-zÀ-ÿ']+)(?:\s+di\s+)",
         r"(?:cliente)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
+        r"(?:la\s+ditta|l['’]impresa|la\s+societ[aà])\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+)?)",
+        r"(?:per|di)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ']{2,}(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ']+)?)\s*[.!?]?\s*$",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
@@ -184,6 +186,30 @@ def _live_portal(lowered: str) -> tuple[str, str] | None:
     return None
 
 
+HELP_PHRASES = (
+    "cosa sai fare",
+    "che cosa sai fare",
+    "cosa puoi fare",
+    "che cosa puoi fare",
+    "cosa riesci a fare",
+    "che sai fare",
+    "come funzioni",
+    "come funziona",
+    "aiuto",
+    "help",
+    "istruzioni",
+)
+
+
+def _asks_what_i_can_do(lowered: str) -> bool:
+    if any(phrase in lowered for phrase in HELP_PHRASES):
+        return True
+    # "puoi fare fatture?", "sai fare i DURC?": è una domanda, non un ordine.
+    stripped = lowered.strip()
+    asks = bool(re.match(r"^(?:mi\s+)?(?:puoi|sai|riesci\s+a|riusciresti\s+a)\b", stripped))
+    return asks and stripped.endswith("?")
+
+
 def plan_deterministic(text: str) -> PlanResult:
     raw = text.strip()
     lowered = raw.lower()
@@ -203,6 +229,28 @@ def plan_deterministic(text: str) -> PlanResult:
             summary="Kill switch: fermo tutti gli agenti e i task in corso.",
             tasks=[],
             source="deterministic-kill",
+        )
+
+    if _asks_what_i_can_do(lowered):
+        return PlanResult(
+            ok=False,
+            summary=(
+                "Ecco cosa so fare, un PC per lavoro:\n"
+                "• Fatture (Webdesk / AdE): «fattura a Gadducci 5.000 euro di manodopera»\n"
+                "• Deleghe F24 (IPSOA): «prepara gli F24»\n"
+                "• Contabilità (AdE → IPSOA): «scarica le fatture in IPSOA per Gadducci»\n"
+                "• Pratiche camerali (CGN, ComUnica): «pratica camerale per Gadducci»\n"
+                "• Contratti (AdE di Samuele): «contratto per Gadducci»\n"
+                "• Richieste DURC (INPS): «DURC per Gadducci»\n"
+                "• Visure (CGN): «visura per Gadducci»\n"
+                "Per lavorare sul sito vero aggiungi «vera» o «apri il sito», "
+                "per esempio: «apri il sito CGN e fai la visura vera per Gadducci».\n"
+                "Importi e nomi non li invento: se mancano, te li chiedo. "
+                "Niente invii, niente pagamenti: prima chiedo Approva."
+            ),
+            denied=False,
+            deny_reason="",
+            source="deterministic-help",
         )
 
     notepad = re.search(
@@ -330,7 +378,10 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
-    if any(word in lowered for word in ("cameral", "comunica", "pratica camerale")):
+    if any(
+        word in lowered
+        for word in ("cameral", "comunica", "camera di commercio", "registro imprese", "camera commercio")
+    ):
         client = _client_name(raw) or _client_name(lowered) or "Cliente"
         return PlanResult(
             ok=True,

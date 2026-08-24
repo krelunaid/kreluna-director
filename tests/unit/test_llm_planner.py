@@ -22,7 +22,7 @@ def fake_model(reply: str) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
-async def ask(reply: str, message: str = "senti, fai la fattura"):
+async def ask(reply: str, message: str = "senti, fai la fattura a Andrea Gadducci per 5.000 euro di manodopera"):
     async with fake_model(reply) as client:
         return await plan_with_llm(
             message,

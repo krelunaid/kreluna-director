@@ -148,6 +148,14 @@ export default function App() {
   }
 
   const pending = useMemo(() => approvals.filter((item) => item.status === "pending"), [approvals]);
+  const blocked = useMemo(() => agents.filter((item) => item.killed || item.paused), [agents]);
+
+  async function resumeAll() {
+    await Promise.all(blocked.map((item) => api.resume(item.device_id).catch(() => undefined)));
+    setChat((items) => [...items, { role: "director", text: "Ho ripreso i PC. Ora possono lavorare." }]);
+    await refresh();
+  }
+
   const recentTasks = tasks.slice(0, 12);
 
   if (!ready) {
@@ -197,6 +205,11 @@ export default function App() {
           <Stat label="Errori" value={overview?.errors ?? 0} />
         </div>
         <div className="actions">
+          {blocked.length && !confirmKill ? (
+            <button className="btn ok" onClick={resumeAll}>
+              Riprendi {blocked.length > 1 ? `(${blocked.length})` : ""}
+            </button>
+          ) : null}
           {confirmKill ? (
             <>
               <button className="btn ghost" onClick={() => setConfirmKill(false)}>
@@ -230,6 +243,18 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {blocked.length ? (
+        <div className="banner">
+          <span>
+            Hai premuto Ferma: {blocked.length === 1 ? "un PC è bloccato" : `${blocked.length} PC sono bloccati`} e le
+            richieste restano in attesa.
+          </span>
+          <button className="btn ok" onClick={resumeAll}>
+            Riprendi
+          </button>
+        </div>
+      ) : null}
 
       <main className="layout">
         <section className="chat">
@@ -342,9 +367,16 @@ export default function App() {
                       </div>
                     ) : null}
                   </div>
-                  <span className={`pill ${agent.killed ? "killed" : agent.presence}`}>
-                    {agent.killed ? "fermo" : label(PC_LABEL, agent.presence)}
-                  </span>
+                  <div className="actions">
+                    <span className={`pill ${agent.killed ? "killed" : agent.presence}`}>
+                      {agent.killed ? "fermo" : label(PC_LABEL, agent.presence)}
+                    </span>
+                    {agent.killed || agent.paused ? (
+                      <button className="btn ok" onClick={() => api.resume(agent.device_id).then(refresh)}>
+                        Riprendi
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>

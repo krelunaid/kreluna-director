@@ -68,7 +68,8 @@ def compose_agent_rows(devices: Iterable[Device], slots: Iterable[AgentSlot]) ->
             live = by_device[slot.device_id]
         elif slot.role in by_agent_id:
             live = by_agent_id[slot.role]
-        if live is None and slot.role not in live_roles:
+        # Un ruolo vecchio si mostra solo mentre quel PC è davvero collegato.
+        if slot.role not in live_roles and (live is None or live.id not in hub.agents):
             continue
         if live is not None:
             seen.add(live.id)

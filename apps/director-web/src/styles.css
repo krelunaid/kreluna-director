@@ -375,6 +375,21 @@ textarea:focus {
 
 /* ---------- layout ---------- */
 
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 18px 0;
+  padding: 10px 14px;
+  border-radius: 13px;
+  font-size: 14px;
+  color: #ffe8c9;
+  background: linear-gradient(180deg, rgba(232, 195, 106, 0.2), rgba(232, 195, 106, 0.07));
+  border: 1px solid rgba(232, 195, 106, 0.45);
+  box-shadow: var(--shadow-md);
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);

@@ -8,6 +8,7 @@ export type Agent = {
   presence: string;
   busy: boolean;
   killed: boolean;
+  paused: boolean;
   platform: string;
   last_seen_at: string | null;
   connected: boolean;

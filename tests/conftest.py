@@ -18,3 +18,8 @@ os.environ.setdefault("DIRECTOR_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
 os.environ.setdefault("DIRECTOR_EVIDENCE_DIR", str(TEST_DIR / "evidence"))
 os.environ.setdefault("DIRECTOR_POLICY_PATH", str(ROOT / "policies" / "default.yaml"))
 os.environ.setdefault("KRELUNA_ENROLLMENT_CODE", "KRELUNA-TEST-ENROLL")
+
+# I test non devono dipendere dal .env di chi sviluppa: l'IA si accende solo
+# dove il test la accende di proposito.
+os.environ["KRELUNA_LLM_BASE_URL"] = ""
+os.environ["KRELUNA_LLM_API_KEY"] = ""
