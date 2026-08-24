@@ -46,7 +46,7 @@ def _money(text: str) -> float | None:
     range_mila = re.search(
         r"(\d{1,3})\s*[-–/]\s*(\d{1,3})\s*(?:mila|thousand|k)\b",
         text,
-        flags=re.I,
+        flags=re.IGNORECASE,
     )
     if range_mila:
         low, high = int(range_mila.group(1)), int(range_mila.group(2))
@@ -64,7 +64,7 @@ def _money(text: str) -> float | None:
     match = re.search(
         r"(?:eur(?:o)?|€)\s*([0-9]{1,7}(?:[.,][0-9]{3})?(?:[.,][0-9]{1,2})?)|([0-9]{1,7}(?:[.,][0-9]{3})?(?:[.,][0-9]{1,2})?)\s*(?:eur(?:o)?|€)",
         text,
-        flags=re.I,
+        flags=re.IGNORECASE,
     )
     if not match:
         return None
@@ -90,7 +90,7 @@ def _client_name(text: str) -> str | None:
         r"(?:cliente)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
     ]
     for pattern in patterns:
-        match = re.search(pattern, text, flags=re.I)
+        match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             name = " ".join(match.group(1).split()).title()
             if name.lower() in {
@@ -109,7 +109,7 @@ def _client_name(text: str) -> str | None:
 
 
 def _looks_like_email(text: str) -> bool:
-    return bool(re.search(r"\b(?:e-?mail|mail|posta|pec)\b", text, flags=re.I))
+    return bool(re.search(r"\b(?:e-?mail|mail|posta|pec)\b", text, flags=re.IGNORECASE))
 
 
 def _wants_real_email_send(text: str) -> bool:
@@ -127,7 +127,7 @@ def _email_to(text: str) -> str | None:
         r"\b(?:a|ad|to)\s+([A-Za-zÀ-ÿ0-9._+\-]+(?:\s+[A-Za-zÀ-ÿ']+){0,3})"
         r"(?=\s+(?:dicendo|che|per|con|,|$))",
         text,
-        flags=re.I,
+        flags=re.IGNORECASE,
     )
     if not match:
         return None
@@ -140,7 +140,7 @@ def _email_to(text: str) -> str | None:
 
 
 def _email_body(text: str) -> str:
-    match = re.search(r"(?:dicendo|che dice|con testo|testo)\s*:?\s*(.+)$", text, flags=re.I | re.S)
+    match = re.search(r"(?:dicendo|che dice|con testo|testo)\s*:?\s*(.+)$", text, flags=re.IGNORECASE | re.DOTALL)
     if match:
         body = match.group(1).strip().strip(" .\"'")
         if body:
@@ -152,14 +152,36 @@ def _description(text: str) -> str:
     lowered = text.lower()
     if "manodopera" in lowered or "manpower" in lowered:
         return "Manodopera"
-    match = re.search(r"(?:per|for|di)\s+([^,.]{3,80})", text, flags=re.I)
+    match = re.search(r"(?:per|for|di)\s+([^,.]{3,80})", text, flags=re.IGNORECASE)
     if match:
         desc = match.group(1)
-        desc = re.split(r"\s+(?:eur|euro|€|di\s+\d|\d{2})", desc, flags=re.I)[0]
-        desc = re.sub(r"\b(?:mila|thousand|euro|eur)\b.*", "", desc, flags=re.I).strip()
+        desc = re.split(r"\s+(?:eur|euro|€|di\s+\d|\d{2})", desc, flags=re.IGNORECASE)[0]
+        desc = re.sub(r"\b(?:mila|thousand|euro|eur)\b.*", "", desc, flags=re.IGNORECASE).strip()
         if len(desc) >= 3:
             return desc.strip().capitalize()
     return "Consulenza"
+
+
+LIVE_PORTALS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("visure-cgn", "Visure su CGN", ("visura", "visure")),
+    ("durc-inps", "DURC su INPS", ("durc", "inps")),
+    ("contratti-ade", "Contratti su AdE", ("contratt", "samuele")),
+    ("camerali-cgn", "Pratiche camerali su CGN", ("cameral", "comunica")),
+    ("fatture-webdesk", "Fatture su Webdesk", ("fattur", "webdesk")),
+)
+
+LIVE_WORDS = ("vero", "vera", "davvero", "apri il sito", "apri il portale", "nel browser")
+
+
+def _live_portal(lowered: str) -> tuple[str, str] | None:
+    """Il lavoro vero si chiede a parole: 'visura vera', 'apri il sito INPS'."""
+
+    if not any(word in lowered for word in LIVE_WORDS):
+        return None
+    for key, name, needles in LIVE_PORTALS:
+        if any(needle in lowered for needle in needles):
+            return key, name
+    return None
 
 
 def plan_deterministic(text: str) -> PlanResult:
@@ -186,13 +208,13 @@ def plan_deterministic(text: str) -> PlanResult:
     notepad = re.search(
         r"(?:apri\s+)?(?:il\s+)?blocco\s+note.*?(?:scrivi|testo)\s*:?\s*[\"']?(.+?)[\"']?$",
         raw,
-        flags=re.I | re.S,
+        flags=re.IGNORECASE | re.DOTALL,
     )
     if notepad or ("blocco note" in lowered and "scrivi" in lowered):
         written = notepad.group(1).strip() if notepad else raw
         written = written.strip(" .\"'")
         if "scrivi" in lowered:
-            after = re.split(r"scrivi\s*:?\s*", raw, flags=re.I, maxsplit=1)
+            after = re.split(r"scrivi\s*:?\s*", raw, flags=re.IGNORECASE, maxsplit=1)
             if len(after) == 2:
                 written = after[1].strip().strip(" .\"'")
         return PlanResult(
@@ -204,6 +226,28 @@ def plan_deterministic(text: str) -> PlanResult:
                     capability="notepad_write",
                     args={"text": written},
                     risk=Risk.LOW,
+                    needs_approval=False,
+                )
+            ],
+        )
+
+    live = _live_portal(lowered)
+    if live is not None:
+        portal, portal_name = live
+        client = _client_name(raw) or _client_name(lowered) or ""
+        return PlanResult(
+            ok=True,
+            summary=(
+                f"Lavoro vero su {portal_name}: apro il sito nel browser del PC"
+                + (f" e cerco {client}" if client else "")
+                + ". Il login lo fai tu. Non premo invio e non scarico niente."
+            ),
+            tasks=[
+                PlannedTask(
+                    goal=f"Aprire {portal_name} sul PC" + (f" e cercare {client}" if client else ""),
+                    capability="portal_open",
+                    args={"portal": portal, "query": client},
+                    risk=Risk.MEDIUM,
                     needs_approval=False,
                 )
             ],

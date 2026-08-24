@@ -56,7 +56,7 @@ def _waiting_pc_note(tasks: list[Task]) -> str:
     for task in tasks:
         if task.status != "queued":
             continue
-        role = preferred_role(task.capability)
+        role = preferred_role(task.capability, json.loads(task.args_json or "{}"))
         label = ROLE_LABEL.get(role or "", role or "quel PC")
         if label not in names:
             names.append(label)

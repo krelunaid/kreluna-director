@@ -1,0 +1,47 @@
+# Programmi veri dello studio: indirizzi e nome del campo da compilare.
+# Questo file lo puoi correggere tu, senza toccare il programma.
+# Il campo si trova per nome, non per posizione del mouse: se il sito sposta
+# le cose, l'Agent non sbaglia riga.
+#
+# field: pezzo di pagina dove scrivere (attributo name, id o placeholder).
+# submit: MAI. L'Agent compila e si ferma. L'invio lo fai tu.
+
+portals:
+  visure-cgn:
+    role: pc-visure
+    name: Visure — CGN
+    url: https://www.cgn.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    login_note: Entra con le credenziali CGN dello studio, poi richiedi la visura.
+  durc-inps:
+    role: pc-durc
+    name: DURC — INPS
+    url: https://www.inps.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    login_note: Entra con SPID o smart card del cliente. Lo fai tu a mano.
+  contratti-ade:
+    role: pc-contratti
+    name: Contratti — Agenzia delle Entrate
+    url: https://www.agenziaentrate.gov.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    login_note: Entra con l'utenza di Samuele. Lo fai tu a mano.
+  camerali-cgn:
+    role: pc-camerali
+    name: Pratiche camerali — CGN
+    url: https://www.cgn.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    login_note: Dopo CGN la pratica si completa su Desktop ComUnica.
+  fatture-webdesk:
+    role: pc-fatture
+    name: Fatture — Webdesk
+    url: https://www.agenziaentrate.gov.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    login_note: Utenza cliente con smart card o SPID. Lo fai tu a mano.
+
+settings:
+  # Quanto aspetta che tu finisca il login, prima di rinunciare.
+  wait_for_login_seconds: 60
+  # Ogni quanto ricontrolla se il campo è comparso.
+  poll_seconds: 3
+  # Browser da guidare sul Mac. Google Chrome è il più affidabile.
+  mac_browser: Google Chrome

@@ -11,6 +11,8 @@ const SUGGESTIONS = [
   { short: "Contratti", full: "Prepara il contratto sul sito AdE di Samuele per Gadducci" },
   { short: "DURC", full: "Prepara la richiesta DURC per Gadducci" },
   { short: "Visure", full: "Prepara la visura per Gadducci" },
+  { short: "Visura vera su CGN", full: "Apri il sito CGN e fai la visura vera per Gadducci" },
+  { short: "DURC vero su INPS", full: "Apri il sito INPS e prepara il DURC vero per Gadducci" },
   { short: "Ferma", full: "Ferma tutto" },
 ];
 

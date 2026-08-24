@@ -44,13 +44,18 @@ async def existing_task(session: AsyncSession, tenant_id: str, key: str) -> Task
     return None
 
 
-async def choose_device(session: AsyncSession, tenant_id: str, capability: str) -> Device | None:
+async def choose_device(
+    session: AsyncSession,
+    tenant_id: str,
+    capability: str,
+    args: dict | None = None,
+) -> Device | None:
     await mark_offline_stale(session)
     devices = (
         await session.execute(select(Device).where(Device.tenant_id == tenant_id, Device.status == "active"))
     ).scalars().all()
-    ranked = sorted(devices, key=lambda device: score_agent(device, capability), reverse=True)
-    if not ranked or score_agent(ranked[0], capability) < 0:
+    ranked = sorted(devices, key=lambda device: score_agent(device, capability, args), reverse=True)
+    if not ranked or score_agent(ranked[0], capability, args) < 0:
         return None
     return ranked[0]
 
@@ -110,7 +115,7 @@ async def dispatch_queued(session: AsyncSession) -> list[Task]:
     ).scalars().all()
     dispatched: list[Task] = []
     for task in tasks:
-        device = await choose_device(session, task.tenant_id, task.capability)
+        device = await choose_device(session, task.tenant_id, task.capability, json.loads(task.args_json))
         if device is None:
             continue
         await dispatch_to_device(session, task, device)

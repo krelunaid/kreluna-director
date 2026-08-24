@@ -50,6 +50,24 @@ class EmailDraftArgs(BaseModel):
     to: str | None = None
 
 
+class PortalOpenArgs(BaseModel):
+    portal: str = Field(min_length=2, max_length=60)
+    query: str = Field(default="", max_length=200)
+
+    @field_validator("portal")
+    @classmethod
+    def known_shape(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not all(ch.isalnum() or ch in "-_" for ch in cleaned):
+            raise ValueError("portale non valido")
+        return cleaned
+
+    @field_validator("query")
+    @classmethod
+    def clean_query(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
 class StudioPrepareArgs(BaseModel):
     client_name: str = Field(default="Cliente", min_length=1, max_length=200)
     notes: str = Field(default="", max_length=500)
@@ -140,6 +158,16 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         default_risk="medium",
         description="Prepara una visura sul sito CGN. Nessun download reale.",
         demo_only=True,
+    ),
+    "portal_open": CapabilitySpec(
+        name="portal_open",
+        args_model=PortalOpenArgs,
+        default_risk="medium",
+        description=(
+            "Apre davvero il portale nel browser del PC, aspetta il login umano e compila "
+            "il campo di ricerca. Non preme invio, non scarica, non invia."
+        ),
+        demo_only=False,
     ),
     "document_check": CapabilitySpec(
         name="document_check",

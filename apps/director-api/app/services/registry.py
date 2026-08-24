@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, timedelta
 
 from fastapi import WebSocket
+from kreluna_shared.agents import preferred_role
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Device, utcnow
-from kreluna_shared.agents import preferred_role
 
 
 class ConnectionHub:
@@ -75,7 +75,7 @@ async def mark_offline_stale(session: AsyncSession) -> None:
             device.presence = "offline"
             continue
         if last.tzinfo is None:
-            last = last.replace(tzinfo=timezone.utc)
+            last = last.replace(tzinfo=UTC)
         if last < cutoff:
             device.presence = "offline"
             device.busy = False
@@ -83,7 +83,7 @@ async def mark_offline_stale(session: AsyncSession) -> None:
     _ = now
 
 
-def score_agent(device: Device, capability: str) -> int:
+def score_agent(device: Device, capability: str, args: dict | None = None) -> int:
     caps = parse_caps(device.capabilities)
     if capability not in caps:
         return -10_000
@@ -91,10 +91,14 @@ def score_agent(device: Device, capability: str) -> int:
         return -10_000
     if device.presence == "offline" or device.killed or device.paused:
         return -10_000
+    role = preferred_role(capability, args)
+    if role and device.agent_id != role:
+        # Un portale vero si apre solo sul PC che fa quel lavoro.
+        if capability == "portal_open":
+            return -10_000
     score = 100
     if not device.busy:
         score += 30
-    role = preferred_role(capability)
     if role and device.agent_id == role:
         score += 80
     plat = (device.platform or "").lower()

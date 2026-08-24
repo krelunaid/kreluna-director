@@ -10,6 +10,7 @@ agents:
       - notepad_write
       - invoice_prepare_demo
       - invoice_submit_demo
+      - portal_open
   - role: pc-f24
     display_name: PC-F24
     job: Deleghe F24
@@ -29,18 +30,21 @@ agents:
     program: Sito CGN, poi invio su Desktop ComUnica
     capabilities:
       - camera_prepare
+      - portal_open
   - role: pc-contratti
     display_name: PC-CONTRATTI
     job: Contratti
     program: Sito Agenzia delle Entrate di Samuele
     capabilities:
       - contratti_prepare
+      - portal_open
   - role: pc-durc
     display_name: PC-DURC
     job: Richieste DURC
     program: Sito INPS (utenza cliente, smart card / SPID)
     capabilities:
       - durc_prepare
+      - portal_open
   - role: pc-visure
     display_name: PC-VISURE
     job: Visure
@@ -48,6 +52,7 @@ agents:
     capabilities:
       - visure_prepare
       - document_check
+      - portal_open
 
   # Vecchi posti: restano in database se già creati, non si scelgono più.
   - role: pc-pagamenti

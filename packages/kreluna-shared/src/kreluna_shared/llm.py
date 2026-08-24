@@ -14,8 +14,10 @@ import httpx
 from kreluna_shared.agents import load_live_agent_roles
 from kreluna_shared.capabilities import CAPABILITIES, DENIED_CAPABILITIES
 from kreluna_shared.models import PlannedTask, PlanResult, Risk
+from kreluna_shared.programs import load_portals
 
 PLANNABLE: tuple[str, ...] = (
+    "portal_open",
     "invoice_prepare_demo",
     "f24_prepare",
     "contabilita_prepare",
@@ -50,6 +52,10 @@ def role_catalog() -> str:
     return "\n".join(f"- {role.display_name}: {role.job}. Programma: {role.program}" for role in load_live_agent_roles())
 
 
+def portal_catalog() -> str:
+    return "\n".join(f'- portal="{portal.key}": {portal.name}, {portal.url}' for portal in load_portals())
+
+
 def build_system_prompt() -> str:
     return f"""Sei il pianificatore di Kreluna Director, per uno studio di consulenza del lavoro italiano.
 Il titolare scrive in italiano parlato. Tu traduci la richiesta in compiti per i PC dello studio.
@@ -59,6 +65,11 @@ PC dello studio e programmi:
 
 Capability che puoi usare (nient'altro):
 {capability_catalog()}
+
+Portali veri per portal_open (l'argomento portal deve essere una di queste chiavi):
+{portal_catalog()}
+Usa portal_open solo quando il titolare chiede il lavoro vero sul sito
+("visura vera", "apri il sito INPS"). Altrimenti usa le capability di preparazione.
 
 Regole non negoziabili:
 1. Non inventare MAI importi, date, partite IVA, nomi di clienti o numeri di fattura.

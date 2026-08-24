@@ -8,6 +8,7 @@ risk:
   invoice_submit_demo: high
   f24_prepare: medium
   f24_submit: critical
+  portal_open: medium
   contabilita_prepare: medium
   camera_prepare: medium
   contratti_prepare: medium
