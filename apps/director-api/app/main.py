@@ -7,17 +7,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from kreluna_shared.update import APP_VERSION
 
 from app.config import ROOT, settings
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
 from app.routers.agent_io import router as agent_io_router
+from app.routers.billing import router as billing_router
 from app.routers.core import router as core_router
 from app.routers.work import router as work_router
-from app.routers.billing import router as billing_router
 from app.routers.ws import router as ws_router
 from app.seed import seed_if_empty
-from app.database import SessionLocal
-from kreluna_shared.update import APP_VERSION
 
 
 @asynccontextmanager

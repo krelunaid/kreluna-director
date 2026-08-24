@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from kreluna_shared.crypto import redact_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuditEvent
-from kreluna_shared.crypto import redact_text
 
 
 async def write_audit(

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.models import Device, utcnow
 from app.services.orchestrator import dispatch_queued
-from app.services.registry import hub, parse_caps
+from app.services.registry import hub, parse_caps, requeue_device_tasks
 
 router = APIRouter()
 
@@ -80,6 +80,8 @@ async def agent_socket(ws: WebSocket) -> None:
                 if device:
                     device.presence = "offline"
                     device.busy = False
+                    device.active_task_id = None
+                    await requeue_device_tasks(session, device.id)
                     await session.commit()
             await hub.broadcast_dashboard({"type": "agent", "device_id": device_id, "presence": "offline"})
 

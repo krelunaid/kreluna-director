@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import Device, utcnow
+from app.models import Device, Task, utcnow
 
 
 class ConnectionHub:
@@ -63,16 +63,33 @@ def parse_caps(raw: str) -> list[str]:
         return []
 
 
+async def requeue_device_tasks(session: AsyncSession, device_id: str) -> int:
+    """Un PC che si spegne non si porta via il lavoro: torna in coda per il prossimo."""
+
+    orphans = (
+        await session.execute(
+            select(Task).where(
+                Task.assigned_device_id == device_id,
+                Task.status.in_(("assigned", "running")),
+            )
+        )
+    ).scalars().all()
+    for task in orphans:
+        task.status = "queued"
+        task.assigned_device_id = None
+    return len(orphans)
+
+
 async def mark_offline_stale(session: AsyncSession) -> None:
     cutoff = utcnow() - timedelta(seconds=settings.heartbeat_timeout_seconds)
     rows = (await session.execute(select(Device))).scalars().all()
-    now = utcnow()
     for device in rows:
         if device.presence == "offline":
             continue
         last = device.last_seen_at
         if last is None:
             device.presence = "offline"
+            await requeue_device_tasks(session, device.id)
             continue
         if last.tzinfo is None:
             last = last.replace(tzinfo=UTC)
@@ -80,7 +97,7 @@ async def mark_offline_stale(session: AsyncSession) -> None:
             device.presence = "offline"
             device.busy = False
             device.active_task_id = None
-    _ = now
+            await requeue_device_tasks(session, device.id)
 
 
 def score_agent(device: Device, capability: str, args: dict | None = None) -> int:

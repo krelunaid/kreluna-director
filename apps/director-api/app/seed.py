@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from kreluna_shared.agents import load_agent_roles
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ROOT, settings
 from app.models import AgentSlot, EnrollmentCode, License, Tenant, User
 from app.security import hash_password
-from kreluna_shared.agents import load_agent_roles
 
 DEMO_TENANT_ID = "11111111-1111-1111-1111-111111111111"
 DEMO_USER_ID = "22222222-2222-2222-2222-222222222222"

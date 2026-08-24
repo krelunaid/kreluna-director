@@ -6,6 +6,9 @@ import secrets
 from datetime import timedelta
 from uuid import UUID
 
+from kreluna_shared.crypto import sign_grant
+from kreluna_shared.models import PlannedTask
+from kreluna_shared.protocol import SignedGrant
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,10 +16,6 @@ from app.config import settings
 from app.models import Approval, Device, Task, UsedNonce, utcnow
 from app.services.audit import write_audit
 from app.services.registry import hub, mark_offline_stale, score_agent
-from kreluna_shared.crypto import sign_grant
-from kreluna_shared.models import PlannedTask
-from kreluna_shared.protocol import SignedGrant
-
 
 LIVE_STATUSES = ("queued", "assigned", "running", "waiting_approval")
 

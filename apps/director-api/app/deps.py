@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException
+from kreluna_shared.policy import PolicyEngine, load_policy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,6 @@ from app.config import settings
 from app.database import get_session
 from app.models import License, User
 from app.security import read_session
-from kreluna_shared.policy import PolicyEngine, load_policy
 
 _policy: PolicyEngine | None = None
 

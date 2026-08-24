@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from kreluna_shared.crypto import b64d, decrypt_bytes, encrypt_bytes, sha256_hex, verify_bytes
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,6 @@ from app.models import Approval, Device, Evidence, InvoiceDraft, Task, utcnow
 from app.services.audit import write_audit
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.registry import hub
-from kreluna_shared.crypto import b64d, decrypt_bytes, encrypt_bytes, sha256_hex, verify_bytes
 
 router = APIRouter()
 
@@ -201,9 +201,8 @@ def purge_expired_evidence(evidence_dir: Path, rows: list[Evidence], now, retent
     for item in rows:
         created = item.created_at
         if created.tzinfo is None:
-            from datetime import timezone
 
-            created = created.replace(tzinfo=timezone.utc)
+            created = created.replace(tzinfo=UTC)
         if item.deleted_at is None and created < cutoff:
             item.deleted_at = now
             path = evidence_dir / item.storage_key

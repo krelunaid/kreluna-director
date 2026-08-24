@@ -13,7 +13,6 @@ class Base(DeclarativeBase):
 def _engine_url() -> str:
     url = settings.director_database_url
     if url.startswith("sqlite+aiosqlite:///./"):
-        from pathlib import Path
 
         from app.config import ROOT
 
