@@ -174,10 +174,12 @@ def _email_body(text: str) -> str:
     return text.strip()
 
 
-def _description(text: str) -> str:
+def _description(text: str, default: str = "Consulenza") -> str:
     lowered = text.lower()
     if "manodopera" in lowered or "manpower" in lowered:
         return "Manodopera"
+    if re.search(r"\bconsulenza\b", lowered):
+        return "Consulenza"
     match = re.search(r"(?:per|for|di)\s+([^,.]{3,80})", text, flags=re.IGNORECASE)
     if match:
         desc = match.group(1)
@@ -185,7 +187,20 @@ def _description(text: str) -> str:
         desc = re.sub(r"\b(?:mila|thousand|euro|eur)\b.*", "", desc, flags=re.IGNORECASE).strip()
         if len(desc) >= 3:
             return desc.strip().capitalize()
-    return "Consulenza"
+    return default
+
+
+def _amount_in_reply(text: str) -> float | None:
+    """Importo nella risposta: anche solo '5000' o 'sì, 5.000'."""
+
+    found = _money(text)
+    if found is not None:
+        return found
+    cleaned = re.sub(r"^(?:s[iì]|ok|va\s*bene)[,.\s]*", "", text.strip(), flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*€\s*$", "", cleaned).strip()
+    if re.fullmatch(r"\d{1,7}(?:[.,]\d{3})*(?:[.,]\d{1,2})?", cleaned):
+        return _parse_amount(cleaned)
+    return None
 
 
 LIVE_PORTALS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -514,6 +529,12 @@ def plan_deterministic(text: str) -> PlanResult:
                 denied=False,
                 deny_reason="",
                 source="deterministic-ask",
+                pending={
+                    "capability": "invoice_prepare_demo",
+                    "client_name": client,
+                    "description": description,
+                    "net_eur": net,
+                },
             )
         return PlanResult(
             ok=True,
@@ -670,6 +691,85 @@ def apply_policy(plan: PlanResult, engine: PolicyEngine, license_state: str) -> 
         task.needs_approval = decision.decision is PolicyDecision.APPROVAL
         safe_tasks.append(task)
     return plan.model_copy(update={"tasks": safe_tasks})
+
+
+def invoice_plan(client: str, description: str, net: float) -> PlanResult:
+    return PlanResult(
+        ok=True,
+        summary=(
+            f"Mando PC-FATTURE (Webdesk / sito AdE, demo locale): fattura a {client} "
+            f"per {description}, € {net:,.2f} + IVA. Poi ti chiedo conferma prima di emetterla."
+        ),
+        tasks=[
+            PlannedTask(
+                goal=f"Aprire il gestionale e compilare la fattura a {client} per {description}",
+                capability="invoice_prepare_demo",
+                args={
+                    "client_name": client,
+                    "description": description,
+                    "net_eur": net,
+                    "vat_rate": 0.22,
+                },
+                risk=Risk.MEDIUM,
+                needs_approval=False,
+            )
+        ],
+    )
+
+
+def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
+    """Legge la tua risposta come risposta, non come richiesta nuova.
+
+    Ritorna None se il messaggio non c'entra: allora si ricomincia da capo.
+    """
+
+    if (pending or {}).get("capability") != "invoice_prepare_demo":
+        return None
+    raw = text.strip()
+    lowered = raw.lower()
+    if any(phrase in lowered for phrase in DENY_PHRASES) or _asks_what_i_can_do(lowered):
+        return None
+
+    client = pending.get("client_name") or _client_name(raw) or _client_name(lowered) or ""
+    net = pending.get("net_eur")
+    if net is None:
+        net = _amount_in_reply(raw) or _amount_in_reply(lowered)
+    description = pending.get("description") or ""
+    if not description:
+        found = _description(raw, default="")
+        if found and not (client and (found.lower() in client.lower() or client.lower() in found.lower())):
+            description = found
+
+    if not client:
+        # Una risposta breve senza verbi è probabilmente il nome del cliente.
+        candidate = " ".join(word for word in raw.replace(",", " ").split() if word.lower() not in NOT_A_NAME)
+        words = [w for w in candidate.split() if len(w) >= 3 and not any(ch.isdigit() for ch in w)]
+        if 1 <= len(words) <= 4 and len(raw) <= 60:
+            client = " ".join(words).title()
+
+    missing = []
+    if not client:
+        missing.append("il cliente")
+    if net is None:
+        missing.append("l'importo")
+    if not description:
+        missing.append("il lavoro")
+
+    if missing:
+        return PlanResult(
+            ok=False,
+            summary=f"Ci siamo quasi: mi manca {' e '.join(missing)}.",
+            denied=False,
+            deny_reason="",
+            source="deterministic-ask",
+            pending={
+                "capability": "invoice_prepare_demo",
+                "client_name": client,
+                "description": description,
+                "net_eur": net,
+            },
+        )
+    return invoice_plan(client, description, float(net))
 
 
 def parse_llm_plan(payload: Any) -> PlanResult:

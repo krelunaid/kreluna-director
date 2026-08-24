@@ -48,6 +48,19 @@ def _amount_is_in_the_text(value: float, message: str) -> bool:
     return abs(spoken - value) <= max(1.0, spoken * 0.001)
 
 
+def _short_question(raw: str) -> str:
+    """Una domanda sola e corta. I modelli piccoli tendono a recitare l'elenco."""
+
+    question = " ".join(raw.split())
+    if not question:
+        return "Non ho capito. Puoi dirlo con altre parole?"
+    question = question.split("?")[0].strip() + "?" if "?" in question else question
+    words = question.split()
+    if len(words) > 18 or question.count(",") >= 3:
+        return "Non ho capito bene. Dimmi in poche parole cosa devo fare e per quale cliente."
+    return question
+
+
 def _client_is_in_the_text(name: str, message: str) -> bool:
     lowered = message.lower()
     parts = [part for part in name.lower().replace(",", " ").split() if len(part) >= 3]
@@ -112,6 +125,9 @@ Come parla il titolare, e cosa vuol dire:
 - "il certificato dell'impresa", "controllo su un'azienda" = visure_prepare
 - "il contratto di assunzione", "il contratto da registrare" = contratti_prepare
 
+Se devi chiedere: UNA sola domanda, in italiano, massimo 12 parole, sul dato che
+manca. Non elencare le tue possibilità, non spiegare come lavori.
+
 Rispondi SOLO con JSON, senza testo intorno:
 {{"understood": true, "summary": "cosa farai, in italiano semplice",
   "tasks": [{{"goal": "cosa fa il PC", "capability": "nome_capability", "args": {{}}}}]}}
@@ -121,10 +137,9 @@ oppure, se manca un dato o non hai capito:
 
 def _as_plan(payload: dict[str, Any], message: str = "") -> PlanResult:
     if not payload.get("understood", False):
-        question = str(payload.get("question") or payload.get("summary") or "").strip()
         return PlanResult(
             ok=False,
-            summary=question or "Non ho capito. Puoi dirlo con altre parole?",
+            summary=_short_question(str(payload.get("question") or payload.get("summary") or "")),
             denied=False,
             deny_reason="",
             source="llm-ask",
@@ -226,7 +241,7 @@ async def plan_with_llm(
     api_key: str,
     model: str,
     client: httpx.AsyncClient,
-    timeout: float = 25.0,
+    timeout: float = 15.0,
 ) -> PlanResult | None:
     """Chiede il piano al modello. Ritorna None se il modello non è raggiungibile."""
 
@@ -236,6 +251,7 @@ async def plan_with_llm(
     body: dict[str, Any] = {
         "model": model,
         "temperature": 0,
+        "max_tokens": 400,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": build_system_prompt()},

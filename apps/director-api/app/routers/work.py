@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from kreluna_shared.agents import preferred_role
 from kreluna_shared.crypto import decrypt_bytes
-from kreluna_shared.planner import apply_policy
+from kreluna_shared.planner import apply_policy, complete_pending
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.services.agents import compose_agent_rows, count_online
 from app.services.audit import write_audit
+from app.services.followup import followups
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.orchestrator import dispatch_queued, enqueue_planned
 from app.services.planning import plan_message
@@ -106,7 +107,19 @@ async def chat(
 ) -> dict:
     if actor.role == "viewer":
         raise HTTPException(status_code=403, detail="Il visore può solo leggere")
-    plan = apply_policy(await plan_message(body.message), get_policy(), actor.license_state)
+    waiting = followups.take(actor.user_id)
+    answered = complete_pending(waiting, body.message) if waiting else None
+    plan = answered if answered is not None else await plan_message(body.message)
+    plan = apply_policy(plan, get_policy(), actor.license_state)
+    if plan.pending:
+        followups.remember(actor.user_id, plan.pending)
+    elif plan.ok or plan.denied:
+        followups.forget(actor.user_id)
+    elif waiting:
+        # Ha chiesto altro senza chiudere: resta la fattura in sospeso.
+        followups.remember(actor.user_id, waiting)
+    else:
+        followups.forget(actor.user_id)
     if plan.source == "deterministic-kill":
         from app.services.orchestrator import kill_all
 
