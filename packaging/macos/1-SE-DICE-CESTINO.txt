@@ -1,15 +1,21 @@
-SE MACOS DICE "SPOSTA NEL CESTINO"
-==================================
+KRELUNA SUL MAC — LEGGI QUESTO
+==============================
 
-Non è rotta. Apple blocca i programmi che non sono sull'App Store.
+La finestra gialla NON ha il pulsante Apri.
+NON premere "Sposta nel Cestino". Premi Fine.
 
-NON fare doppio clic.
+Poi:
 
-1. Clic DESTRO su "Installa Kreluna.command"
-2. Scegli Apri
-3. Di nuovo Apri
+1. Trascina "Kreluna Director.app" sulla cartella Applicazioni
+   (è nello stesso zip, accanto all'app).
 
-Poi Kreluna va in Applicazioni da sola.
+2. Apri Applicazioni → Kreluna Director.
+
+3. Di nuovo la finestra gialla: premi Fine.
+
+4. Menu Mela → Impostazioni di Sistema → Privacy e sicurezza.
+
+5. In basso: "Kreluna è stata bloccata" → Apri comunque.
 
 Login: andrea@studio.demo / demo
 Non serve Python.

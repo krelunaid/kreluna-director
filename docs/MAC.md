@@ -4,25 +4,21 @@ Non è un sito da iPhone. È un’**app per computer Mac**.
 
 **Non serve installare Python.** È già dentro il programma.
 
+Su macOS nuovo la finestra gialla ha solo **Sposta nel Cestino** e **Fine**. Non c’è Apri. Non è rotta.
+
 ## Installazione
 
-1. Scarica `Kreluna-Director-Mac.zip`
-2. Aprilo (doppio clic)
-3. **Non doppio clic.** Clic **destro** su **Installa Kreluna.command** → **Apri** → **Apri**
-4. Se dice “Sposta nel Cestino”: è il blocco Apple, non è rotta. Stesso clic destro → Apri.
+1. Scarica e apri `Kreluna-Director-Mac.zip`
+2. Trascina `Kreluna Director.app` sulla cartella **Applicazioni** (nello zip)
+3. Aprila. Se esce la finestra gialla: premi **Fine** (non Cestino)
+4. Menu Mela → **Impostazioni di Sistema** → **Privacy e sicurezza**
+5. In basso: Kreluna è stata bloccata → **Apri comunque**
 
 ## Accesso
 
-- Indirizzo (si apre da sola): `http://127.0.0.1:8080`
 - Email: `andrea@studio.demo`
 - Password: `demo`
 
-## Aggiornamento (già installata)
+## Aggiornamento
 
-Chiudi Kreluna, poi di nuovo **Installa Kreluna.command** sullo zip nuovo. I dati restano.
-
-## Ricreare lo zip
-
-```bash
-make mac
-```
+Chiudi Kreluna, trascina di nuovo l’app in Applicazioni. I dati restano.

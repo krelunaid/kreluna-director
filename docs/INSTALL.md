@@ -5,8 +5,8 @@ App per **Mac** e **Windows**. Non è un sito da telefono. **Non serve Python.**
 ## Mac
 
 1. Apri `Kreluna-Director-Mac.zip`
-2. Clic **destro** su **Installa Kreluna.command** → **Apri** → **Apri**
-   (se dice Cestino: è il blocco Apple, non è rotta)
+2. Trascina `Kreluna Director.app` sulla cartella **Applicazioni**
+3. Finestra gialla: **Fine** (non Cestino) → Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**
 
 Dettagli: `docs/MAC.md`.
 

@@ -1,15 +1,11 @@
 KRELUNA DIRECTOR PER MAC
 ========================
 
-SE DICE "SPOSTA NEL CESTINO":
-  clic DESTRO su Installa Kreluna.command → Apri → Apri
-  (non doppio clic)
+NON usare Installa Kreluna.command (macOS lo blocca).
 
-Poi:
-1. Kreluna va da sola in Applicazioni.
-2. Entra con andrea@studio.demo / demo
+1. Trascina Kreluna Director.app sulla cartella Applicazioni.
+2. Aprila. Se esce la finestra gialla: Fine (non Cestino).
+3. Menu Mela → Impostazioni di Sistema → Privacy e sicurezza
+   → in basso → Apri comunque.
 
-Non serve installare Python. È già dentro Kreluna.
-
-Aggiornamenti: chiudi Kreluna e rilancia Installa Kreluna.command
-sullo zip nuovo. I dati restano.
+Login: andrea@studio.demo / demo
