@@ -18,10 +18,39 @@ from app.services.audit import write_audit
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.orchestrator import dispatch_queued, dispatch_to_device, enqueue_planned
 from app.services.registry import hub
+from kreluna_shared.agents import preferred_role
 from kreluna_shared.crypto import decrypt_bytes
 from kreluna_shared.planner import apply_policy, plan_deterministic
 
 router = APIRouter()
+
+
+ROLE_LABEL = {
+    "pc-fatture": "PC-FATTURE",
+    "pc-pagamenti": "PC-PAGAMENTI",
+    "pc-f24": "PC-F24",
+    "pc-contabilita": "PC-CONTABILITA",
+    "pc-documenti": "PC-DOCUMENTI",
+    "pc-email": "PC-EMAIL",
+}
+
+
+def _waiting_pc_note(tasks: list[Task]) -> str:
+    names: list[str] = []
+    for task in tasks:
+        if task.status != "queued":
+            continue
+        role = preferred_role(task.capability)
+        label = ROLE_LABEL.get(role or "", role or "quel PC")
+        if label not in names:
+            names.append(label)
+    if not names:
+        return ""
+    who = ", ".join(names)
+    return (
+        f" {who} non è acceso: il lavoro resta in attesa. "
+        "Hai acceso PC-FATTURE: clicca Fattura Gadducci."
+    )
 
 
 class ChatBody(BaseModel):
@@ -107,7 +136,7 @@ async def chat(
     await hub.broadcast_dashboard({"type": "tasks", "tenant_id": actor.tenant_id})
     return {
         "ok": True,
-        "summary": plan.summary,
+        "summary": plan.summary + _waiting_pc_note(created),
         "denied": False,
         "source": plan.source,
         "tasks": [_task_out(task) for task in created],

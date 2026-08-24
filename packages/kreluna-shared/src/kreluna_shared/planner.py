@@ -86,6 +86,46 @@ def _client_name(text: str) -> str | None:
     return None
 
 
+def _looks_like_email(text: str) -> bool:
+    return bool(re.search(r"\b(?:e-?mail|mail|posta|pec)\b", text, flags=re.I))
+
+
+def _wants_real_email_send(text: str) -> bool:
+    lowered = text.lower()
+    if re.search(r"\bpec\b", lowered) and re.search(r"\b(?:invia|inviala|spedisci)\b", lowered):
+        return True
+    return bool(re.search(r"invia(?:la)?\s+(?:davvero|per\s+davvero)", lowered))
+
+
+def _email_to(text: str) -> str | None:
+    addr = re.search(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", text)
+    if addr:
+        return addr.group(0)
+    match = re.search(
+        r"(?:a|ad|to)\s+([A-Za-zÀ-ÿ0-9._+\-]+(?:\s+[A-Za-zÀ-ÿ']+){0,3})"
+        r"(?=\s+(?:dicendo|che|per|con|,|$))",
+        text,
+        flags=re.I,
+    )
+    if not match:
+        return None
+    name = " ".join(match.group(1).split())
+    if name.lower() in {"me", "mi", "me stesso", "una", "la"}:
+        return None
+    if "@" not in name and " " in name:
+        return name.title()
+    return name
+
+
+def _email_body(text: str) -> str:
+    match = re.search(r"(?:dicendo|che dice|con testo|testo)\s*:?\s*(.+)$", text, flags=re.I | re.S)
+    if match:
+        body = match.group(1).strip().strip(" .\"'")
+        if body:
+            return body
+    return text.strip()
+
+
 def _description(text: str) -> str:
     lowered = text.lower()
     if "manodopera" in lowered or "manpower" in lowered:
@@ -203,24 +243,29 @@ def plan_deterministic(text: str) -> PlanResult:
             ],
         )
 
-    if "email" in lowered or "posta" in lowered:
-        if any(word in lowered for word in ("invia", "inviala", "manda", "spedisci")):
+    if _looks_like_email(raw):
+        if _wants_real_email_send(raw):
             return PlanResult(
                 ok=False,
-                summary="Non invio email o PEC in questa versione.",
+                summary="Non invio email o PEC da qui. Posso solo preparare una bozza su PC-EMAIL.",
                 denied=True,
-                deny_reason="L'invio email/PEC richiede Approval Gateway e non è abilitato nel prototipo.",
+                deny_reason="L'invio vero resta bloccato.",
             )
+        to = _email_to(raw)
+        body = _email_body(raw)
+        subject = body[:80] if body != raw else "Messaggio dallo studio"
+        dest = to or "destinatario da scegliere"
         return PlanResult(
             ok=True,
-            summary="Preparo una bozza email, senza inviarla.",
+            summary=f"Preparo una bozza email a {dest}, senza inviarla. Serve PC-EMAIL acceso.",
             tasks=[
                 PlannedTask(
-                    goal="Preparare bozza email",
+                    goal=f"Preparare bozza email a {dest}",
                     capability="email_draft",
                     args={
-                        "subject": "Aggiornamento studio",
-                        "body": raw,
+                        "to": to,
+                        "subject": subject,
+                        "body": body,
                     },
                     risk=Risk.MEDIUM,
                     needs_approval=False,
@@ -268,9 +313,12 @@ def plan_deterministic(text: str) -> PlanResult:
 
     return PlanResult(
         ok=False,
-        summary="Non ho capito un obiettivo eseguibile. Prova con un comando dello studio.",
+        summary=(
+            "Non ho capito. PC-FATTURE è il PC delle fatture: clicca Fattura Gadducci, "
+            "oppure scrivi: fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera."
+        ),
         denied=False,
-        deny_reason="Nessuna capability riconosciuta. Esempi: apri blocco note e scrivi CIAO; prepara fattura demo a Rossi per consulenza EUR 1500.",
+        deny_reason="",
     )
 
 

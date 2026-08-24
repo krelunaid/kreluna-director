@@ -9,6 +9,7 @@ const SUGGESTIONS = [
   { short: "Controlla fatture", full: "Controlla le fatture" },
   { short: "Pagamento", full: "Prepara un pagamento di 500 euro, non eseguirlo" },
   { short: "F24", full: "Prepara gli F24 in scadenza, ma non inviarli" },
+  { short: "Bozza mail", full: "Prepara una bozza mail a Andrea Gadducci dicendo di aprire Kreluna" },
   { short: "Ferma", full: "Ferma tutto" },
 ];
 
@@ -25,7 +26,7 @@ export default function App() {
   const [chat, setChat] = useState<ChatItem[]>([
     {
       role: "director",
-      text: "Sono Kreluna Director. Parla solo con me: scelgo io il PC e ti chiedo conferma prima delle azioni irreversibili.",
+      text: "Sono Kreluna Director. Parla solo con me. Per la fattura clicca Fattura Gadducci: la mando a PC-FATTURE e poi ti chiedo conferma.",
     },
   ]);
   const [draft, setDraft] = useState("");
@@ -223,7 +224,7 @@ export default function App() {
           >
             <textarea
               value={draft}
-              placeholder="Scrivi a Kreluna…"
+              placeholder="Clicca Fattura Gadducci, oppure scrivi qui…"
               onChange={(event) => setDraft(event.target.value)}
             />
             <button className="btn" disabled={busy}>
