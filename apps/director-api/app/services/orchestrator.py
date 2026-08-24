@@ -18,15 +18,30 @@ from kreluna_shared.models import PlannedTask
 from kreluna_shared.protocol import SignedGrant
 
 
+LIVE_STATUSES = ("queued", "assigned", "running", "waiting_approval")
+
+
 def idempotency_key(tenant_id: str, capability: str, args: dict) -> str:
     material = json.dumps({"t": tenant_id, "c": capability, "a": args}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(material.encode()).hexdigest()
 
 
+async def same_request_tasks(session: AsyncSession, tenant_id: str, base_key: str) -> list[Task]:
+    rows = (
+        await session.execute(
+            select(Task).where(Task.tenant_id == tenant_id, Task.idempotency_key.like(f"{base_key}%"))
+        )
+    ).scalars().all()
+    return list(rows)
+
+
 async def existing_task(session: AsyncSession, tenant_id: str, key: str) -> Task | None:
-    return (
-        await session.execute(select(Task).where(Task.tenant_id == tenant_id, Task.idempotency_key == key))
-    ).scalar_one_or_none()
+    """Solo un lavoro ancora vivo blocca un doppione. Uno annullato o finito si può richiedere."""
+
+    for task in await same_request_tasks(session, tenant_id, key):
+        if task.status in LIVE_STATUSES:
+            return task
+    return None
 
 
 async def choose_device(session: AsyncSession, tenant_id: str, capability: str) -> Device | None:
@@ -47,10 +62,12 @@ async def enqueue_planned(
     user_id: str,
     planned: PlannedTask,
 ) -> Task:
-    key = idempotency_key(tenant_id, planned.capability, planned.args)
-    found = await existing_task(session, tenant_id, key)
-    if found:
-        return found
+    base_key = idempotency_key(tenant_id, planned.capability, planned.args)
+    previous = await same_request_tasks(session, tenant_id, base_key)
+    for candidate in previous:
+        if candidate.status in LIVE_STATUSES:
+            return candidate
+    key = base_key if not previous else f"{base_key}:{len(previous) + 1}"
     task = Task(
         tenant_id=tenant_id,
         requested_by=user_id,

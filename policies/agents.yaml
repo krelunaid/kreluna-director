@@ -52,22 +52,22 @@ agents:
   # Vecchi posti: restano in database se già creati, non si scelgono più.
   - role: pc-pagamenti
     display_name: PC-PAGAMENTI
-    job: (non in elenco Delta)
-    program: non usato
+    job: Vecchio ruolo
+    program: Da riassegnare, apri Kreluna Agent e usa Cambia lavoro
     retired: true
     capabilities:
       - payment_prepare
   - role: pc-documenti
     display_name: PC-DOCUMENTI
-    job: (non in elenco Delta)
-    program: non usato
+    job: Vecchio ruolo
+    program: Da riassegnare, apri Kreluna Agent e usa Cambia lavoro
     retired: true
     capabilities:
       - document_check
   - role: pc-email
     display_name: PC-EMAIL
-    job: (non in elenco Delta)
-    program: non usato
+    job: Vecchio ruolo
+    program: Da riassegnare, apri Kreluna Agent e usa Cambia lavoro
     retired: true
     capabilities:
       - email_draft

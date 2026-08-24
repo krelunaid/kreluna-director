@@ -14,6 +14,30 @@ const SUGGESTIONS = [
   { short: "Ferma", full: "Ferma tutto" },
 ];
 
+const TASK_LABEL: Record<string, string> = {
+  queued: "in attesa",
+  assigned: "sul PC",
+  running: "in corso",
+  waiting_approval: "da approvare",
+  completed: "fatto",
+  failed: "errore",
+  cancelled: "annullato",
+  blocked: "bloccato",
+};
+
+const PC_LABEL: Record<string, string> = {
+  online: "acceso",
+  busy: "occupato",
+  offline: "spento",
+  waiting_install: "da installare",
+  killed: "fermo",
+  paused: "in pausa",
+};
+
+function label(map: Record<string, string>, value: string): string {
+  return map[value] || value.replace(/_/g, " ");
+}
+
 export default function App() {
   const [ready, setReady] = useState(Boolean(token()));
   const [email, setEmail] = useState("andrea@studio.demo");
@@ -122,7 +146,7 @@ export default function App() {
   }
 
   const pending = useMemo(() => approvals.filter((item) => item.status === "pending"), [approvals]);
-  const recentTasks = tasks.slice(0, 6);
+  const recentTasks = tasks.slice(0, 12);
 
   if (!ready) {
     return (
@@ -155,7 +179,7 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <div className="eyebrow">Kreluna Director</div>
+          <div className="brand-mark">Kreluna Director</div>
           <div className="small">
             {name} · {overview?.license_state ?? "…"}
             {version ? ` · v${version}` : ""}
@@ -283,11 +307,13 @@ export default function App() {
               {recentTasks.map((task) => (
                 <div className="row compact" key={task.id}>
                   <div className="row-main">
-                    <div className="task-goal">{task.goal}</div>
+                    <div className="task-goal" title={task.goal}>
+                      {task.goal}
+                    </div>
                     <EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} />
                   </div>
                   <div className="actions">
-                    <span className={`pill ${task.status} ${task.risk}`}>{task.status}</span>
+                    <span className={`pill ${task.status} ${task.risk}`}>{label(TASK_LABEL, task.status)}</span>
                     {task.status === "queued" || task.status === "assigned" ? (
                       <button className="btn ghost" onClick={() => api.cancelTask(task.id).then(refresh)}>
                         Annulla
@@ -304,13 +330,19 @@ export default function App() {
             <div className="panel-body">
               {agents.map((agent) => (
                 <div className="row compact" key={agent.device_id}>
-                  <div>
-                    <span className={`dot ${agent.presence}`} />
+                  <div className="row-main">
+                    <span className={`dot ${agent.presence}`} title={label(PC_LABEL, agent.presence)} />
                     <strong>{agent.display_name || agent.agent_id}</strong>
                     <span className="small"> · {agent.job}</span>
-                    {agent.program ? <div className="small">{agent.program}</div> : null}
+                    {agent.program ? (
+                      <div className="small program" title={agent.program}>
+                        {agent.program}
+                      </div>
+                    ) : null}
                   </div>
-                  <span className="pill">{agent.killed ? "fermo" : agent.presence}</span>
+                  <span className={`pill ${agent.killed ? "killed" : agent.presence}`}>
+                    {agent.killed ? "fermo" : label(PC_LABEL, agent.presence)}
+                  </span>
                 </div>
               ))}
             </div>
