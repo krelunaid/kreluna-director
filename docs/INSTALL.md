@@ -52,6 +52,13 @@ L'indirizzo HTTP è accettato soltanto quando Director e Agent sono sullo stesso
 Il CSV non viene conservato dal Director e non viene inviato al provider IA.
 L'Agent inserisce i campi e si ferma: il click su **Accedi**, l'OTP e ogni invio restano umani.
 
+## Collegare Grok
+
+Apri **Impostazioni**, scegli **Grok (xAI)**, lascia `grok-4.6` come modello,
+incolla la chiave API xAI e premi **Salva e controlla**. La chiave viene cifrata
+nel database locale e la schermata non può rileggerla. Solo il titolare può
+cambiare questa configurazione.
+
 ## Accesso
 
 - Si apre da sola la finestra **Kreluna Director**; l'indirizzo locale resta interno

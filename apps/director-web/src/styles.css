@@ -289,7 +289,7 @@ button:disabled { cursor: not-allowed; opacity: .52; }
 .ai-active.warning { color: #ffe198; background: rgba(255, 202, 85, .1); }
 .provider-compact { margin-left: auto; }
 .provider-compact select { max-width: 150px; padding: 5px 7px; color: #b9bfd2; border: 1px solid transparent; background: transparent; font-size: 10px; }
-.ai-diagnostic { margin: 0 0 6px 58px; padding: 5px 9px; overflow: hidden; text-overflow: ellipsis; color: #d7c596; border-left: 2px solid var(--amber); border-radius: 3px; background: rgba(255, 202, 85, .055); font-size: 10px; white-space: nowrap; }
+.ai-diagnostic { margin: 0 0 6px 58px; padding: 5px 9px; overflow: hidden; text-overflow: ellipsis; color: #d7c596; border: 0; border-left: 2px solid var(--amber); border-radius: 3px; background: rgba(255, 202, 85, .055); font-size: 10px; text-align: left; white-space: nowrap; }
 .chat-log { min-height: 0; padding: 0 0 6px 58px; display: flex; flex-direction: column; gap: 9px; overflow-y: auto; }
 .msg { max-width: 94%; padding: 11px 13px; color: #d9dce8; border: 1px solid rgba(116, 133, 199, .19); border-radius: 12px; background: linear-gradient(150deg, rgba(19, 31, 60, .9), rgba(12, 22, 43, .9)); font-size: 12px; line-height: 1.52; white-space: pre-wrap; }
 .msg strong { display: block; margin-bottom: 5px; color: var(--gold); font-size: 12px; }
@@ -349,7 +349,7 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .cockpit-footer > span:last-child { margin-left: auto; border: 0; }
 .cockpit-footer .healthy { color: #a9eeb9; }.cockpit-footer .warning { color: #e8c878; }
 .global-stop { position: absolute; z-index: 8; left: 181px; bottom: 58px; width: 24px; height: 24px; padding: 0; color: #ff8d84; border: 1px solid rgba(255, 101, 95, .25); border-radius: 6px; background: rgba(95, 20, 31, .26); font-size: 9px; }
-.kill-confirm, .lightbox, .update-dialog, .vault-dialog { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; border: 0; background: rgba(2, 5, 12, .84); backdrop-filter: blur(7px); }
+.kill-confirm, .lightbox, .update-dialog, .vault-dialog, .ai-settings-dialog { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; border: 0; background: rgba(2, 5, 12, .84); backdrop-filter: blur(7px); }
 .kill-confirm > div { width: 360px; padding: 24px; text-align: center; border: 1px solid var(--line-strong); border-radius: 16px; background: #101a34; box-shadow: 0 30px 80px #000; }
 .kill-confirm h2 { margin-top: 0; }.kill-confirm p { color: var(--muted); }
 .kill-confirm button { margin: 5px; padding: 8px 13px; color: #fff; border: 1px solid var(--line-strong); border-radius: 8px; background: #1b2746; }
@@ -371,6 +371,26 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .update-progress.success { color: #a9eeb9; border-color: rgba(93, 222, 128, .28); background: rgba(21, 76, 42, .24); }
 .update-install-error { color: #ffaaa4; border-color: rgba(255, 101, 95, .32); background: rgba(95, 20, 31, .25); }
 .update-card small { display: block; margin-top: 12px; color: #69748f; font-size: 8px; }
+
+/* Configurazione IA */
+.ai-settings-card { width: min(520px, 92vw); display: grid; gap: 13px; padding: 26px; color: #eef1ff; border: 1px solid rgba(126, 109, 255, .38); border-radius: 20px; background: linear-gradient(145deg, #111c38, #081226); box-shadow: 0 34px 100px #000; }
+.ai-settings-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.ai-settings-heading span { color: #a895ff; letter-spacing: .16em; font-size: 9px; font-weight: 800; }
+.ai-settings-heading h2 { margin: 7px 0 5px; color: #fff1bd; font-size: 23px; }
+.ai-settings-heading p { margin: 0; color: #aeb7d1; line-height: 1.5; font-size: 11px; }
+.ai-settings-heading > button { width: 34px; height: 34px; color: #c9cede; border: 1px solid var(--line-strong); border-radius: 9px; background: #172342; font-size: 22px; }
+.ai-settings-card > label { display: grid; gap: 6px; color: #aeb7d1; font-size: 10px; }
+.ai-settings-card input, .ai-settings-card select { height: 39px; width: 100%; padding: 0 11px; color: #edf0fa; border: 1px solid var(--line-strong); border-radius: 9px; outline: 0; background: #0a142b; font-size: 11px; }
+.ai-settings-card input:focus, .ai-settings-card select:focus { border-color: rgba(126, 109, 255, .68); box-shadow: 0 0 0 3px rgba(126, 109, 255, .1); }
+.ai-settings-note, .ai-settings-alert { padding: 9px 11px; border-radius: 8px; font-size: 10px; }
+.ai-settings-note { color: #b7c0d7; border: 1px solid var(--line); background: rgba(4, 10, 24, .42); }
+.ai-settings-alert.error { color: #ffaaa4; border: 1px solid rgba(255, 101, 95, .32); background: rgba(95, 20, 31, .25); }
+.ai-settings-alert.success { color: #a9eeb9; border: 1px solid rgba(93, 222, 128, .28); background: rgba(21, 76, 42, .24); }
+.ai-settings-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 3px; }
+.ai-settings-actions button { padding: 9px 14px; color: #d8def0; border: 1px solid rgba(118, 132, 189, .34); border-radius: 9px; background: #172342; font-size: 11px; }
+.ai-settings-actions button.primary { color: #1d1607; border-color: #f4d277; background: linear-gradient(180deg, #ffe7a1, #d9a83e); font-weight: 800; }
+.ai-settings-actions button:disabled { cursor: wait; opacity: .55; }
+.ai-settings-card > small { color: #737e99; font-size: 9px; }
 
 /* Cassaforte clienti */
 .vault-card { width: min(920px, 94vw); max-height: 88vh; display: flex; flex-direction: column; gap: 14px; padding: 24px; overflow: hidden; color: #eef1ff; border: 1px solid rgba(126, 109, 255, .38); border-radius: 20px; background: linear-gradient(145deg, #111c38, #081226); box-shadow: 0 34px 100px #000; }

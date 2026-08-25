@@ -15,11 +15,14 @@ class AIProviderConfig:
     base_url: str
     api_key: str
     model: str
+    credential_error: str = ""
 
     @property
     def configured(self) -> bool:
         credentials_ready = self.provider == "ollama" or bool(self.api_key)
-        return bool(self.base_url and self.model and credentials_ready)
+        return bool(
+            self.base_url and self.model and credentials_ready and not self.credential_error
+        )
 
 
 class Settings(BaseSettings):
@@ -37,13 +40,13 @@ class Settings(BaseSettings):
     director_credential_key: str = "kreluna-dev-credential-key-change-in-production"
     director_cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     director_policy_path: str = str(ROOT / "policies" / "default.yaml")
-    kreluna_llm_provider: str = ""
+    kreluna_llm_provider: str = "grok"
     kreluna_llm_base_url: str = ""
     kreluna_llm_api_key: str = ""
     kreluna_llm_model: str = "gpt-4o-mini"
     kreluna_grok_base_url: str = "https://api.x.ai/v1"
     kreluna_grok_api_key: str = ""
-    kreluna_grok_model: str = ""
+    kreluna_grok_model: str = "grok-4.6"
     kreluna_ollama_base_url: str = "http://127.0.0.1:11434/v1"
     kreluna_ollama_model: str = ""
     kreluna_openai_base_url: str = "https://api.openai.com/v1"

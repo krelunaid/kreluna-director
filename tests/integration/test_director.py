@@ -8,7 +8,15 @@ import pytest
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.main import app
-from app.models import ClientCredential, EnrollmentCode, Evidence, InvoiceDraft, Task, utcnow
+from app.models import (
+    AIProviderCredential,
+    ClientCredential,
+    EnrollmentCode,
+    Evidence,
+    InvoiceDraft,
+    Task,
+    utcnow,
+)
 from app.routers.agent_io import purge_expired_evidence
 from app.seed import DEMO_TENANT_ID, OTHER_TENANT_ID, seed_if_empty
 from httpx import ASGITransport, AsyncClient
@@ -392,6 +400,69 @@ async def test_ai_provider_selection_is_persisted_per_studio(client: AsyncClient
         json={"provider": "sconosciuto"},
     )
     assert invalid.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_owner_saves_grok_key_encrypted_without_returning_it(
+    client: AsyncClient,
+    monkeypatch,
+):
+    secret = "xai-test-secret-that-must-never-be-returned"
+
+    async def healthy(config, **_kwargs):
+        assert config.provider == "grok"
+        assert config.model == "grok-4.6"
+        assert config.api_key == secret
+        return {
+            "provider": "grok",
+            "label": "Grok",
+            "model": "grok-4.6",
+            "configured": True,
+            "connected": True,
+            "status": "connected",
+            "detail": "Provider e modello raggiungibili",
+        }
+
+    monkeypatch.setattr("app.routers.core.check_ai_health", healthy)
+    token = await login(client)
+    saved = await client.post(
+        "/ai/configure",
+        headers=auth(token),
+        json={"provider": "grok", "model": "grok-4.6", "api_key": secret},
+    )
+
+    assert saved.status_code == 200
+    assert saved.json()["connected"] is True
+    assert secret not in saved.text
+    providers = await client.get("/ai/providers", headers=auth(token))
+    assert secret not in providers.text
+    grok = next(item for item in providers.json()["providers"] if item["provider"] == "grok")
+    assert grok["key_saved"] is True
+    assert grok["configured"] is True
+    retained = await client.post(
+        "/ai/configure",
+        headers=auth(token),
+        json={"provider": "grok", "model": "grok-4.6", "api_key": ""},
+    )
+    assert retained.status_code == 200
+    assert retained.json()["connected"] is True
+
+    viewer = await login(client, "viewer@studio.demo")
+    forbidden = await client.post(
+        "/ai/configure",
+        headers=auth(viewer),
+        json={"provider": "grok", "model": "grok-4.6", "api_key": secret},
+    )
+    assert forbidden.status_code == 403
+
+    async with SessionLocal() as session:
+        stored = await session.get(
+            AIProviderCredential,
+            {"tenant_id": DEMO_TENANT_ID, "provider": "grok"},
+        )
+        assert stored is not None
+        assert stored.api_key_ciphertext.startswith("v1.")
+        assert secret not in stored.api_key_ciphertext
 
 
 @pytest.mark.asyncio

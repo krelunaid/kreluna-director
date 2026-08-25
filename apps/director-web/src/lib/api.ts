@@ -70,6 +70,17 @@ export type AIProviderOption = {
   label: string;
   model: string;
   configured: boolean;
+  key_saved: boolean;
+};
+
+export type AIHealth = {
+  provider: "grok" | "ollama" | "openai";
+  label: string;
+  model: string;
+  configured: boolean;
+  connected: boolean;
+  status: string;
+  detail: string;
 };
 
 export type UpdateStatus = {
@@ -209,9 +220,14 @@ export const api = {
     request<{ ok: boolean; state: string }>(`/vault/credentials/${id}`, { method: "DELETE" }),
   vaultTemplate: () => authenticatedBlob("/vault/template.csv"),
   chooseAIProvider: (provider: string) =>
-    request<{ connected: boolean; detail: string }>("/ai/provider", {
+    request<AIHealth>("/ai/provider", {
       method: "POST",
       body: JSON.stringify({ provider }),
+    }),
+  configureAI: (provider: string, model: string, apiKey: string) =>
+    request<AIHealth>("/ai/configure", {
+      method: "POST",
+      body: JSON.stringify({ provider, model, api_key: apiKey || null }),
     }),
   agents: () => request<{ agents: Agent[] }>("/agents"),
   tasks: () => request<{ tasks: Task[] }>("/tasks"),

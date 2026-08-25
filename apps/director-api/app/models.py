@@ -49,6 +49,18 @@ class AISelection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class AIProviderCredential(Base):
+    """Tenant-scoped API credential encrypted before database persistence."""
+
+    __tablename__ = "ai_provider_credentials"
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20), primary_key=True)
+    model: Mapped[str] = mapped_column(String(160))
+    api_key_ciphertext: Mapped[str] = mapped_column(Text, default="")
+    updated_by: Mapped[str] = mapped_column(String(36))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class License(Base):
     __tablename__ = "licenses"
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
