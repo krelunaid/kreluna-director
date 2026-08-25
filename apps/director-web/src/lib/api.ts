@@ -236,7 +236,7 @@ export const api = {
   agents: () => request<{ agents: Agent[] }>("/agents"),
   tasks: () => request<{ tasks: Task[] }>("/tasks"),
   approvals: () => request<{ approvals: Approval[] }>("/approvals"),
-  chat: (message: string) =>
+  chat: (message: string, history: Array<{ role: "user" | "assistant"; content: string }> = []) =>
     request<{
       ok: boolean;
       summary: string;
@@ -249,9 +249,10 @@ export const api = {
       "/chat",
       {
         method: "POST",
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, history: history.slice(-8) }),
       },
     ),
+  resetChat: () => request<{ ok: boolean }>("/chat/reset", { method: "POST" }),
   kill: () => request<{ ok: boolean; stopped_devices: number }>("/kill-switch", { method: "POST" }),
   cancelTask: (id: string) => request<{ ok: boolean; status: string }>(`/tasks/${id}/cancel`, { method: "POST" }),
   pause: (deviceId: string) => request<{ ok: boolean; requeued_tasks: number }>(`/agents/${deviceId}/pause`, { method: "POST" }),
