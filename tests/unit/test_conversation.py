@@ -123,3 +123,14 @@ def test_new_request_clears_every_pending_context():
 
     assert memory.take("utente") is None
     assert memory.last_invoice("utente") is None
+
+
+def test_invoice_typo_still_keeps_the_client_name():
+    plan = plan_deterministic("funzioni mi fai una fattura pae vanni gioitoli")
+
+    assert not plan.ok
+    assert plan.source == "deterministic-ask"
+    assert plan.pending
+    assert plan.pending["client_name"] == "Vanni Gioitoli"
+    assert "cliente" not in plan.summary
+    assert "importo" in plan.summary
