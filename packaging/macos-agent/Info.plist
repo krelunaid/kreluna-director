@@ -9,9 +9,9 @@
   <key>CFBundleIdentifier</key>
   <string>studio.kreluna.agent</string>
   <key>CFBundleVersion</key>
-  <string>0.5.9</string>
+  <string>0.5.10</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.5.9</string>
+  <string>0.5.10</string>
   <key>NSAppleEventsUsageDescription</key>
   <string>Kreluna Agent guida il browser dello studio per aprire i portali (CGN, INPS, Agenzia delle Entrate) e compilare i campi. Non invia e non scarica nulla senza la tua approvazione.</string>
   <key>CFBundlePackageType</key>

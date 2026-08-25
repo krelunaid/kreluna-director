@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
 import struct
 from pathlib import Path
+
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -35,14 +38,37 @@ def test_macos_site_packages_uses_python_version_directory(tmp_path):
 
 
 def _load_bundle_module():
-    import importlib.util
-
     path = ROOT / "scripts" / "lib" / "bundle_python.py"
     spec = importlib.util.spec_from_file_location("kreluna_bundle_python", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_icon_module():
+    path = ROOT / "scripts" / "lib" / "make_app_icon.py"
+    spec = importlib.util.spec_from_file_location("kreluna_app_icon", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_mac_icon_contains_a_large_visible_k() -> None:
+    module = _load_icon_module()
+    icon: Image.Image = module.draw_icon(1024)
+
+    # The light K must occupy a meaningful area. This catches the macOS build
+    # regression where an unscaled fallback font produced a one-pixel letter.
+    colors = icon.getcolors(maxcolors=icon.width * icon.height)
+    assert colors is not None
+    light_pixels = sum(
+        count
+        for count, (red, green, blue, alpha) in colors
+        if alpha > 0 and red > 220 and green > 190 and blue > 100
+    )
+    assert light_pixels > 20_000
 
 
 def test_macos_arm64_director_bundle_has_server_runtime_and_no_intel():

@@ -17,6 +17,9 @@ INK = (244, 239, 228, 255)
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     for path in (
+        "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
+        "/System/Library/Fonts/NewYork.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -24,7 +27,13 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         candidate = Path(path)
         if candidate.exists():
             return ImageFont.truetype(str(candidate), size=size)
-    return ImageFont.load_default()
+    # Pillow's unscaled bitmap fallback makes the K almost invisible in a
+    # 1024px macOS icon. Modern Pillow can size its bundled default font, so
+    # keep the mark legible even on an unexpected build runner.
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow < 10.1; release builds use a newer version.
+        return ImageFont.load_default()
 
 
 def draw_icon(size: int) -> Image.Image:
