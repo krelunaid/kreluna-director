@@ -73,9 +73,12 @@ ma non clicca **Accedi** e non cattura una schermata dopo la compilazione.
 
 ## IA opzionale
 
-Senza chiave il Director lavora a regole. In `.env` si configura Grok, OpenAI
-o Ollama con i campi dedicati al provider (`KRELUNA_GROK_*`, `KRELUNA_OPENAI_*`,
-`KRELUNA_OLLAMA_*`).
+Grok con modello `grok-4.6` è il provider iniziale. Nell'app apri
+**Impostazioni**, incolla una volta la chiave xAI e premi **Salva e controlla**:
+la chiave viene cifrata per azienda e non viene mai rimandata alla dashboard.
+OpenAI e Ollama restano selezionabili. In un deployment server si possono usare
+anche i campi `.env` dedicati (`KRELUNA_GROK_*`, `KRELUNA_OPENAI_*`,
+`KRELUNA_OLLAMA_*`). La dashboard mostra sempre una diagnostica esplicita.
 Dettagli: `docs/COLLEGA-IA.txt`.
 
 Il modello propone, la policy decide. Non può usare capability fuori elenco,

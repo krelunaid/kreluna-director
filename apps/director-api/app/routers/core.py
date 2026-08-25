@@ -21,7 +21,13 @@ from app.deps import Actor, get_actor, get_policy
 from app.models import AgentSlot, Device, EnrollmentCode, User
 from app.security import hash_password, issue_session, password_needs_rehash, verify_password
 from app.services.agents import compose_agent_rows
-from app.services.ai import check_ai_health, save_selected_provider, selected_provider
+from app.services.ai import (
+    check_ai_health,
+    provider_config,
+    save_provider_configuration,
+    save_selected_provider,
+    selected_provider,
+)
 from app.services.audit import write_audit
 from app.services.orchestrator import kill_all
 from app.services.registry import hub, mark_offline_stale, requeue_device_tasks
@@ -48,6 +54,12 @@ class EnrollBody(BaseModel):
 
 class AIProviderBody(BaseModel):
     provider: str
+
+
+class AIConfigurationBody(BaseModel):
+    provider: str
+    model: str = Field(default="", max_length=160)
+    api_key: str | None = Field(default=None, max_length=512)
 
 
 @router.get("/health")
@@ -160,13 +172,14 @@ async def ai_providers(
     current = await selected_provider(session, actor.tenant_id)
     providers = []
     for name in ("grok", "ollama", "openai"):
-        config = settings.ai_provider_config(name)
+        config = await provider_config(session, actor.tenant_id, name)
         providers.append(
             {
                 "provider": name,
                 "label": config.label,
                 "model": config.model,
                 "configured": config.configured,
+                "key_saved": bool(config.api_key),
             }
         )
     return {"selected": current, "providers": providers}
@@ -177,8 +190,8 @@ async def ai_health(
     actor: Annotated[Actor, Depends(get_actor)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
-    current = await selected_provider(session, actor.tenant_id)
-    return await check_ai_health(settings.ai_provider_config(current), force=True)
+    config = await provider_config(session, actor.tenant_id)
+    return await check_ai_health(config, force=True)
 
 
 @router.post("/ai/provider")
@@ -207,7 +220,45 @@ async def choose_ai_provider(
         detail=chosen,
     )
     await session.commit()
-    return await check_ai_health(settings.ai_provider_config(chosen), force=True)
+    config = await provider_config(session, actor.tenant_id, chosen)
+    return await check_ai_health(config, force=True)
+
+
+@router.post("/ai/configure")
+async def configure_ai_provider(
+    body: AIConfigurationBody,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può configurare l'IA")
+    try:
+        config = await save_provider_configuration(
+            session,
+            tenant_id=actor.tenant_id,
+            provider=body.provider,
+            model=body.model,
+            api_key=body.api_key,
+            actor_id=actor.user_id,
+        )
+        await save_selected_provider(
+            session,
+            tenant_id=actor.tenant_id,
+            provider=config.provider,
+            actor_id=actor.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="ai.provider.configure",
+        result="ok",
+        detail=f"{config.provider}:{config.model}",
+    )
+    await session.commit()
+    return await check_ai_health(config, force=True)
 
 
 @router.post("/auth/login")

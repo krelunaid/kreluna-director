@@ -7,7 +7,7 @@ from kreluna_shared.llm import plan_with_llm
 from kreluna_shared.models import PlanResult
 from kreluna_shared.planner import plan_deterministic
 
-from app.config import settings
+from app.config import AIProviderConfig, settings
 
 
 async def plan_message(
@@ -15,31 +15,36 @@ async def plan_message(
     client: httpx.AsyncClient | None = None,
     *,
     provider: str | None = None,
+    config: AIProviderConfig | None = None,
 ) -> PlanResult:
     plan = plan_deterministic(message)
-    config = settings.ai_provider_config(provider)
+    resolved = config or settings.ai_provider_config(provider)
     if plan.source != "deterministic-unknown":
         return plan
-    if not config.configured:
+    if not resolved.configured:
         return PlanResult(
             ok=False,
             summary=(
-                f"IA {config.label} non configurata: controlla modello e credenziali. "
+                f"IA {resolved.label} non configurata: controlla modello e credenziali. "
                 "Nessun lavoro è stato creato."
             ),
             source="llm-error",
-            diagnostic={"code": "not_configured", "provider": config.provider},
+            diagnostic={"code": "not_configured", "provider": resolved.provider},
         )
     if client is not None:
-        from_model = await _ask(message, client, provider=config.provider)
+        from_model = await _ask(message, client, config=resolved)
     else:
         async with httpx.AsyncClient() as owned:
-            from_model = await _ask(message, owned, provider=config.provider)
+            from_model = await _ask(message, owned, config=resolved)
     return from_model or plan
 
 
-async def _ask(message: str, client: httpx.AsyncClient, *, provider: str) -> PlanResult | None:
-    config = settings.ai_provider_config(provider)
+async def _ask(
+    message: str,
+    client: httpx.AsyncClient,
+    *,
+    config: AIProviderConfig,
+) -> PlanResult | None:
     result = await plan_with_llm(
         message,
         base_url=config.base_url,

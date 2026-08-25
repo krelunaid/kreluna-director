@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import time
+from binascii import Error as BinasciiError
+from dataclasses import replace
 from typing import Any
 
 import httpx
+from cryptography.exceptions import InvalidTag
+from kreluna_shared.crypto import decrypt_secret_text, encrypt_secret_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AI_PROVIDERS, AIProviderConfig, settings
-from app.models import AISelection, utcnow
+from app.models import AIProviderCredential, AISelection, utcnow
 
 _HEALTH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 HEALTH_CACHE_SECONDS = 30
+MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}")
 
 
 async def selected_provider(session: AsyncSession, tenant_id: str) -> str:
@@ -41,7 +47,113 @@ async def save_selected_provider(
     return cleaned
 
 
+def _credential_context(tenant_id: str, provider: str) -> str:
+    return f"ai-provider:{tenant_id}:{provider}:api-key"
+
+
+async def provider_config(
+    session: AsyncSession,
+    tenant_id: str,
+    provider: str | None = None,
+) -> AIProviderConfig:
+    """Resolve one provider without ever returning its stored secret to the UI."""
+
+    selected = (provider or await selected_provider(session, tenant_id)).strip().lower()
+    base = settings.ai_provider_config(selected)
+    row = await session.get(
+        AIProviderCredential,
+        {"tenant_id": tenant_id, "provider": selected},
+    )
+    if row is None:
+        return base
+    api_key = base.api_key
+    credential_error = ""
+    if row.api_key_ciphertext:
+        try:
+            api_key = decrypt_secret_text(
+                settings.director_credential_key,
+                row.api_key_ciphertext,
+                context=_credential_context(tenant_id, selected),
+            ).strip()
+        except (BinasciiError, InvalidTag, UnicodeDecodeError, ValueError):
+            api_key = ""
+            credential_error = "stored_key_unreadable"
+    return replace(
+        base,
+        api_key=api_key,
+        model=row.model.strip() or base.model,
+        credential_error=credential_error,
+    )
+
+
+def _clean_model(value: str, *, fallback: str) -> str:
+    model = value.strip() or fallback.strip()
+    if not MODEL_PATTERN.fullmatch(model):
+        raise ValueError("Nome modello non valido")
+    return model
+
+
+async def save_provider_configuration(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    provider: str,
+    model: str,
+    api_key: str | None,
+    actor_id: str,
+) -> AIProviderConfig:
+    """Encrypt a tenant API key and persist only its ciphertext."""
+
+    cleaned = provider.strip().lower()
+    if cleaned not in AI_PROVIDERS:
+        raise ValueError("Provider IA sconosciuto")
+    base = settings.ai_provider_config(cleaned)
+    clean_model = _clean_model(model, fallback=base.model)
+    row = await session.get(
+        AIProviderCredential,
+        {"tenant_id": tenant_id, "provider": cleaned},
+    )
+    if row is None:
+        row = AIProviderCredential(
+            tenant_id=tenant_id,
+            provider=cleaned,
+            model=clean_model,
+            api_key_ciphertext="",
+            updated_by=actor_id,
+        )
+        session.add(row)
+    else:
+        row.model = clean_model
+        row.updated_by = actor_id
+        row.updated_at = utcnow()
+
+    supplied_key = api_key.strip() if api_key is not None else ""
+    if cleaned == "ollama":
+        row.api_key_ciphertext = ""
+    elif supplied_key:
+        if len(supplied_key) < 20 or len(supplied_key) > 512:
+            raise ValueError("La chiave API non ha una lunghezza valida")
+        row.api_key_ciphertext = encrypt_secret_text(
+            settings.director_credential_key,
+            supplied_key,
+            context=_credential_context(tenant_id, cleaned),
+        )
+    await session.flush()
+    _HEALTH_CACHE.clear()
+    return await provider_config(session, tenant_id, cleaned)
+
+
 def _not_configured(config: AIProviderConfig) -> dict[str, Any]:
+    if config.credential_error:
+        return {
+            "provider": config.provider,
+            "label": config.label,
+            "model": config.model,
+            "configured": False,
+            "connected": False,
+            "status": "credential_error",
+            "detail": "La chiave salvata non è leggibile: inseriscila nuovamente",
+        }
     missing: list[str] = []
     if not config.model:
         missing.append("modello")

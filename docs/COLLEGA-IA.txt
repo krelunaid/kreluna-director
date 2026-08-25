@@ -14,30 +14,27 @@ Cosa NON cambia
 - L'IA non puo' inventare importi: se manca l'importo, chiede.
 - L'IA non puo' usare programmi fuori elenco, ne' inviare F24, PEC o pagamenti.
 - L'IA non puo' decidere da sola cosa non ha bisogno di approvazione.
-- Se il modello e' spento o sbaglia, il Director torna alle regole di prima.
+- Se il modello e' spento o sbaglia, il Director mostra l'errore esplicito e
+  non crea lavori dalla frase non compresa.
 - Le schermate dei PC non vengono mandate al modello. Va solo la tua frase.
 
 Come si collega
 ---------------
-1. Prendi una chiave API. Va bene Grok (xAI), OpenAI, Anthropic, Mistral,
-   oppure un modello installato in studio che parla come OpenAI.
-2. Nella cartella del Director copia .env.example in .env
-3. Scrivi tre righe. Con Grok:
-      KRELUNA_LLM_BASE_URL=https://api.x.ai/v1
-      KRELUNA_LLM_API_KEY=la-tua-chiave
-      KRELUNA_LLM_MODEL=grok-4.6
-   Con OpenAI cambiano solo la prima e la terza riga:
-      KRELUNA_LLM_BASE_URL=https://api.openai.com/v1
-      KRELUNA_LLM_MODEL=gpt-4o-mini
-4. Riavvia il Director.
+1. Prendi una chiave API xAI.
+2. Apri Impostazioni nel Director.
+3. Scegli Grok (xAI), lascia grok-4.6 come modello e incolla la chiave.
+4. Premi Salva e controlla.
 
 La chiave Grok si crea su console.x.ai, voce "API Keys".
-Cambiare fornitore non richiede di toccare il programma: solo queste righe.
+Viene cifrata nel database locale e non viene piu' mostrata dalla dashboard.
+Solo il titolare puo' salvarla o cambiare provider. OpenAI e Ollama si scelgono
+dalla stessa schermata. I campi .env restano disponibili solo per installazioni
+server gestite da un amministratore.
 
 Come si controlla
 -----------------
-In alto nella dashboard c'e' scritto "IA: gpt-4o-mini" se e' collegata,
-oppure "IA: non collegata".
+In alto nella dashboard c'e' scritto "IA: Grok - grok-4.6" se e' collegata,
+oppure viene mostrato il motivo preciso per cui la verifica non passa.
 Sotto ogni risposta della chat c'e' scritto chi ha risposto:
 "Director - regole" oppure "Director - IA".
 
@@ -49,4 +46,6 @@ e non costano niente.
 
 Se vuoi tornare indietro
 ------------------------
-Svuota KRELUNA_LLM_API_KEY e riavvia. Torna tutto a regole.
+Seleziona un altro provider in Impostazioni. Senza una configurazione valida,
+le regole deterministiche continuano a funzionare e le frasi libere vengono
+bloccate con diagnostica esplicita.

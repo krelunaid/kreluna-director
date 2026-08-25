@@ -7,6 +7,22 @@ from app.services.ai import check_ai_health
 from app.services.planning import plan_message
 
 
+def test_new_install_defaults_to_grok_46(monkeypatch):
+    for name in (
+        "KRELUNA_LLM_PROVIDER",
+        "KRELUNA_LLM_BASE_URL",
+        "KRELUNA_GROK_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    configured = Settings(_env_file=None)
+
+    assert configured.selected_ai_provider == "grok"
+    grok = configured.ai_provider_config()
+    assert grok.provider == "grok"
+    assert grok.model == "grok-4.6"
+
+
 def test_provider_configs_keep_credentials_and_models_separate():
     configured = Settings(
         _env_file=None,

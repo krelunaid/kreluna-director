@@ -103,6 +103,13 @@ export default function App() {
   const [vaultBusy, setVaultBusy] = useState(false);
   const [vaultMessage, setVaultMessage] = useState("");
   const [vaultError, setVaultError] = useState("");
+  const [aiSettingsOpen, setAISettingsOpen] = useState(false);
+  const [aiSettingsProvider, setAISettingsProvider] = useState<AIProviderOption["provider"]>("grok");
+  const [aiSettingsModel, setAISettingsModel] = useState("grok-4.6");
+  const [aiSettingsKey, setAISettingsKey] = useState("");
+  const [aiSettingsBusy, setAISettingsBusy] = useState(false);
+  const [aiSettingsError, setAISettingsError] = useState("");
+  const [aiSettingsMessage, setAISettingsMessage] = useState("");
   const vaultInput = useRef<HTMLInputElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<number>(0);
@@ -233,6 +240,46 @@ export default function App() {
     catch (err) { setVaultError(err instanceof Error ? err.message : "Rimozione non riuscita"); }
   }
 
+  function openAISettings(provider = overview?.ai_provider || "grok") {
+    const option = aiProviders.find((item) => item.provider === provider);
+    setAISettingsProvider(provider);
+    setAISettingsModel(option?.model || (provider === "grok" ? "grok-4.6" : ""));
+    setAISettingsKey("");
+    setAISettingsError("");
+    setAISettingsMessage("");
+    setAISettingsOpen(true);
+  }
+
+  function closeAISettings() {
+    setAISettingsOpen(false);
+    setAISettingsKey("");
+    setAISettingsError("");
+    setAISettingsMessage("");
+  }
+
+  function changeAISettingsProvider(provider: AIProviderOption["provider"]) {
+    const option = aiProviders.find((item) => item.provider === provider);
+    setAISettingsProvider(provider);
+    setAISettingsModel(option?.model || (provider === "grok" ? "grok-4.6" : ""));
+    setAISettingsKey("");
+    setAISettingsError("");
+    setAISettingsMessage("");
+  }
+
+  async function saveAISettings(event: FormEvent) {
+    event.preventDefault();
+    setAISettingsBusy(true); setAISettingsError(""); setAISettingsMessage("");
+    try {
+      const result = await api.configureAI(aiSettingsProvider, aiSettingsModel, aiSettingsKey);
+      setAISettingsKey("");
+      if (result.connected) setAISettingsMessage(`${result.label} è collegato e pronto.`);
+      else setAISettingsError(result.detail);
+      await refresh();
+    } catch (err) {
+      setAISettingsError(err instanceof Error ? err.message : "Configurazione IA non riuscita");
+    } finally { setAISettingsBusy(false); }
+  }
+
   function goTo(section: string, prompt?: string, nav = section) {
     setActiveNav(nav); if (prompt) setDraft(prompt);
     window.setTimeout(() => document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 0);
@@ -323,8 +370,8 @@ export default function App() {
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
-        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.14"}</p>
-          <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => goTo("ai-settings")}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : " · da configurare"}</button>
+        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.15"}</p>
+          <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => openAISettings()}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : " · da configurare"}</button>
         </div>
       </div>
       <div className="metric-grid" aria-label="Riepilogo">
@@ -350,7 +397,7 @@ export default function App() {
           <NavButton icon="▧" label="Visure" onClick={() => goTo("chat", SUGGESTIONS[6].full)} />
           <NavButton icon="▦" label="Cassaforte" count={vaultCredentials.length || undefined} onClick={() => void openVault()} />
           <NavButton icon="▤" label="Documenti" onClick={() => goTo("requests")} />
-          <NavButton icon="⚙" label="Impostazioni" onClick={() => goTo("ai-settings")} />
+          <NavButton icon="⚙" label="Impostazioni" onClick={() => openAISettings()} />
           <button
             type="button"
             className={`sidebar-update ${updateAvailable ? "available" : "idle"}`}
@@ -384,9 +431,9 @@ export default function App() {
         <div className="work-grid">
           <section className="kreluna-panel" id="chat">
             <div className="kreluna-heading"><div className={`orb chat-orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div><h2>Kreluna</h2><span className={`ai-active ${aiConnected ? "connected" : "warning"}`}>{aiConnected ? "IA attiva" : "IA da configurare"}</span>
-              <label className="provider-compact" id="ai-settings"><select value={overview?.ai_provider || "openai"} onChange={async (event) => { await api.chooseAIProvider(event.target.value); await refresh(); }} aria-label="Provider IA">{aiProviders.map((item) => <option key={item.provider} value={item.provider}>{item.label}{item.configured ? "" : " · da configurare"}</option>)}</select></label>
+              <label className="provider-compact" id="ai-settings"><select value={overview?.ai_provider || "grok"} onChange={async (event) => { await api.chooseAIProvider(event.target.value); await refresh(); }} aria-label="Provider IA">{aiProviders.map((item) => <option key={item.provider} value={item.provider}>{item.label}{item.configured ? "" : " · da configurare"}</option>)}</select></label>
             </div>
-            {!aiConnected ? <div className="ai-diagnostic" title={overview?.ai_detail || "Configurazione incompleta"}><strong>{providerLabel}</strong>: {overview?.ai_detail || "modello o chiave API mancanti"}. Nessun fallback silenzioso.</div> : null}
+            {!aiConnected ? <button className="ai-diagnostic" title={overview?.ai_detail || "Configurazione incompleta"} onClick={() => openAISettings()}><strong>{providerLabel}</strong>: {overview?.ai_detail || "modello o chiave API mancanti"}. Configura ora.</button> : null}
             <div className="chat-log" ref={logRef}>{chat.map((item, index) => <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}><strong>{item.role === "user" ? "Tu" : `Kreluna${item.source ? item.source.startsWith("llm") ? " · IA" : " · Regole" : ""}`}</strong><div>{item.text}</div></div>)}{busy ? <div className="typing"><i /><i /><i /></div> : null}</div>
             <div className="chips">{SUGGESTIONS.map((item) => <button key={item.full} className="chip" onClick={() => void send(item.full)} disabled={busy}>{item.short}</button>)}</div>
             <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(draft); }}><span className="mic">♩</span><textarea value={draft} placeholder="Clicca Fattura Gadducci, oppure scrivi qui…" onChange={(event) => setDraft(event.target.value)} /><button className="send-button" disabled={busy} aria-label="Invia">➤</button></form>
@@ -405,6 +452,16 @@ export default function App() {
 
     <footer className="cockpit-footer"><span>◉&nbsp; Sistema: macOS</span><span>▣&nbsp; Host: questo Mac</span><span>♙&nbsp; Utente: {name}</span><span>◷&nbsp; Sessione attiva</span><span className={aiConnected ? "healthy" : "warning"}>●&nbsp; {aiConnected ? "Tutti i sistemi operativi" : `${providerLabel} da configurare`}</span></footer>
     {confirmKill ? <div className="kill-confirm" role="dialog" aria-modal="true" aria-label="Conferma stop"><div><h2>Fermare tutti gli Agent?</h2><p>I lavori in corso torneranno in attesa.</p><button onClick={() => setConfirmKill(false)}>Annulla</button><button className="danger" onClick={async () => { await api.kill(); setConfirmKill(false); await refresh(); }}>Conferma stop</button></div></div> : null}
+    {aiSettingsOpen ? <div className="ai-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title"><form className="ai-settings-card" onSubmit={saveAISettings}>
+      <div className="ai-settings-heading"><div><span>CONFIGURAZIONE IA</span><h2 id="ai-settings-title">Collega Grok al Director</h2><p>La chiave viene cifrata sul computer e non viene mai mostrata nuovamente.</p></div><button type="button" aria-label="Chiudi configurazione IA" onClick={closeAISettings}>×</button></div>
+      <label>Provider<select value={aiSettingsProvider} onChange={(event) => changeAISettingsProvider(event.target.value as AIProviderOption["provider"])}><option value="grok">Grok (xAI)</option><option value="ollama">Ollama locale</option><option value="openai">OpenAI</option></select></label>
+      <label>Modello<input value={aiSettingsModel} onChange={(event) => setAISettingsModel(event.target.value)} placeholder={aiSettingsProvider === "grok" ? "grok-4.6" : "Nome del modello"} autoComplete="off" /></label>
+      {aiSettingsProvider !== "ollama" ? <label>Chiave API<input type="password" value={aiSettingsKey} onChange={(event) => setAISettingsKey(event.target.value)} placeholder={aiProviders.find((item) => item.provider === aiSettingsProvider)?.key_saved ? "Chiave già salvata · lascia vuoto per conservarla" : aiSettingsProvider === "grok" ? "Incolla la chiave xAI" : "Incolla la chiave API"} autoComplete="new-password" /></label> : <div className="ai-settings-note">Ollama non usa una chiave API; deve essere attivo su questo computer.</div>}
+      {aiSettingsError ? <div className="ai-settings-alert error" role="alert">{aiSettingsError}</div> : null}
+      {aiSettingsMessage ? <div className="ai-settings-alert success">{aiSettingsMessage}</div> : null}
+      <div className="ai-settings-actions"><button type="button" onClick={closeAISettings}>Annulla</button><button className="primary" disabled={aiSettingsBusy || !aiSettingsModel.trim()}>{aiSettingsBusy ? "Controllo…" : "Salva e controlla"}</button></div>
+      <small>La verifica usa il provider selezionato. Nessun fallback automatico verso OpenAI.</small>
+    </form></div> : null}
     {vaultOpen ? <div className="vault-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-title"><div className="vault-card">
       <div className="vault-heading"><div><span className="vault-eyebrow">CASSAFORTE CLIENTI</span><h2 id="vault-title">Accessi protetti per cliente</h2><p>Il CSV viene riconosciuto nel Director. Password e token sono cifrati e non vengono inviati a Grok.</p></div><button className="vault-close" aria-label="Chiudi Cassaforte" onClick={() => setVaultOpen(false)}>×</button></div>
       <div className="vault-toolbar"><input ref={vaultInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void previewVaultFile(event.target.files?.[0] || null)} /><button className="primary" disabled={vaultBusy} onClick={() => vaultInput.current?.click()}>{vaultBusy ? "Riconosco il CSV…" : "Importa CSV"}</button><button disabled={vaultBusy} onClick={() => void downloadVaultTemplate()}>Scarica modello</button><span>🔒 Nessun segreto mostrato</span></div>

@@ -28,7 +28,7 @@ from app.models import (
     utcnow,
 )
 from app.services.agents import compose_agent_rows, count_online
-from app.services.ai import check_ai_health, selected_provider
+from app.services.ai import check_ai_health, provider_config
 from app.services.audit import write_audit
 from app.services.followup import followups
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
@@ -118,8 +118,8 @@ async def chat(
     if answered is None:
         opened = followups.last_invoice(actor.user_id)
         answered = continue_open_invoice(opened, body.message) if opened else None
-    provider = await selected_provider(session, actor.tenant_id)
-    plan = answered if answered is not None else await plan_message(body.message, provider=provider)
+    ai_config = await provider_config(session, actor.tenant_id)
+    plan = answered if answered is not None else await plan_message(body.message, config=ai_config)
     plan = apply_policy(plan, get_policy(), actor.license_state)
     if plan.pending:
         followups.remember(actor.user_id, plan.pending)
@@ -474,8 +474,8 @@ async def overview(
     historical_errors = [
         task for task in failed if not task.created_at or as_utc(task.created_at) <= cutoff
     ]
-    provider = await selected_provider(session, actor.tenant_id)
-    ai_health = await check_ai_health(settings.ai_provider_config(provider))
+    ai_config = await provider_config(session, actor.tenant_id)
+    ai_health = await check_ai_health(ai_config)
     return {
         "tenant_id": actor.tenant_id,
         "license_state": actor.license_state,
