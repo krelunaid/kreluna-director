@@ -156,13 +156,13 @@ def _client_name(text: str) -> str | None:
         if needle in lowered:
             return name
     patterns = [
-        r"(?:fattura|invoice)(?:\s+demo)?\s+(?:ad|al cliente|a|per|to)\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+){0,3}?)(?=\s+(?:per|di|for|da|euro|eur|€|\d)|[,.]|$)",
+        r"(?:fattura|invoice)(?:\s+demo)?\s+(?:ad|al cliente|a|per|pae|pre|pe|to)\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+){0,3}?)(?=\s+(?:per|di|for|da|euro|eur|€|\d)|[,.]|$)",
         r"(?:per)\s+([A-Za-zÀ-ÿ']+)(?:\s+di\s+)",
         r"(?:cliente)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
         r"(?:la\s+ditta|l['’]impresa|la\s+societ[aà])\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+)?)",
         r"(?:per|di)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ']{2,}(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ']+)?)\s*[.!?]?\s*$",
         # "…a giorgio tesi", anche scritto tutto minuscolo: due parole a fine frase.
-        r"\b(?:a|ad|al|per)\s+([A-Za-zÀ-ÿ']{3,}\s+[A-Za-zÀ-ÿ']{3,})\s*[.!?]?\s*$",
+        r"\b(?:a|ad|al|per|pae|pre|pe)\s+([A-Za-zÀ-ÿ']{3,}\s+[A-Za-zÀ-ÿ']{3,})\s*[.!?]?\s*$",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)

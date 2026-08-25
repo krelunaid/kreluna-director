@@ -1,4 +1,4 @@
-"""Chi pianifica: prima le regole dello studio, poi il modello IA se le regole non capiscono."""
+"""Chi pianifica: sicurezza e frasi certe alle regole, linguaggio incerto al modello IA."""
 
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ async def plan_message(
 ) -> PlanResult:
     plan = plan_deterministic(message)
     resolved = config or settings.ai_provider_config(provider)
-    if plan.source != "deterministic-unknown":
+    # Le regole restano definitive per sicurezza e comandi completi. Quando hanno
+    # ancora domande, invece, il modello può capire refusi e italiano parlato.
+    if plan.source not in {"deterministic-unknown", "deterministic-ask"}:
         return plan
     if not resolved.configured:
         return PlanResult(
