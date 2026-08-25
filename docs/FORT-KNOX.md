@@ -2,11 +2,13 @@
 
 Fort Knox custodisce gli accessi dei clienti ai portali professionali. Il titolare
 dello studio può inserire un accesso dal programma o importare più clienti con un
-CSV. Il segreto non viene mai restituito dalla API e non esiste un'esportazione.
+CSV. Ogni accesso include il link HTTPS del portale, così l'Agent sa quale indirizzo
+aprire senza chiederlo all'IA. Il segreto non viene mai restituito dalla API e non
+esiste un'esportazione.
 
 ## Flusso
 
-1. Il titolare autenticato inserisce cliente, portale, username e password/token.
+1. Il titolare autenticato inserisce cliente, portale, link, username e password/token.
 2. Il Director rifiuta SPID, CNS, CIE, smart card e OTP.
 3. Il server deriva una chiave distinta per lo studio dalla chiave master e cifra
    username e segreto con AES-GCM e contesto autenticato.

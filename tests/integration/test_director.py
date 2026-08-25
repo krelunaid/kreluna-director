@@ -237,6 +237,7 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
         json={
             "client_name": client_name,
             "portal": "webdesk",
+            "portal_url": "https://fatture.example.it/login",
             "username": "fortknox@example.it",
             "secret": secret,
             "secret_kind": "password",
@@ -254,6 +255,7 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
         json={
             "client_name": client_name,
             "portal": "webdesk",
+            "portal_url": "https://fatture.example.it/login",
             "username": "altro@example.it",
             "secret": "Altro-Segreto-123",
             "secret_kind": "password",
@@ -269,6 +271,7 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
         json={
             "client_name": client_name,
             "portal": "webdesk",
+            "portal_url": "https://fatture.example.it/accesso",
             "username": "fortknox-nuovo@example.it",
             "secret": replacement,
             "secret_kind": "password",
@@ -280,6 +283,7 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
 
     listing = await client.get("/vault/credentials", headers=auth(token))
     item = next(row for row in listing.json()["credentials"] if row["id"] == credential_id)
+    assert item["portal_url"] == "https://fatture.example.it/accesso"
     assert item["username_masked"] != "fortknox-nuovo@example.it"
     assert replacement not in listing.text
     async with SessionLocal() as session:
@@ -381,8 +385,9 @@ async def test_owner_imports_masked_client_credentials_without_plaintext(client:
 async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncClient):
     token = await login(client)
     csv_data = (
-        b"cliente;portale;username;password\n"
-        b"Cliente Lease;webdesk;lease@example.it;Lease-Segreto-123\n"
+        b"cliente;portale;link_portale;username;password\n"
+        b"Cliente Lease;webdesk;https://fatture.example.it/login;"
+        b"lease@example.it;Lease-Segreto-123\n"
     )
     imported = await client.post(
         "/vault/import",
@@ -422,6 +427,16 @@ async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncC
     tampered = {**payload, "task_id": str(uuid4())}
     assert (await client.post(path, json=tampered)).status_code == 401
     assert (await client.post("/agent/demo-invoice/prepare", json=payload)).status_code == 401
+    location_path = "/agent/portal-location"
+    location_payload = signed_agent_request(
+        private,
+        location_path,
+        {"device_id": device_id, "task_id": task_id},
+    )
+    location = await client.post(location_path, json=location_payload)
+    assert location.status_code == 200
+    assert location.json()["portal_url"] == "https://fatture.example.it/login"
+    assert location.json()["sent_to_ai"] is False
     lease = await client.post("/agent/credential-lease", json=payload)
     assert lease.status_code == 200
     assert lease.json()["username"] == "lease@example.it"

@@ -213,6 +213,7 @@ class ClientCredential(Base):
     client_name: Mapped[str] = mapped_column(String(200))
     client_key: Mapped[str] = mapped_column(String(200))
     portal: Mapped[str] = mapped_column(String(80))
+    portal_url: Mapped[str] = mapped_column(String(1000), default="")
     credential_label: Mapped[str] = mapped_column(String(120), default="principale")
     secret_kind: Mapped[str] = mapped_column(String(40), default="password")
     username_ciphertext: Mapped[str] = mapped_column(Text)

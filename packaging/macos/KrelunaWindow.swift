@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import WebKit
 
 private let allowedHosts = Set(["127.0.0.1", "localhost", "::1"])
@@ -15,10 +16,11 @@ private func isDirectorURL(_ url: URL?) -> Bool {
     return url.user == nil && url.password == nil
 }
 
-final class KrelunaDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
+final class KrelunaDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     private let startURL: URL
     private var window: NSWindow?
     private var webView: WKWebView?
+    private var activeDownloads: [WKDownload] = []
 
     init(startURL: URL) {
         self.startURL = startURL
@@ -73,6 +75,10 @@ final class KrelunaDelegate: NSObject, NSApplicationDelegate, WKNavigationDelega
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+        if navigationAction.shouldPerformDownload {
+            decisionHandler(.download)
+            return
+        }
         guard let url = navigationAction.request.url else {
             decisionHandler(.cancel)
             return
@@ -89,6 +95,72 @@ final class KrelunaDelegate: NSObject, NSApplicationDelegate, WKNavigationDelega
 
     func webView(
         _ webView: WKWebView,
+        navigationAction: WKNavigationAction,
+        didBecome download: WKDownload
+    ) {
+        track(download)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        navigationResponse: WKNavigationResponse,
+        didBecome download: WKDownload
+    ) {
+        track(download)
+    }
+
+    private func track(_ download: WKDownload) {
+        activeDownloads.append(download)
+        download.delegate = self
+    }
+
+    func download(
+        _ download: WKDownload,
+        decideDestinationUsing response: URLResponse,
+        suggestedFilename: String,
+        completionHandler: @escaping (URL?) -> Void
+    ) {
+        guard let downloads = FileManager.default.urls(
+            for: .downloadsDirectory,
+            in: .userDomainMask
+        ).first else {
+            completionHandler(nil)
+            return
+        }
+        let requested = URL(fileURLWithPath: suggestedFilename).lastPathComponent
+        let fallback = "kreluna-fort-knox-modello.csv"
+        let name = requested.isEmpty ? fallback : requested
+        let source = URL(fileURLWithPath: name)
+        let stem = source.deletingPathExtension().lastPathComponent
+        let suffix = source.pathExtension
+        var destination = downloads.appendingPathComponent(name)
+        var copy = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            let candidate = suffix.isEmpty ? "\(stem)-\(copy)" : "\(stem)-\(copy).\(suffix)"
+            destination = downloads.appendingPathComponent(candidate)
+            copy += 1
+        }
+        completionHandler(destination)
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+        activeDownloads.removeAll { $0 === download }
+    }
+
+    func download(
+        _ download: WKDownload,
+        didFailWithError error: Error,
+        resumeData: Data?
+    ) {
+        activeDownloads.removeAll { $0 === download }
+        let alert = NSAlert()
+        alert.messageText = "Download non riuscito"
+        alert.informativeText = error.localizedDescription
+        alert.runModal()
+    }
+
+    func webView(
+        _ webView: WKWebView,
         createWebViewWith configuration: WKWebViewConfiguration,
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
@@ -99,6 +171,28 @@ final class KrelunaDelegate: NSObject, NSApplicationDelegate, WKNavigationDelega
             NSWorkspace.shared.open(url)
         }
         return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping ([URL]?) -> Void
+    ) {
+        let panel = NSOpenPanel()
+        panel.title = "Importa accessi in Fort Knox"
+        panel.prompt = "Importa CSV"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.allowedContentTypes = [UTType.commaSeparatedText]
+        guard let window else {
+            completionHandler(panel.runModal() == .OK ? panel.urls : nil)
+            return
+        }
+        panel.beginSheetModal(for: window) { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
     }
 
     private func installMenus() {

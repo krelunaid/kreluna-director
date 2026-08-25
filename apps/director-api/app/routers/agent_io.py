@@ -108,37 +108,18 @@ async def _verify_agent_request(
     session.add(UsedNonce(nonce=request_nonce))
 
 
-def _credential_transport_allowed(request: Request) -> bool:
-    from urllib.parse import urlparse
-
-    public = urlparse(settings.director_public_url)
-    if public.scheme == "https":
-        return True
-    client_host = (request.client.host if request.client else "").lower()
-    return public.scheme == "http" and client_host in {"127.0.0.1", "::1", "localhost", "testclient"}
-
-
-@router.post("/agent/credential-lease")
-async def credential_lease(
+async def _credential_for_task(
+    session: AsyncSession,
     body: CredentialLeaseBody,
-    request: Request,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict:
-    """Release one credential once, only to the device already assigned to the task."""
-
-    if not _credential_transport_allowed(request):
-        raise HTTPException(status_code=409, detail="Fort Knox richiede una connessione HTTPS")
+    *,
+    path: str,
+) -> tuple[Device, Task, ClientCredential]:
     device = (
         await session.execute(select(Device).where(Device.id == body.device_id))
     ).scalar_one_or_none()
     if device is None or device.status != "active" or device.killed or device.paused:
         raise HTTPException(status_code=401, detail="Agent non autorizzato")
-    await _verify_agent_request(
-        session,
-        device,
-        "/agent/credential-lease",
-        body.model_dump(mode="json"),
-    )
+    await _verify_agent_request(session, device, path, body.model_dump(mode="json"))
     task = (
         await session.execute(
             select(Task).where(Task.id == body.task_id, Task.tenant_id == device.tenant_id)
@@ -159,12 +140,6 @@ async def credential_lease(
     allowed_portals = TASK_PORTALS.get(portal_key, set())
     if not client_key or not allowed_portals:
         raise HTTPException(status_code=409, detail="Cliente o portale non supportato")
-    nonce = f"vault-task:{task.id}"
-    already_used = (
-        await session.execute(select(UsedNonce).where(UsedNonce.nonce == nonce))
-    ).scalar_one_or_none()
-    if already_used is not None:
-        raise HTTPException(status_code=409, detail="Accesso già consegnato per questo lavoro")
     credential = (
         await session.execute(
             select(ClientCredential)
@@ -179,6 +154,40 @@ async def credential_lease(
     ).scalars().first()
     if credential is None:
         raise HTTPException(status_code=404, detail="Nessun accesso salvato per cliente e portale")
+    return device, task, credential
+
+
+def _credential_transport_allowed(request: Request) -> bool:
+    from urllib.parse import urlparse
+
+    public = urlparse(settings.director_public_url)
+    if public.scheme == "https":
+        return True
+    client_host = (request.client.host if request.client else "").lower()
+    return public.scheme == "http" and client_host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+@router.post("/agent/credential-lease")
+async def credential_lease(
+    body: CredentialLeaseBody,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Release one credential once, only to the device already assigned to the task."""
+
+    if not _credential_transport_allowed(request):
+        raise HTTPException(status_code=409, detail="Fort Knox richiede una connessione HTTPS")
+    device, task, credential = await _credential_for_task(
+        session,
+        body,
+        path="/agent/credential-lease",
+    )
+    nonce = f"vault-task:{task.id}"
+    already_used = (
+        await session.execute(select(UsedNonce).where(UsedNonce.nonce == nonce))
+    ).scalar_one_or_none()
+    if already_used is not None:
+        raise HTTPException(status_code=409, detail="Accesso già consegnato per questo lavoro")
     try:
         username, secret = decrypt_credential(credential)
     except (ValueError, UnicodeDecodeError, InvalidTag) as exc:
@@ -202,6 +211,40 @@ async def credential_lease(
         "secret_kind": credential.secret_kind,
         "expires_in_seconds": 30,
         "single_use": True,
+    }
+
+
+@router.post("/agent/portal-location")
+async def portal_location(
+    body: CredentialLeaseBody,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Tell the assigned Agent where to open the portal without releasing secrets."""
+
+    if not _credential_transport_allowed(request):
+        raise HTTPException(status_code=409, detail="Fort Knox richiede una connessione HTTPS")
+    device, task, credential = await _credential_for_task(
+        session,
+        body,
+        path="/agent/portal-location",
+    )
+    await write_audit(
+        session,
+        tenant_id=device.tenant_id,
+        actor=device.agent_id,
+        action="vault.portal_location",
+        result="ok",
+        device_id=device.id,
+        task_id=task.id,
+        capability=task.capability,
+        detail=f"credential_id={credential.id};link={'yes' if credential.portal_url else 'no'}",
+    )
+    await session.commit()
+    return {
+        "portal_url": credential.portal_url,
+        "configured": bool(credential.portal_url),
+        "sent_to_ai": False,
     }
 
 
