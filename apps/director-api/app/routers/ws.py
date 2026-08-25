@@ -117,7 +117,7 @@ async def agent_socket(ws: WebSocket) -> None:
         pass
     finally:
         if device_id:
-            hub.drop_agent(device_id)
+            hub.drop_agent(device_id, ws)
             async with SessionLocal() as session:
                 device = (await session.execute(select(Device).where(Device.id == device_id))).scalar_one_or_none()
                 if device:
