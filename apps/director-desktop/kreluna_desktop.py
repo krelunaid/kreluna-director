@@ -49,7 +49,7 @@ def port_open(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) == 0
 
 
-def wait_health(timeout: float = 20) -> bool:
+def wait_health(timeout: float = 120) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:

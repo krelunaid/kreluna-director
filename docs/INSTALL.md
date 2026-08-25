@@ -38,9 +38,20 @@ Un Agent per computer. Non è il cervello.
 
 ## Aggiornamenti (anche se è già installata)
 
+### Mac
+
+1. Quando il pallino sotto **Impostazioni** diventa rosso, premi **Aggiornamento**
+2. Premi **Installa ora**
+3. Kreluna verifica il file, sostituisce l'app in **Applicazioni** e si riapre
+
+Se l'app non è in Applicazioni o il Mac non concede il permesso, Kreluna mostra
+un errore esplicito e lascia disponibile **Scarica manualmente**.
+
+### Windows
+
 1. **Chiudi** Kreluna
-2. Apri lo zip nuovo
-3. Stesso installatore di prima
+2. Scarica e apri lo zip nuovo
+3. Avvia `Installa.bat`
 4. Riapri Kreluna
 
 Il programma viene sostituito. **I dati restano.**

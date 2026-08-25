@@ -88,7 +88,9 @@ Poi apri [http://127.0.0.1:5173](http://127.0.0.1:5173)
 
 ## Aggiornamenti
 
-Il programma legge `GET /update/manifest` e avvisa se c’è una versione nuova. Per applicarla: chiudi Kreluna e reinstalla lo zip nuovo (i dati restano). Dettagli: `docs/INSTALL.md`.
+Il programma controlla le release ufficiali e avvisa se c’è una versione nuova. Su Mac,
+da **Aggiornamento → Installa ora**, verifica il pacchetto, sostituisce l’app in
+Applicazioni e si riapre; i dati restano. Dettagli: `docs/INSTALL.md`.
 
 ## Test
 

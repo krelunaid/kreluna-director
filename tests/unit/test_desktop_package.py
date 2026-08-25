@@ -25,6 +25,16 @@ def test_local_agent_is_explicit_opt_in_in_desktop_launcher() -> None:
     assert 'health.get("service") != "director-api"' in source
 
 
+def test_mac_launcher_exposes_the_whole_app_bundle_to_updater() -> None:
+    launcher = (ROOT / "packaging" / "macos" / "Kreluna").read_text()
+
+    assert 'APP_BUNDLE="$(cd "$APP_DIR/.." && pwd)"' in launcher
+    assert 'export KRELUNA_APP_BUNDLE="$APP_BUNDLE"' in launcher
+    assert 'export PYTHONDONTWRITEBYTECODE="1"' in launcher
+    api_main = (ROOT / "apps" / "director-api" / "app" / "main.py").read_text()
+    assert 'Path(ROOT / "data").mkdir' not in api_main
+
+
 def test_embedded_director_runtimes_include_password_hasher() -> None:
     import importlib.util
 

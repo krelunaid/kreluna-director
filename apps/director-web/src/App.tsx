@@ -78,6 +78,8 @@ export default function App() {
   const [version, setVersion] = useState("");
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateInstallState, setUpdateInstallState] = useState<"idle" | "installing" | "restarting">("idle");
+  const [updateInstallError, setUpdateInstallError] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
   const [activeNav, setActiveNav] = useState("dashboard");
@@ -91,13 +93,25 @@ export default function App() {
   }
 
   useEffect(() => {
-    Promise.all([api.health(), api.updateStatus().catch(() => null)]).then(([health, status]) => {
-      setVersion(health.version);
+    let active = true;
+    const applyUpdateStatus = (status: UpdateStatus | null) => {
+      if (!active || !status) return;
+      setUpdateStatus(status);
       if (status?.available) {
-        setUpdateStatus(status);
         setUpdateOpen(updateReminderExpired(status.latest_version));
       }
+    };
+    Promise.all([api.health(), api.updateStatus().catch(() => null)]).then(([health, status]) => {
+      if (active) setVersion(health.version);
+      applyUpdateStatus(status);
     }).catch(() => undefined);
+    const updateTimer = window.setInterval(() => {
+      api.updateStatus().then(applyUpdateStatus).catch(() => undefined);
+    }, 15 * 60 * 1000);
+    return () => {
+      active = false;
+      window.clearInterval(updateTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -163,11 +177,58 @@ export default function App() {
     setUpdateOpen(false);
   }
 
-  function downloadUpdate() {
+  function downloadUpdateManually() {
     if (!updateStatus) return;
     const url = updateStatus.download_url || updateStatus.release_url;
     if (url) window.open(url, "_blank", "noopener,noreferrer");
-    setUpdateOpen(false);
+  }
+
+  async function waitForUpdateRestart(expectedVersion: string) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2500));
+    let previousVersionChecks = 0;
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      try {
+        const response = await fetch("/health", { cache: "no-store" });
+        if (response.ok) {
+          const health = await response.json() as { version?: string };
+          if (health.version === expectedVersion) {
+            window.location.reload();
+            return;
+          }
+          if (health.version) {
+            previousVersionChecks += 1;
+            if (previousVersionChecks >= 5) {
+              setUpdateInstallState("idle");
+              setUpdateInstallError("La nuova versione non è partita. Kreluna ha riaperto la versione precedente.");
+              return;
+            }
+          }
+        }
+      } catch {
+        /* il programma si sta riavviando */
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    }
+    setUpdateInstallState("idle");
+    setUpdateInstallError("Il riavvio sta impiegando troppo tempo. Riapri Kreluna Director da Applicazioni.");
+  }
+
+  async function installUpdate() {
+    if (!updateStatus || updateInstallState !== "idle") return;
+    if (updateStatus.platform !== "macos") {
+      downloadUpdateManually();
+      return;
+    }
+    setUpdateInstallError("");
+    setUpdateInstallState("installing");
+    try {
+      const result = await api.installUpdate();
+      setUpdateInstallState("restarting");
+      void waitForUpdateRestart(result.version);
+    } catch (err) {
+      setUpdateInstallState("idle");
+      setUpdateInstallError(err instanceof Error ? err.message : "Aggiornamento non riuscito");
+    }
   }
 
   if (!ready) {
@@ -191,7 +252,7 @@ export default function App() {
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
-        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.11"}</p>
+        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.12"}</p>
           <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => goTo("ai-settings")}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : " · da configurare"}</button>
         </div>
       </div>
@@ -280,8 +341,15 @@ export default function App() {
       <h2 id="update-title">Kreluna {updateStatus.latest_version} è disponibile</h2>
       <p>Ora stai usando la versione {updateStatus.current_version}. I dati dello studio e la configurazione restano al loro posto.</p>
       {updateStatus.notes ? <div className="update-notes"><strong>Novità</strong><span>{updateStatus.notes}</span></div> : null}
-      <div className="update-actions"><button onClick={remindUpdateLater}>Ricordamelo dopo</button><button className="primary" onClick={downloadUpdate}>Scarica aggiornamento</button></div>
-      <small>Il download parte solo dopo il tuo clic dalla pagina ufficiale Kreluna.</small>
+      {updateInstallState === "installing" ? <div className="update-progress">Scarico e verifico l’aggiornamento…</div> : null}
+      {updateInstallState === "restarting" ? <div className="update-progress success">Installato. Kreluna si sta riavviando…</div> : null}
+      {updateInstallError ? <div className="update-install-error" role="alert">{updateInstallError}</div> : null}
+      <div className="update-actions">
+        <button onClick={remindUpdateLater} disabled={updateInstallState !== "idle"}>Ricordamelo dopo</button>
+        <button className="primary" onClick={() => void installUpdate()} disabled={updateInstallState !== "idle"}>{updateStatus.platform === "macos" ? "Installa ora" : "Scarica aggiornamento"}</button>
+        {updateInstallError ? <button onClick={downloadUpdateManually}>Scarica manualmente</button> : null}
+      </div>
+      <small>Su Mac l’app viene verificata, sostituita in Applicazioni e riaperta automaticamente.</small>
     </div></div> : null}
     {lightbox ? <button className="lightbox" onClick={() => setLightbox(null)}><img src={lightbox} alt="Schermata del PC" /></button> : null}
   </div>;

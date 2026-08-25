@@ -2,6 +2,7 @@
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+APP_BUNDLE="$(cd "$APP_DIR/.." && pwd)"
 ROOT="$APP_DIR/Resources/app"
 SUPPORT="$HOME/Library/Application Support/KrelunaDirector"
 LOG="$SUPPORT/kreluna.log"
@@ -31,9 +32,13 @@ fi
 
 export PYTHONHOME="$(cd "$(dirname "$PYTHON")/.." && pwd)"
 export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/director-api:$ROOT/apps/director-desktop"
+export PYTHONDONTWRITEBYTECODE="1"
 export DIRECTOR_DATABASE_URL="sqlite+aiosqlite:///$SUPPORT/data/kreluna.db"
 export DIRECTOR_EVIDENCE_DIR="$SUPPORT/data/evidence"
 export KRELUNA_DIRECTOR_URL="http://127.0.0.1:8080"
+export KRELUNA_DESKTOP_APP="1"
+export KRELUNA_APP_BUNDLE="$APP_BUNDLE"
+export KRELUNA_SUPPORT_DIR="$SUPPORT"
 notify "Apro Kreluna Director…"
 cd "$ROOT"
 exec "$PYTHON" "$ROOT/apps/director-desktop/kreluna_desktop.py"

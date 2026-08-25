@@ -97,6 +97,7 @@ def test_release_status_ignores_unsafe_links_and_prereleases():
     assert result["download_url"] == ""
     assert result["release_url"].startswith("https://github.com/")
     assert trusted_release_url("https://example.invalid/file.zip") == ""
+    assert trusted_release_url("https://release-assets.githubusercontent.com/file.zip")
     assert unavailable_status("0.5.9")["state"] == "unavailable"
 
 
@@ -118,3 +119,6 @@ def test_sidebar_update_indicator_has_idle_and_available_states():
     assert "updateAvailable ? <strong>Aggiornamento</strong> : null" in source
     assert ".sidebar-update.available > .sidebar-update-dot" in styles
     assert "background: var(--red)" in styles
+    assert '"Installa ora"' in source
+    assert "api.installUpdate()" in source
+    assert "15 * 60 * 1000" in source

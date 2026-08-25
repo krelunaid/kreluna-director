@@ -366,6 +366,10 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .update-actions { display: flex; justify-content: center; gap: 9px; margin-top: 18px; }
 .update-actions button { padding: 9px 14px; color: #d8def0; border: 1px solid rgba(118, 132, 189, .34); border-radius: 9px; background: #172342; font-size: 11px; }
 .update-actions button.primary { color: #1d1607; border-color: #f4d277; background: linear-gradient(180deg, #ffe7a1, #d9a83e); font-weight: 800; }
+.update-actions button:disabled { cursor: wait; opacity: .55; }
+.update-progress, .update-install-error { margin-top: 13px; padding: 9px 11px; border: 1px solid rgba(244, 210, 119, .28); border-radius: 9px; color: #ecd68f; background: rgba(75, 58, 13, .22); font-size: 10px; }
+.update-progress.success { color: #a9eeb9; border-color: rgba(93, 222, 128, .28); background: rgba(21, 76, 42, .24); }
+.update-install-error { color: #ffaaa4; border-color: rgba(255, 101, 95, .32); background: rgba(95, 20, 31, .25); }
 .update-card small { display: block; margin-top: 12px; color: #69748f; font-size: 8px; }
 
 @media (max-width: 1320px) {
