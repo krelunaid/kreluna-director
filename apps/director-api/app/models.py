@@ -186,3 +186,31 @@ class AgentSlot(Base):
     enrollment_code: Mapped[str] = mapped_column(String(80), default="")
     device_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     __table_args__ = (UniqueConstraint("tenant_id", "role", name="uq_slot_role"),)
+
+
+class ClientCredential(Base):
+    """Recoverable client secret, encrypted before it reaches the database."""
+
+    __tablename__ = "client_credentials"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    client_name: Mapped[str] = mapped_column(String(200))
+    client_key: Mapped[str] = mapped_column(String(200))
+    portal: Mapped[str] = mapped_column(String(80))
+    credential_label: Mapped[str] = mapped_column(String(120), default="principale")
+    secret_kind: Mapped[str] = mapped_column(String(40), default="password")
+    username_ciphertext: Mapped[str] = mapped_column(Text)
+    secret_ciphertext: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(40), default="ready")
+    updated_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "client_key",
+            "portal",
+            "credential_label",
+            name="uq_client_credential",
+        ),
+    )

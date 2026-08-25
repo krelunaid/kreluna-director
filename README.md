@@ -48,21 +48,29 @@ Esempi che capisce già:
 - `Prepara gli F24 in scadenza, ma non inviarli`
 - `Scarica le fatture in IPSOA per Gadducci`
 - `Apri il sito CGN e fai la visura vera per Gadducci` (browser vero sul Mac)
+- `Apri il sito CGN per Gadducci usando l'accesso salvato` (compila, non accede)
 - `Cosa sai fare?`
 - `Ferma tutto`
 
-## Lavoro vero sui portali
+## Cassaforte clienti e portali
+
+Da **Cassaforte** il titolare può importare un CSV con cliente, portale,
+username e password/token. Il Director riconosce le colonne localmente, cifra
+ogni accesso e mostra soltanto valori mascherati. Grok/OpenAI/Ollama non ricevono
+il CSV né le credenziali.
 
 `portal_open` guida il browser del Mac: apre il portale, aspetta il login umano,
 controlla che la pagina davanti sia davvero quella del portale, scrive nel campo
 trovato per nome (non a coordinate del mouse) e si ferma. Indirizzi e campi
 stanno in `policies/programs.yaml`, correggibili senza toccare il codice.
+Se viene richiesto esplicitamente l'accesso salvato, compila username e password
+ma non clicca **Accedi** e non cattura una schermata dopo la compilazione.
 
 ## IA opzionale
 
-Senza chiave il Director lavora a regole. Con tre righe in `.env`
-(`KRELUNA_LLM_BASE_URL`, `KRELUNA_LLM_API_KEY`, `KRELUNA_LLM_MODEL`) capisce
-anche l'italiano parlato: vale Grok, OpenAI, o un modello locale in studio.
+Senza chiave il Director lavora a regole. In `.env` si configura Grok, OpenAI
+o Ollama con i campi dedicati al provider (`KRELUNA_GROK_*`, `KRELUNA_OPENAI_*`,
+`KRELUNA_OLLAMA_*`).
 Dettagli: `docs/COLLEGA-IA.txt`.
 
 Il modello propone, la policy decide. Non può usare capability fuori elenco,

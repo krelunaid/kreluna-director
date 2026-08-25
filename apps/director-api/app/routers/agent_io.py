@@ -6,7 +6,8 @@ from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from cryptography.exceptions import InvalidTag
+from fastapi import APIRouter, Depends, HTTPException, Request
 from kreluna_shared.crypto import b64d, decrypt_bytes, encrypt_bytes, sha256_hex, verify_bytes
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -14,10 +15,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_session
-from app.models import Approval, Device, Evidence, InvoiceDraft, Task, utcnow
+from app.models import (
+    Approval,
+    ClientCredential,
+    Device,
+    Evidence,
+    InvoiceDraft,
+    Task,
+    UsedNonce,
+    utcnow,
+)
 from app.services.audit import write_audit
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.registry import hub
+from app.services.vault import client_key_for_name, decrypt_credential
 
 router = APIRouter()
 
@@ -39,6 +50,20 @@ class IngestBody(BaseModel):
     evidence: list[EvidenceIn] = Field(default_factory=list)
 
 
+class CredentialLeaseBody(BaseModel):
+    device_id: str
+    task_id: str
+    signature: str
+
+
+TASK_PORTALS = {
+    "fatture-webdesk": {"webdesk", "ade"},
+    "visure-cgn": {"cgn"},
+    "camerali-cgn": {"cgn", "comunica"},
+    "contratti-ade": {"ade"},
+}
+
+
 def _verify_device(device: Device, task_id: str, signature: str) -> None:
     payload = task_id.encode()
     try:
@@ -46,6 +71,98 @@ def _verify_device(device: Device, task_id: str, signature: str) -> None:
             raise PermissionError("bad sig")
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Firma dispositivo non valida") from exc
+
+
+def _credential_transport_allowed(request: Request) -> bool:
+    from urllib.parse import urlparse
+
+    public = urlparse(settings.director_public_url)
+    if public.scheme == "https":
+        return True
+    client_host = (request.client.host if request.client else "").lower()
+    return public.scheme == "http" and client_host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+@router.post("/agent/credential-lease")
+async def credential_lease(
+    body: CredentialLeaseBody,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Release one credential once, only to the device already assigned to the task."""
+
+    if not _credential_transport_allowed(request):
+        raise HTTPException(status_code=409, detail="La Cassaforte richiede una connessione HTTPS")
+    device = (
+        await session.execute(select(Device).where(Device.id == body.device_id))
+    ).scalar_one_or_none()
+    if device is None or device.status != "active" or device.killed or device.paused:
+        raise HTTPException(status_code=401, detail="Agent non autorizzato")
+    _verify_device(device, body.task_id, body.signature)
+    task = (
+        await session.execute(
+            select(Task).where(Task.id == body.task_id, Task.tenant_id == device.tenant_id)
+        )
+    ).scalar_one_or_none()
+    if (
+        task is None
+        or task.assigned_device_id != device.id
+        or task.capability != "portal_open"
+        or task.status not in {"assigned", "running"}
+    ):
+        raise HTTPException(status_code=403, detail="Il task non può usare la Cassaforte")
+    args = json.loads(task.args_json or "{}")
+    if args.get("use_saved_access") is not True:
+        raise HTTPException(status_code=403, detail="L'uso della Cassaforte non è stato richiesto")
+    portal_key = str(args.get("portal") or "")
+    client_key = client_key_for_name(str(args.get("query") or ""))
+    allowed_portals = TASK_PORTALS.get(portal_key, set())
+    if not client_key or not allowed_portals:
+        raise HTTPException(status_code=409, detail="Cliente o portale non supportato")
+    nonce = f"vault-task:{task.id}"
+    already_used = (
+        await session.execute(select(UsedNonce).where(UsedNonce.nonce == nonce))
+    ).scalar_one_or_none()
+    if already_used is not None:
+        raise HTTPException(status_code=409, detail="Accesso già consegnato per questo lavoro")
+    credential = (
+        await session.execute(
+            select(ClientCredential)
+            .where(
+                ClientCredential.tenant_id == device.tenant_id,
+                ClientCredential.client_key == client_key,
+                ClientCredential.portal.in_(allowed_portals),
+                ClientCredential.status == "ready",
+            )
+            .order_by(ClientCredential.credential_label)
+        )
+    ).scalars().first()
+    if credential is None:
+        raise HTTPException(status_code=404, detail="Nessun accesso salvato per cliente e portale")
+    try:
+        username, secret = decrypt_credential(credential)
+    except (ValueError, UnicodeDecodeError, InvalidTag) as exc:
+        raise HTTPException(status_code=409, detail="Accesso cifrato non leggibile") from exc
+    session.add(UsedNonce(nonce=nonce))
+    await write_audit(
+        session,
+        tenant_id=device.tenant_id,
+        actor=device.agent_id,
+        action="vault.credential_lease",
+        result="ok",
+        device_id=device.id,
+        task_id=task.id,
+        capability=task.capability,
+        detail=f"credential_id={credential.id}",
+    )
+    await session.commit()
+    return {
+        "username": username,
+        "secret": secret,
+        "secret_kind": credential.secret_kind,
+        "expires_in_seconds": 30,
+        "single_use": True,
+    }
 
 
 @router.post("/agent/ingest")

@@ -22,18 +22,22 @@ cp "$ROOT/packaging/windows/Installa.bat" "$OUT/Installa.bat"
 cp "$ROOT/packaging/windows/LEGGIMI-WINDOWS.txt" "$OUT/LEGGIMI-WINDOWS.txt"
 cp "$ROOT/scripts/windows/Install-KrelunaAgent.ps1" "$OUT/Install-KrelunaAgent.ps1"
 
-python3 - "$OUT" <<'PY'
+ICON_PYTHON="python3"
+if [[ -x "$ROOT/.venv/bin/python" ]] && "$ROOT/.venv/bin/python" -c 'import PIL' >/dev/null 2>&1; then
+  ICON_PYTHON="$ROOT/.venv/bin/python"
+fi
+"$ICON_PYTHON" - "$OUT" "$ROOT" <<'PY'
 from pathlib import Path
+import shutil
 import sys
-from PIL import Image, ImageDraw
+from PIL import Image
 
 out = Path(sys.argv[1])
-img = Image.new("RGB", (256, 256), (11, 18, 32))
-draw = ImageDraw.Draw(img)
-draw.rounded_rectangle((16, 16, 240, 240), radius=48, outline=(212, 175, 55), width=8)
-draw.ellipse((70, 50, 186, 166), outline=(240, 215, 140), width=6)
+root = Path(sys.argv[2])
 ico = out / "Kreluna Director" / "kreluna.ico"
 png = out / "Kreluna Director" / "kreluna.png"
+shutil.copy2(root / "packaging" / "macos" / "AppIcon.png", png)
+img = Image.open(png)
 img.save(png)
 img.save(ico, sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
 PY

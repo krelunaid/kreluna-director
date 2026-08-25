@@ -53,6 +53,7 @@ class EmailDraftArgs(BaseModel):
 class PortalOpenArgs(BaseModel):
     portal: str = Field(min_length=2, max_length=60)
     query: str = Field(default="", max_length=200)
+    use_saved_access: bool = False
 
     @field_validator("portal")
     @classmethod

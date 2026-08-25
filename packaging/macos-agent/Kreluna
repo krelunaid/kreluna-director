@@ -36,6 +36,7 @@ fi
 export PYTHONHOME="$(cd "$(dirname "$PYTHON")/.." && pwd)"
 export PYTHONPATH="$ROOT/packages/kreluna-shared/src:$ROOT/apps/kreluna-agent"
 export KRELUNA_AGENT_DATA_DIR="$SUPPORT/data"
+export PYTHONDONTWRITEBYTECODE="1"
 
 notify "Avvio Kreluna Agent…"
 cd "$ROOT"

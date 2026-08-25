@@ -28,13 +28,17 @@ jobs:
       - name: Verifica versione
         run: test "v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" = "${GITHUB_REF_NAME}"
       - name: Crea pacchetto Mac
-        run: bash scripts/macos/build-mac-app.sh
+        run: |
+          bash scripts/macos/build-mac-app.sh
+          bash scripts/macos/build-mac-agent.sh
       - uses: actions/upload-artifact@v5
         with:
           name: mac
           path: |
             dist-macos/Kreluna-Director-Mac.zip
             dist-macos/Kreluna-Director-Mac.zip.sha256
+            dist-macos-agent/Kreluna-Agent-Mac.zip
+            dist-macos-agent/Kreluna-Agent-Mac.zip.sha256
 
   windows:
     name: Crea app Windows
@@ -55,13 +59,17 @@ jobs:
       - name: Verifica versione
         run: test "v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" = "${GITHUB_REF_NAME}"
       - name: Crea pacchetto Windows
-        run: bash scripts/windows/build-windows-zip.sh
+        run: |
+          bash scripts/windows/build-windows-zip.sh
+          bash scripts/windows/build-agent-zip.sh
       - uses: actions/upload-artifact@v5
         with:
           name: windows
           path: |
             dist-windows/Kreluna-Director-Windows.zip
             dist-windows/Kreluna-Director-Windows.zip.sha256
+            dist-agents/Kreluna-Agenti-Windows.zip
+            dist-agents/Kreluna-Agenti-Windows.zip.sha256
 
   publish:
     name: Pubblica aggiornamento
@@ -81,6 +89,10 @@ jobs:
             release/Kreluna-Director-Mac.zip.sha256 \
             release/Kreluna-Director-Windows.zip \
             release/Kreluna-Director-Windows.zip.sha256 \
+            release/Kreluna-Agent-Mac.zip \
+            release/Kreluna-Agent-Mac.zip.sha256 \
+            release/Kreluna-Agenti-Windows.zip \
+            release/Kreluna-Agenti-Windows.zip.sha256 \
             --repo "${GITHUB_REPOSITORY}" \
             --generate-notes \
             --title "Kreluna Director ${GITHUB_REF_NAME#v}"

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     director_signing_seed: str = "kreluna-dev-signing-seed-change-in-production"
     director_session_secret: str = "kreluna-dev-session-secret-change-in-production"
     director_evidence_key: str = "kreluna-dev-evidence-key-32b-change!!"
+    director_credential_key: str = "kreluna-dev-credential-key-change-in-production"
     director_cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     director_policy_path: str = str(ROOT / "policies" / "default.yaml")
     kreluna_llm_provider: str = ""
@@ -78,6 +79,7 @@ class Settings(BaseSettings):
             "DIRECTOR_SIGNING_SEED": self.director_signing_seed,
             "DIRECTOR_SESSION_SECRET": self.director_session_secret,
             "DIRECTOR_EVIDENCE_KEY": self.director_evidence_key,
+            "DIRECTOR_CREDENTIAL_KEY": self.director_credential_key,
             "KRELUNA_ENROLLMENT_CODE": self.kreluna_enrollment_code,
         }
         invalid = [

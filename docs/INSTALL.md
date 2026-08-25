@@ -30,6 +30,24 @@ Dettagli: `docs/WINDOWS.md`.
 
 Un Agent per computer. Non è il cervello.
 
+I pacchetti ufficiali includono tutti e sette i lavori su entrambi i sistemi:
+Fatture, F24, Contabilità, Camerali, Contratti, DURC e Visure. Sul Mac scegli
+il lavoro al primo avvio; nello zip Windows c'è un pulsante di installazione per ogni lavoro.
+
+Se l'Agent è su un computer diverso dal Director, configura un indirizzo **HTTPS**.
+L'indirizzo HTTP è accettato soltanto quando Director e Agent sono sullo stesso computer.
+
+## Cassaforte clienti
+
+1. Apri **Cassaforte** nella barra laterale.
+2. Premi **Scarica modello** e compila il CSV senza righe SPID/CNS/CIE.
+3. Premi **Importa CSV**, controlla l'anteprima mascherata e scegli **Cifra e importa**.
+4. Per compilare un accesso senza effettuare il login, chiedi ad esempio:
+   `Apri il sito CGN per Bianchi usando l'accesso salvato`.
+
+Il CSV non viene conservato dal Director e non viene inviato al provider IA.
+L'Agent inserisce i campi e si ferma: il click su **Accedi**, l'OTP e ogni invio restano umani.
+
 ## Accesso
 
 - Si apre da sola la finestra su `http://127.0.0.1:8080`

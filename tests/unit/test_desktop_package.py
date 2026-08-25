@@ -49,3 +49,15 @@ def test_embedded_director_runtimes_include_password_hasher() -> None:
     assert "fastapi" in packages
     assert "sqlalchemy" in packages
     assert "greenlet" in packages
+
+
+def test_release_publishes_director_and_agents_for_mac_and_windows() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+
+    for asset in (
+        "Kreluna-Director-Mac.zip",
+        "Kreluna-Director-Windows.zip",
+        "Kreluna-Agent-Mac.zip",
+        "Kreluna-Agenti-Windows.zip",
+    ):
+        assert asset in workflow

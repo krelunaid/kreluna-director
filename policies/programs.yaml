@@ -12,6 +12,8 @@ portals:
     name: Visure — CGN
     url: https://www.cgn.it
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    username_field: "input[type=email], input[name*=user], input[name*=login]"
+    password_field: "input[type=password]"
     login_note: Entra con le credenziali CGN dello studio, poi richiedi la visura.
   durc-inps:
     role: pc-durc
@@ -24,12 +26,16 @@ portals:
     name: Contratti — Agenzia delle Entrate
     url: https://www.agenziaentrate.gov.it
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    username_field: "input[type=email], input[name*=user], input[name*=login]"
+    password_field: "input[type=password]"
     login_note: Entra con l'utenza di Samuele. Lo fai tu a mano.
   camerali-cgn:
     role: pc-camerali
     name: Pratiche camerali — CGN
     url: https://www.cgn.it
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    username_field: "input[type=email], input[name*=user], input[name*=login]"
+    password_field: "input[type=password]"
     login_note: Dopo CGN la pratica si completa su Desktop ComUnica.
   fatture-webdesk:
     role: pc-fatture
@@ -38,6 +44,8 @@ portals:
     # Apri Webdesk nel browser, copia la riga dell'indirizzo e mettila qui.
     url: https://www.agenziaentrate.gov.it
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    username_field: "input[type=email], input[name*=user], input[name*=login]"
+    password_field: "input[type=password]"
     login_note: Utenza cliente con smart card o SPID. Lo fai tu a mano.
 
 settings:

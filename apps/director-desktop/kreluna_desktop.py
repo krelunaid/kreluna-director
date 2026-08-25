@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
@@ -33,11 +34,30 @@ API_URL = (
 ).rstrip("/")
 
 
+def _local_secret(name: str) -> str:
+    """Create a per-installation secret outside the signed application bundle."""
+
+    path = SUPPORT / name
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        value = ""
+    if len(value) < 32:
+        value = secrets.token_urlsafe(48)
+        path.write_text(value + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return value
+
+
 def prepare_env() -> None:
     SUPPORT.mkdir(parents=True, exist_ok=True)
     (SUPPORT / "data").mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("DIRECTOR_DATABASE_URL", f"sqlite+aiosqlite:///{SUPPORT / 'data' / 'kreluna.db'}")
     os.environ.setdefault("DIRECTOR_EVIDENCE_DIR", str(SUPPORT / "data" / "evidence"))
+    os.environ.setdefault("DIRECTOR_CREDENTIAL_KEY", _local_secret("credential.key"))
     os.environ.setdefault("KRELUNA_DIRECTOR_URL", API_URL)
     sys.path.insert(0, str(ROOT / "packages" / "kreluna-shared" / "src"))
     sys.path.insert(0, str(ROOT / "apps" / "director-api"))

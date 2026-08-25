@@ -8,7 +8,7 @@ import pytest
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.main import app
-from app.models import EnrollmentCode, Evidence, InvoiceDraft, Task, utcnow
+from app.models import ClientCredential, EnrollmentCode, Evidence, InvoiceDraft, Task, utcnow
 from app.routers.agent_io import purge_expired_evidence
 from app.seed import DEMO_TENANT_ID, OTHER_TENANT_ID, seed_if_empty
 from httpx import ASGITransport, AsyncClient
@@ -73,6 +73,114 @@ async def test_health_and_login(client: AsyncClient):
     assert "IPSOA" in programs["pc-f24"]
     assert "CGN" in programs["pc-visure"]
     assert overview.json()["agents_total"] == len(agents.json()["agents"])
+
+
+@pytest.mark.asyncio
+async def test_owner_imports_masked_client_credentials_without_plaintext(client: AsyncClient):
+    token = await login(client)
+    csv_data = (
+        b"cliente;portale;username;password;tipo_segreto;etichetta\n"
+        b"Cliente Cassaforte;webdesk;cassaforte@example.it;Segreto-Non-In-DB;password;principale\n"
+    )
+    preview = await client.post(
+        "/vault/import/preview",
+        headers=auth(token),
+        files={"file": ("accessi.csv", csv_data, "text/csv")},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["recognized"] == 1
+    assert preview.json()["sent_to_ai"] is False
+    assert "Segreto-Non-In-DB" not in preview.text
+
+    imported = await client.post(
+        "/vault/import",
+        headers=auth(token),
+        files={"file": ("accessi.csv", csv_data, "text/csv")},
+    )
+    assert imported.status_code == 200
+    assert imported.json()["created"] == 1
+    assert imported.json()["source_file_retained"] is False
+    listing = await client.get("/vault/credentials", headers=auth(token))
+    assert listing.status_code == 200
+    item = next(row for row in listing.json()["credentials"] if row["client_name"] == "Cliente Cassaforte")
+    assert item["username_masked"] != "cassaforte@example.it"
+    assert "Segreto-Non-In-DB" not in listing.text
+
+    async with SessionLocal() as session:
+        stored = (
+            await session.execute(
+                select(ClientCredential).where(ClientCredential.id == item["id"])
+            )
+        ).scalar_one()
+        assert "cassaforte@example.it" not in stored.username_ciphertext
+        assert "Segreto-Non-In-DB" not in stored.secret_ciphertext
+
+    viewer = await login(client, "viewer@studio.demo")
+    assert (await client.get("/vault/credentials", headers=auth(viewer))).status_code == 403
+    checked = await client.post(f"/vault/credentials/{item['id']}/check", headers=auth(token))
+    assert checked.json()["state"] == "ready"
+    revoked = await client.delete(f"/vault/credentials/{item['id']}", headers=auth(token))
+    assert revoked.status_code == 200
+    listing = await client.get("/vault/credentials", headers=auth(token))
+    assert all(row["id"] != item["id"] for row in listing.json()["credentials"])
+
+
+@pytest.mark.asyncio
+async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncClient):
+    token = await login(client)
+    csv_data = (
+        b"cliente;portale;username;password\n"
+        b"Cliente Lease;webdesk;lease@example.it;Lease-Segreto-123\n"
+    )
+    imported = await client.post(
+        "/vault/import",
+        headers=auth(token),
+        files={"file": ("accessi.csv", csv_data, "text/csv")},
+    )
+    assert imported.status_code == 200
+    code = f"LEASE-{uuid4()}"
+    async with SessionLocal() as session:
+        session.add(EnrollmentCode(tenant_id=DEMO_TENANT_ID, code=code, used=False))
+        await session.commit()
+    private, public = generate_device_keypair()
+    enrolled = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": code,
+            "agent_id": f"pc-lease-{uuid4()}",
+            "hostname": "lease-host",
+            "public_key": b64e(public),
+            "capabilities": ["portal_open"],
+            "platform": "macos",
+        },
+    )
+    device_id = enrolled.json()["device_id"]
+    async with SessionLocal() as session:
+        task = Task(
+            tenant_id=DEMO_TENANT_ID,
+            requested_by="22222222-2222-2222-2222-222222222222",
+            goal="Compilare accesso salvato",
+            capability="portal_open",
+            args_json=(
+                '{"portal":"fatture-webdesk","query":"Cliente Lease",'
+                '"use_saved_access":true}'
+            ),
+            risk="medium",
+            status="assigned",
+            idempotency_key=f"lease-{uuid4()}",
+            assigned_device_id=device_id,
+        )
+        session.add(task)
+        await session.commit()
+        task_id = task.id
+    signature = b64e(sign_bytes(private, task_id.encode()))
+    payload = {"device_id": device_id, "task_id": task_id, "signature": signature}
+    lease = await client.post("/agent/credential-lease", json=payload)
+    assert lease.status_code == 200
+    assert lease.json()["username"] == "lease@example.it"
+    assert lease.json()["secret"] == "Lease-Segreto-123"
+    assert lease.json()["single_use"] is True
+    assert (await client.post("/agent/credential-lease", json=payload)).status_code == 409
 
 
 @pytest.mark.asyncio

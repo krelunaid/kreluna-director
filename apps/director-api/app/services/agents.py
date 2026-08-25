@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from kreluna_shared.agents import capabilities_for_role, load_live_agent_roles
+from kreluna_shared.agents import capabilities_for_role, load_live_agent_roles, platforms_for_role
 
 from app.models import AgentSlot, Device
 from app.services.registry import hub, parse_caps
@@ -41,6 +41,7 @@ def _from_device(row: Device, slot: AgentSlot | None, retired: bool = False) -> 
         "job": slot.job if slot else "",
         "program": slot.program if slot else "",
         "enrollment_code": slot.enrollment_code if slot else "",
+        "supported_platforms": platforms_for_role(row.agent_id),
     }
 
 
@@ -58,13 +59,14 @@ def _from_slot(slot: AgentSlot) -> dict[str, Any]:
         "busy": False,
         "killed": False,
         "paused": False,
-        "platform": "windows",
+        "platform": "not_installed",
         "last_seen_at": None,
         "active_task_id": None,
         "connected": False,
         "job": slot.job,
         "program": slot.program,
         "enrollment_code": slot.enrollment_code,
+        "supported_platforms": platforms_for_role(slot.role),
     }
 
 

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 import time
+import webbrowser
 from collections.abc import Callable
 from typing import Any
 
+import httpx
 from kreluna_shared.crypto import sha256_hex
 from kreluna_shared.programs import load_settings, portal_for_key
 
@@ -70,7 +73,12 @@ def learn_portal(
 def open_portal(
     portal: str,
     query: str = "",
+    use_saved_access: bool = False,
     *,
+    director_url: str = "",
+    device_id: str | None = None,
+    task_id: str = "",
+    signature: str = "",
     runner: mac_browser.Runner | None = None,
     supported: Callable[[], bool] = mac_browser.is_supported,
     sleep: Callable[[float], None] = time.sleep,
@@ -78,6 +86,28 @@ def open_portal(
     spec = portal_for_key(portal)
     if spec is None:
         raise ValueError(f"PORTALE_SCONOSCIUTO:{portal}")
+    if not supported() and sys.platform == "win32":
+        webbrowser.open(spec.url)
+        return {
+            "ok": True,
+            "live": True,
+            "sent": False,
+            "filled": False,
+            "browser": "predefinito Windows",
+            "portal": spec.name,
+            "url": spec.url,
+            "query": query,
+            "message": (
+                f"Ho aperto {spec.name} sul PC Windows. "
+                + (
+                    "Per sicurezza la Cassaforte non compila ancora questo browser: inserisci l'accesso e l'OTP a mano. "
+                    if use_saved_access
+                    else "Completa il login a mano. "
+                )
+                + "Non ho inviato, scaricato o pagato nulla."
+            ),
+            "evidence": [],
+        }
     if not supported():
         raise RuntimeError(
             "Questo passo muove il browser di un Mac. Su questo PC non è disponibile: "
@@ -92,8 +122,15 @@ def open_portal(
     mac_browser.open_url(run, browser, spec.url)
     evidence.append(_evidence(mac_browser.screenshot(run), "portale-aperto", portal))
 
-    def stop(step: str, message: str, filled: bool = False) -> dict[str, Any]:
-        evidence.append(_evidence(mac_browser.screenshot(run), step, portal))
+    def stop(
+        step: str,
+        message: str,
+        filled: bool = False,
+        *,
+        capture: bool = True,
+    ) -> dict[str, Any]:
+        if capture:
+            evidence.append(_evidence(mac_browser.screenshot(run), step, portal))
         return {
             "ok": True,
             "live": True,
@@ -106,6 +143,65 @@ def open_portal(
             "message": message,
             "evidence": evidence,
         }
+
+    if use_saved_access:
+        if not spec.username_field or not spec.password_field:
+            return stop(
+                "accesso-non-supportato",
+                f"{spec.name}: questo accesso resta manuale. SPID, CNS, CIE e smart card non vengono compilati.",
+            )
+        where = mac_browser.current_url(run, browser)
+        if not mac_browser.same_site(spec.url, where):
+            return stop(
+                "sito-sbagliato",
+                f"Sul {browser} adesso c'è un altro sito, non {spec.name}. Non uso la Cassaforte.",
+            )
+        sleep(settings.poll_seconds)
+        has_username = mac_browser.field_is_there(run, browser, spec.username_field)
+        has_password = mac_browser.field_is_there(run, browser, spec.password_field)
+        if not has_username or not has_password:
+            return stop(
+                "campi-login-non-trovati",
+                f"{spec.name}: non riconosco i campi di accesso. Non ho richiesto né mostrato la password.",
+            )
+        if not director_url or not device_id or not task_id or not signature:
+            raise RuntimeError("CASSAFORTE_AGENT_NON_AUTORIZZATA")
+        response = httpx.post(
+            f"{director_url.rstrip('/')}/agent/credential-lease",
+            json={"device_id": device_id, "task_id": task_id, "signature": signature},
+            timeout=15,
+        )
+        if not response.is_success:
+            try:
+                detail = str(response.json().get("detail") or "Accesso non disponibile")
+            except (ValueError, AttributeError):
+                detail = "Accesso non disponibile"
+            raise RuntimeError(detail)
+        credentials = response.json()
+        username = str(credentials.get("username") or "")
+        secret = str(credentials.get("secret") or "")
+        if not username or not secret:
+            raise RuntimeError("CASSAFORTE_ACCESSO_VUOTO")
+        username_written = mac_browser.fill_field(run, browser, spec.username_field, username)
+        password_written = mac_browser.fill_field(run, browser, spec.password_field, secret)
+        credentials["username"] = ""
+        credentials["secret"] = ""
+        username = ""
+        secret = ""
+        if not username_written or not password_written:
+            mac_browser.fill_field(run, browser, spec.username_field, "")
+            mac_browser.fill_field(run, browser, spec.password_field, "")
+            return stop(
+                "accesso-non-compilato",
+                f"{spec.name}: i campi sono cambiati. Ho ripulito ciò che avevo scritto e mi sono fermato.",
+                capture=False,
+            )
+        return stop(
+            "accesso-compilato",
+            f"{spec.name}: accesso compilato dalla Cassaforte. Clicca tu per entrare; io non invio il modulo.",
+            filled=True,
+            capture=False,
+        )
 
     waited = 0
     found = mac_browser.field_is_there(run, browser, spec.field) if spec.field else False

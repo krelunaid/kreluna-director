@@ -6,6 +6,7 @@ agents:
     display_name: PC-FATTURE
     job: Fatture
     program: Webdesk e sito Agenzia delle Entrate (utenza cliente, smart card / SPID)
+    platforms: [macos, windows]
     capabilities:
       - notepad_write
       - invoice_prepare_demo
@@ -16,12 +17,14 @@ agents:
     display_name: PC-F24
     job: Deleghe F24
     program: Creazione IPSOA, poi Invio Telematico (in demo non si invia)
+    platforms: [macos, windows]
     capabilities:
       - f24_prepare
   - role: pc-contabilita
     display_name: PC-CONTABILITA
     job: Contabilità
     program: Scarico fatture AdE (SPID/smart card) XML/P7M, carico IPSOA, importatore contabile IPSOA
+    platforms: [macos, windows]
     capabilities:
       - contabilita_prepare
       - invoice_check
@@ -29,6 +32,7 @@ agents:
     display_name: PC-CAMERALI
     job: Pratiche camerali
     program: Sito CGN, poi invio su Desktop ComUnica
+    platforms: [macos, windows]
     capabilities:
       - camera_prepare
       - portal_open
@@ -37,6 +41,7 @@ agents:
     display_name: PC-CONTRATTI
     job: Contratti
     program: Sito Agenzia delle Entrate di Samuele
+    platforms: [macos, windows]
     capabilities:
       - contratti_prepare
       - portal_open
@@ -45,6 +50,7 @@ agents:
     display_name: PC-DURC
     job: Richieste DURC
     program: Sito INPS (utenza cliente, smart card / SPID)
+    platforms: [macos, windows]
     capabilities:
       - durc_prepare
       - portal_open
@@ -53,6 +59,7 @@ agents:
     display_name: PC-VISURE
     job: Visure
     program: Sito CGN
+    platforms: [macos, windows]
     capabilities:
       - visure_prepare
       - document_check
