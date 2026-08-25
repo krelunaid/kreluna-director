@@ -17,5 +17,5 @@ Poi:
 
 5. In basso: "Kreluna è stata bloccata" → Apri comunque.
 
-Login: andrea@studio.demo / demo
+Al primo avvio Kreluna mostra le credenziali personali una sola volta: conservale.
 Non serve Python.

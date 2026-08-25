@@ -17,7 +17,6 @@ if db_path.exists():
 os.environ.setdefault("DIRECTOR_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
 os.environ.setdefault("DIRECTOR_EVIDENCE_DIR", str(TEST_DIR / "evidence"))
 os.environ.setdefault("DIRECTOR_POLICY_PATH", str(ROOT / "policies" / "default.yaml"))
-os.environ.setdefault("KRELUNA_ENROLLMENT_CODE", "KRELUNA-TEST-ENROLL")
 os.environ.setdefault("DIRECTOR_CREDENTIAL_KEY", "kreluna-test-credential-key-unique-123456")
 
 # I test non devono dipendere dal .env di chi sviluppa: l'IA si accende solo

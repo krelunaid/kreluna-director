@@ -4,17 +4,22 @@
 param(
   [string]$Role = "pc-fatture",
   [string]$DirectorUrl = "http://127.0.0.1:8080",
-  [string]$EnrollCode = "KRELUNA-PC-FATTURE",
+  [Parameter(Mandatory = $true)][string]$EnrollCode,
   [string]$FattureTarget = ""
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $EnrollCode.StartsWith("KRELUNA-ENROLL-") -or $EnrollCode.Length -lt 50 -or $EnrollCode.Length -gt 100) {
+    throw "Usa il codice monouso generato dal Director."
+}
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Install = Join-Path $env:LOCALAPPDATA "KrelunaAgent-$Role"
 $App = Join-Path $Install "app"
 New-Item -ItemType Directory -Force -Path $Install | Out-Null
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $Install "fatture.target"), $FattureTarget, $Utf8NoBom)
+$EnrollPath = Join-Path $Install "enrollment.once"
+[IO.File]::WriteAllText($EnrollPath, $EnrollCode, $Utf8NoBom)
 
 $Source = $null
 foreach ($candidate in @(
@@ -47,7 +52,7 @@ set INSTALL=$Install
 set ROOT=$App\
 set AGENT_DIRECTOR_URL=$DirectorUrl
 set AGENT_DIRECTOR_WSS=$($DirectorUrl.Replace('http://','ws://').Replace('https://','wss://'))/ws/agent
-set KRELUNA_ENROLLMENT_CODE=$EnrollCode
+set KRELUNA_ENROLLMENT_CODE_FILE=%INSTALL%\enrollment.once
 set KRELUNA_AGENT_ID=$Role
 set KRELUNA_AGENT_DISPLAY_NAME=$Role
 set KRELUNA_AGENT_DATA_DIR=%INSTALL%\data
@@ -68,6 +73,5 @@ $link.Save()
 
 Write-Host "Agent $Role installato in $Install"
 Write-Host "Director: $DirectorUrl"
-Write-Host "Codice enrollment: $EnrollCode"
 Write-Host "Sul desktop: Kreluna Agent $Role"
 # Nessuna backdoor, nessun blocco di Windows, nessuna chiave server in questo script.

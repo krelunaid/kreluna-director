@@ -83,8 +83,8 @@ function agentState(agent: Agent, work?: Task): string {
 
 export default function App() {
   const [ready, setReady] = useState(Boolean(token()));
-  const [email, setEmail] = useState("andrea@studio.demo");
-  const [password, setPassword] = useState("demo");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("Studio");
   const [error, setError] = useState("");
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -105,6 +105,13 @@ export default function App() {
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
   const [activeNav, setActiveNav] = useState("dashboard");
   const [deviceAction, setDeviceAction] = useState<string | null>(null);
+  const [enrollment, setEnrollment] = useState<{
+    agentId: string;
+    displayName: string;
+    code: string;
+    expiresAt: string;
+  } | null>(null);
+  const [enrollmentError, setEnrollmentError] = useState("");
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultCredentials, setVaultCredentials] = useState<VaultCredential[]>([]);
   const [vaultFile, setVaultFile] = useState<File | null>(null);
@@ -213,9 +220,24 @@ export default function App() {
   }
 
   async function toggleAgent(agent: Agent) {
-    if (agent.presence === "waiting_install" || deviceAction) return;
+    if (deviceAction) return;
     setDeviceAction(agent.device_id);
-    try { if (agent.killed || agent.paused) await api.resume(agent.device_id); else await api.pause(agent.device_id); await refresh(); }
+    try {
+      if (agent.presence === "waiting_install") {
+        setEnrollmentError("");
+        const issued = await api.issueAgentEnrollment(agent.agent_id);
+        setEnrollment({
+          agentId: issued.agent_id,
+          displayName: agent.display_name || agent.agent_id,
+          code: issued.enrollment_code,
+          expiresAt: issued.expires_at,
+        });
+      } else if (agent.killed || agent.paused) await api.resume(agent.device_id);
+      else await api.pause(agent.device_id);
+      await refresh();
+    } catch (err) {
+      setEnrollmentError(err instanceof Error ? err.message : "Codice Agent non disponibile");
+    }
     finally { setDeviceAction(null); }
   }
 
@@ -391,7 +413,7 @@ export default function App() {
         <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         {error ? <div className="error">{error}</div> : null}<button className="btn" type="submit">Entra nello studio</button>
-      </form><p className="hint">Demo: andrea@studio.demo / demo{version ? ` · v${version}` : ""}</p>
+      </form><p className="hint">Usa le credenziali personali della tua installazione{version ? ` · v${version}` : ""}</p>
     </div></div>;
   }
 
@@ -463,7 +485,7 @@ export default function App() {
             const work = currentWork(agent, tasks); const enabled = !(agent.killed || agent.paused); const active = enabled && agent.presence !== "waiting_install";
             return <article className={`feature-card ${work ? "working" : ""} ${enabled ? "enabled" : "disabled"}`} key={agent.device_id}>
               <div className="feature-name"><span className={`status-dot ${agent.presence === "waiting_install" ? "waiting" : enabled ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong>
-                <button className={`mini-switch ${active ? "on" : "off"}`} disabled={agent.presence === "waiting_install" || deviceAction === agent.device_id} onClick={() => void toggleAgent(agent)} title={agent.presence === "waiting_install" ? "Installa prima l’Agent" : enabled ? "Disattiva Agent" : "Attiva Agent"} aria-label={`${agent.presence === "waiting_install" ? "Installa prima" : enabled ? "Disattiva" : "Attiva"} ${agent.display_name || agent.agent_id}`} aria-pressed={active}><i /></button>
+                <button className={`mini-switch ${active ? "on" : "off"}`} disabled={deviceAction === agent.device_id} onClick={() => void toggleAgent(agent)} title={agent.presence === "waiting_install" ? "Genera il codice per installare l’Agent" : enabled ? "Disattiva Agent" : "Attiva Agent"} aria-label={`${agent.presence === "waiting_install" ? "Installa" : enabled ? "Disattiva" : "Attiva"} ${agent.display_name || agent.agent_id}`} aria-pressed={active}><i /></button>
               </div><p>{agent.job}</p><span title="Disponibile per Mac e Windows">{agentState(agent, work)} · Mac/PC</span>
             </article>;
           })}</div>
@@ -493,6 +515,13 @@ export default function App() {
 
     <footer className="cockpit-footer"><span>◉&nbsp; Sistema: macOS</span><span>▣&nbsp; Host: questo Mac</span><span>♙&nbsp; Utente: {name}</span><span>◷&nbsp; Sessione attiva</span><span className={aiConnected ? "healthy" : "warning"}>●&nbsp; {aiConnected ? "Tutti i sistemi operativi" : `${providerLabel}: ${aiUnavailable}`}</span></footer>
     {confirmKill ? <div className="kill-confirm" role="dialog" aria-modal="true" aria-label="Conferma stop"><div><h2>Fermare tutti gli Agent?</h2><p>I lavori in corso torneranno in attesa.</p><button onClick={() => setConfirmKill(false)}>Annulla</button><button className="danger" onClick={async () => { await api.kill(); setConfirmKill(false); await refresh(); }}>Conferma stop</button></div></div> : null}
+    {enrollment || enrollmentError ? <div className="enrollment-dialog" role="dialog" aria-modal="true" aria-labelledby="enrollment-title"><div className="enrollment-card">
+      <span>INSTALLAZIONE AGENT</span><h2 id="enrollment-title">{enrollment?.displayName || "Codice non disponibile"}</h2>
+      {enrollment ? <><p>Inserisci questo codice nell’installer Mac o Windows. Vale una sola volta e scade alle {new Date(enrollment.expiresAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}.</p><code>{enrollment.code}</code><button className="primary" onClick={() => void navigator.clipboard.writeText(enrollment.code)}>Copia codice</button></> : null}
+      {enrollmentError ? <div className="enrollment-error" role="alert">{enrollmentError}</div> : null}
+      <button onClick={() => { setEnrollment(null); setEnrollmentError(""); }}>Chiudi</button>
+      <small>Il Director conserva soltanto l’impronta del codice. Per reinstallare un PC già collegato occorre prima revocarlo.</small>
+    </div></div> : null}
     {aiSettingsOpen ? <div className="ai-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title"><form className="ai-settings-card" onSubmit={saveAISettings}>
       <div className="ai-settings-heading"><div><span>CONFIGURAZIONE IA</span><h2 id="ai-settings-title">{settingsManaged ? "IA Kreluna" : "Collega il provider al Director"}</h2><p>{settingsManaged ? "Il servizio IA è gestito e protetto da Kreluna. Questa app usa soltanto la sua licenza revocabile." : "La chiave viene cifrata sul computer e non viene mai mostrata nuovamente."}</p></div><button type="button" aria-label="Chiudi configurazione IA" onClick={closeAISettings}>×</button></div>
       <label>Provider<select value={aiSettingsProvider} onChange={(event) => changeAISettingsProvider(event.target.value as AIProviderOption["provider"])}>{aiProviders.map((item) => <option key={item.provider} value={item.provider}>{item.label}</option>)}</select></label>

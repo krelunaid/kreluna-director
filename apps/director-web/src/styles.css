@@ -358,7 +358,7 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .cockpit-footer > span:last-child { margin-left: auto; border: 0; }
 .cockpit-footer .healthy { color: #a9eeb9; }.cockpit-footer .warning { color: #e8c878; }
 .global-stop { position: absolute; z-index: 8; left: 181px; bottom: 58px; width: 24px; height: 24px; padding: 0; color: #ff8d84; border: 1px solid rgba(255, 101, 95, .25); border-radius: 6px; background: rgba(95, 20, 31, .26); font-size: 9px; }
-.kill-confirm, .lightbox, .update-dialog, .vault-dialog, .ai-settings-dialog { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; border: 0; background: rgba(2, 5, 12, .84); backdrop-filter: blur(7px); }
+.kill-confirm, .lightbox, .update-dialog, .vault-dialog, .ai-settings-dialog, .enrollment-dialog { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; border: 0; background: rgba(2, 5, 12, .84); backdrop-filter: blur(7px); }
 .kill-confirm > div { width: 360px; padding: 24px; text-align: center; border: 1px solid var(--line-strong); border-radius: 16px; background: #101a34; box-shadow: 0 30px 80px #000; }
 .kill-confirm h2 { margin-top: 0; }.kill-confirm p { color: var(--muted); }
 .kill-confirm button { margin: 5px; padding: 8px 13px; color: #fff; border: 1px solid var(--line-strong); border-radius: 8px; background: #1b2746; }
@@ -380,6 +380,15 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .update-progress.success { color: #a9eeb9; border-color: rgba(93, 222, 128, .28); background: rgba(21, 76, 42, .24); }
 .update-install-error { color: #ffaaa4; border-color: rgba(255, 101, 95, .32); background: rgba(95, 20, 31, .25); }
 .update-card small { display: block; margin-top: 12px; color: #69748f; font-size: 8px; }
+
+.enrollment-card { width: min(520px, 92vw); display: grid; gap: 12px; padding: 26px; color: #eef1ff; border: 1px solid rgba(126, 109, 255, .38); border-radius: 20px; background: linear-gradient(145deg, #111c38, #081226); box-shadow: 0 34px 100px #000; }
+.enrollment-card > span { color: #a895ff; letter-spacing: .16em; font-size: 9px; font-weight: 800; }
+.enrollment-card h2 { margin: 0; color: #fff1bd; font-size: 23px; }
+.enrollment-card p, .enrollment-card small { margin: 0; color: #aeb7d1; line-height: 1.5; font-size: 11px; }
+.enrollment-card code { overflow-wrap: anywhere; padding: 13px; color: #f4dda0; border: 1px solid rgba(244, 210, 119, .28); border-radius: 9px; background: rgba(75, 58, 13, .22); user-select: all; }
+.enrollment-card button { padding: 9px 14px; color: #d8def0; border: 1px solid rgba(118, 132, 189, .34); border-radius: 9px; background: #172342; }
+.enrollment-card button.primary { color: #1d1607; border-color: #f4d277; background: linear-gradient(180deg, #ffe7a1, #d9a83e); font-weight: 800; }
+.enrollment-error { padding: 9px 11px; color: #ffaaa4; border: 1px solid rgba(255, 101, 95, .32); border-radius: 9px; background: rgba(95, 20, 31, .25); font-size: 10px; }
 
 /* Configurazione IA */
 .ai-settings-card { width: min(520px, 92vw); display: grid; gap: 13px; padding: 26px; color: #eef1ff; border: 1px solid rgba(126, 109, 255, .38); border-radius: 20px; background: linear-gradient(145deg, #111c38, #081226); box-shadow: 0 34px 100px #000; }

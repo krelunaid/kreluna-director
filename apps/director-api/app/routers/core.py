@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from kreluna_shared.crypto import b64d, fingerprint_device
+from kreluna_shared.crypto import b64d, sha256_hex
 from kreluna_shared.update import APP_VERSION, manifest_payload, sign_manifest
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.deps import Actor, get_actor, get_policy
-from app.models import AgentSlot, Device, EnrollmentCode, User
+from app.models import AgentSlot, Device, EnrollmentCode, User, as_utc, utcnow
 from app.security import hash_password, issue_session, password_needs_rehash, verify_password
 from app.services.agents import compose_agent_rows
 from app.services.ai import (
@@ -29,6 +29,11 @@ from app.services.ai import (
     selected_provider,
 )
 from app.services.audit import write_audit
+from app.services.enrollment import (
+    enrollment_digest,
+    issue_enrollment_token,
+    valid_enrollment_token,
+)
 from app.services.orchestrator import kill_all
 from app.services.registry import hub, mark_offline_stale, requeue_device_tasks
 from app.services.updates import latest_update_status
@@ -299,11 +304,20 @@ async def me(actor: Annotated[Actor, Depends(get_actor)]) -> dict:
 
 @router.post("/enrollment/redeem")
 async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
+    if not valid_enrollment_token(body.enrollment_code):
+        raise HTTPException(status_code=401, detail="Codice di enrollment non valido")
+    digest = enrollment_digest(body.enrollment_code)
     code = (
-        await session.execute(select(EnrollmentCode).where(EnrollmentCode.code == body.enrollment_code))
+        await session.execute(select(EnrollmentCode).where(EnrollmentCode.code == digest))
     ).scalar_one_or_none()
     if code is None:
-        raise HTTPException(status_code=404, detail="Codice di enrollment sconosciuto")
+        raise HTTPException(status_code=401, detail="Codice di enrollment non valido")
+    if code.used:
+        raise HTTPException(status_code=409, detail="Codice di enrollment già usato")
+    if code.expires_at is None or as_utc(code.expires_at) < utcnow():
+        code.used = True
+        await session.commit()
+        raise HTTPException(status_code=410, detail="Codice di enrollment scaduto")
     try:
         raw_pub = b64d(body.public_key)
         if len(raw_pub) != 32:
@@ -315,44 +329,40 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
         await session.execute(
             select(AgentSlot).where(
                 AgentSlot.tenant_id == code.tenant_id,
-                AgentSlot.enrollment_code == body.enrollment_code,
+                AgentSlot.role == code.agent_id,
+                AgentSlot.enrollment_code == digest,
             )
         )
     ).scalar_one_or_none()
     if slot is None:
-        slot = (
-            await session.execute(
-                select(AgentSlot).where(
-                    AgentSlot.tenant_id == code.tenant_id,
-                    AgentSlot.role == body.agent_id,
-                )
-            )
-        ).scalar_one_or_none()
-
-    if slot is None and code.used:
-        raise HTTPException(status_code=409, detail="Codice di enrollment già usato")
-    if slot is not None and body.agent_id and body.agent_id != slot.role:
+        raise HTTPException(status_code=409, detail="Codice non più associato a uno slot")
+    if body.agent_id != slot.role:
         raise HTTPException(status_code=400, detail="Questo codice è per un altro PC")
 
-    fingerprint = body.fingerprint or fingerprint_device(body.hostname, body.agent_id)
+    fingerprint = sha256_hex(raw_pub)
     device = None
-    if slot is not None and slot.device_id:
+    if slot.device_id:
         device = (
             await session.execute(select(Device).where(Device.id == slot.device_id, Device.tenant_id == code.tenant_id))
         ).scalar_one_or_none()
-    if device is None and slot is not None:
+    if device is None:
         device = (
             await session.execute(
                 select(Device).where(Device.tenant_id == code.tenant_id, Device.agent_id == slot.role)
             )
         ).scalar_one_or_none()
+    if device is not None and device.status != "revoked":
+        raise HTTPException(
+            status_code=409,
+            detail="Questo ruolo è già installato: revoca prima il vecchio PC",
+        )
 
     if device is None:
         device = Device(
             tenant_id=code.tenant_id,
-            agent_id=slot.role if slot is not None else body.agent_id,
+            agent_id=slot.role,
             hostname=body.hostname,
-            display_name=(slot.display_name if slot else None) or body.display_name or body.agent_id,
+            display_name=slot.display_name or body.display_name or body.agent_id,
             public_key=body.public_key,
             fingerprint=fingerprint,
             capabilities=json.dumps(body.capabilities),
@@ -362,24 +372,23 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
         )
         session.add(device)
         await session.flush()
-        if slot is None:
-            code.used = True
-            code.used_by_device_id = device.id
     else:
         device.public_key = body.public_key
+        device.fingerprint = fingerprint
         device.hostname = body.hostname
         device.capabilities = json.dumps(body.capabilities)
         device.platform = body.platform
         device.status = "active"
         device.killed = False
         device.paused = False
-        if slot is not None:
-            device.display_name = slot.display_name or device.display_name
-            device.agent_id = slot.role
-
-    if slot is not None:
-        slot.device_id = device.id
         device.display_name = slot.display_name or device.display_name
+        device.agent_id = slot.role
+
+    code.used = True
+    code.used_by_device_id = device.id
+    slot.enrollment_code = ""
+    slot.device_id = device.id
+    device.display_name = slot.display_name or device.display_name
     await write_audit(
         session,
         tenant_id=code.tenant_id,
@@ -395,6 +404,60 @@ async def redeem(body: EnrollBody, session: Annotated[AsyncSession, Depends(get_
         "tenant_id": device.tenant_id,
         "agent_id": device.agent_id,
         "status": device.status,
+    }
+
+
+@router.post("/agents/{agent_id}/enrollment")
+async def create_agent_enrollment(
+    agent_id: str,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può installare un Agent")
+    slot = (
+        await session.execute(
+            select(AgentSlot).where(
+                AgentSlot.tenant_id == actor.tenant_id,
+                AgentSlot.role == agent_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ruolo Agent non trovato")
+    if slot.device_id:
+        device = (
+            await session.execute(
+                select(Device).where(
+                    Device.id == slot.device_id,
+                    Device.tenant_id == actor.tenant_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if device is not None and device.status == "active":
+            raise HTTPException(
+                status_code=409,
+                detail="Revoca prima il vecchio PC per creare un nuovo codice",
+            )
+    raw, record = await issue_enrollment_token(
+        session,
+        tenant_id=actor.tenant_id,
+        slot=slot,
+    )
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="device.enrollment.issue",
+        result="ok",
+        detail=slot.role,
+    )
+    await session.commit()
+    return {
+        "agent_id": slot.role,
+        "enrollment_code": raw,
+        "expires_at": record.expires_at.isoformat() if record.expires_at else None,
+        "single_use": True,
     }
 
 
@@ -431,6 +494,17 @@ async def revoke_device(
         raise HTTPException(status_code=404, detail="Device non trovato")
     device.status = "revoked"
     device.killed = True
+    slots = (
+        await session.execute(
+            select(AgentSlot).where(
+                AgentSlot.tenant_id == actor.tenant_id,
+                AgentSlot.device_id == device.id,
+            )
+        )
+    ).scalars().all()
+    for slot in slots:
+        slot.device_id = None
+        slot.enrollment_code = ""
     await hub.send_agent(device.id, {"type": "kill", "reason": "revoked"})
     hub.drop_agent(device.id)
     await write_audit(

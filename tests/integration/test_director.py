@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import time
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -9,6 +11,7 @@ from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.models import (
+    AgentSlot,
     AIProviderCredential,
     ClientCredential,
     EnrollmentCode,
@@ -21,7 +24,9 @@ from app.routers.agent_io import purge_expired_evidence
 from app.seed import DEMO_TENANT_ID, OTHER_TENANT_ID, seed_if_empty
 from httpx import ASGITransport, AsyncClient
 from kreluna_shared.crypto import (
+    agent_http_payload,
     b64e,
+    canonical_json_bytes,
     encrypt_bytes,
     generate_device_keypair,
     sha256_hex,
@@ -50,6 +55,101 @@ async def login(client: AsyncClient, email: str = "andrea@studio.demo") -> str:
 
 def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+async def issue_agent_code(
+    client: AsyncClient,
+    role: str,
+    capabilities: list[str],
+) -> str:
+    async with SessionLocal() as session:
+        slot = (
+            await session.execute(
+                select(AgentSlot).where(
+                    AgentSlot.tenant_id == DEMO_TENANT_ID,
+                    AgentSlot.role == role,
+                )
+            )
+        ).scalar_one_or_none()
+        if slot is None:
+            session.add(
+                AgentSlot(
+                    tenant_id=DEMO_TENANT_ID,
+                    role=role,
+                    display_name=role.upper(),
+                    job="Test",
+                    program="Test locale",
+                    capabilities=json.dumps(capabilities),
+                    enrollment_code="",
+                )
+            )
+            await session.commit()
+    owner = await login(client)
+    issued = await client.post(f"/agents/{role}/enrollment", headers=auth(owner))
+    assert issued.status_code == 200, issued.text
+    return issued.json()["enrollment_code"]
+
+
+async def enroll_test_agent(
+    client: AsyncClient,
+    *,
+    role: str,
+    capabilities: list[str],
+    platform: str = "macos",
+) -> tuple[bytes, str, str]:
+    code = await issue_agent_code(client, role, capabilities)
+    private, public = generate_device_keypair()
+    enrolled = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": code,
+            "agent_id": role,
+            "hostname": f"{role}-host",
+            "public_key": b64e(public),
+            "capabilities": capabilities,
+            "platform": platform,
+        },
+    )
+    assert enrolled.status_code == 200, enrolled.text
+    return private, enrolled.json()["device_id"], code
+
+
+def signed_ingest(
+    private_key: bytes,
+    *,
+    device_id: str,
+    task_id: str,
+    ok: bool,
+    result: dict | None = None,
+    error: str | None = None,
+    evidence: list[dict] | None = None,
+) -> dict:
+    envelope = {
+        "device_id": device_id,
+        "task_id": task_id,
+        "nonce": uuid4().hex,
+        "sent_at": int(time.time()),
+        "ok": ok,
+        "result": result or {},
+        "error": error,
+        "evidence": evidence or [],
+    }
+    return {
+        **envelope,
+        "signature": b64e(sign_bytes(private_key, canonical_json_bytes(envelope))),
+    }
+
+
+def signed_agent_request(private_key: bytes, path: str, payload: dict) -> dict:
+    envelope = {
+        **payload,
+        "nonce": uuid4().hex,
+        "sent_at": int(time.time()),
+    }
+    return {
+        **envelope,
+        "signature": b64e(sign_bytes(private_key, agent_http_payload(path, envelope))),
+    }
 
 
 @pytest.fixture
@@ -160,23 +260,11 @@ async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncC
         files={"file": ("accessi.csv", csv_data, "text/csv")},
     )
     assert imported.status_code == 200
-    code = f"LEASE-{uuid4()}"
-    async with SessionLocal() as session:
-        session.add(EnrollmentCode(tenant_id=DEMO_TENANT_ID, code=code, used=False))
-        await session.commit()
-    private, public = generate_device_keypair()
-    enrolled = await client.post(
-        "/enrollment/redeem",
-        json={
-            "enrollment_code": code,
-            "agent_id": f"pc-lease-{uuid4()}",
-            "hostname": "lease-host",
-            "public_key": b64e(public),
-            "capabilities": ["portal_open"],
-            "platform": "macos",
-        },
+    private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-lease-{uuid4()}",
+        capabilities=["portal_open"],
     )
-    device_id = enrolled.json()["device_id"]
     async with SessionLocal() as session:
         task = Task(
             tenant_id=DEMO_TENANT_ID,
@@ -195,8 +283,15 @@ async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncC
         session.add(task)
         await session.commit()
         task_id = task.id
-    signature = b64e(sign_bytes(private, task_id.encode()))
-    payload = {"device_id": device_id, "task_id": task_id, "signature": signature}
+    path = "/agent/credential-lease"
+    payload = signed_agent_request(
+        private,
+        path,
+        {"device_id": device_id, "task_id": task_id},
+    )
+    tampered = {**payload, "task_id": str(uuid4())}
+    assert (await client.post(path, json=tampered)).status_code == 401
+    assert (await client.post("/agent/demo-invoice/prepare", json=payload)).status_code == 401
     lease = await client.post("/agent/credential-lease", json=payload)
     assert lease.status_code == 200
     assert lease.json()["username"] == "lease@example.it"
@@ -207,57 +302,138 @@ async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncC
 
 @pytest.mark.asyncio
 async def test_enrollment_replay_and_revoke(client: AsyncClient):
-    _private, public = generate_device_keypair()
-    first = await client.post(
-        "/enrollment/redeem",
-        json={
-            "enrollment_code": settings.kreluna_enrollment_code,
-            "agent_id": "pc-test-enroll",
-            "hostname": "test-host",
-            "public_key": b64e(public),
-            "capabilities": ["notepad_write"],
-            "platform": "linux",
-        },
+    role = f"pc-test-enroll-{uuid4()}"
+    _private, device_id, code = await enroll_test_agent(
+        client,
+        role=role,
+        capabilities=["notepad_write"],
+        platform="linux",
     )
-    assert first.status_code == 200
-    device_id = first.json()["device_id"]
+    _other_private, other_public = generate_device_keypair()
     replay = await client.post(
         "/enrollment/redeem",
         json={
-            "enrollment_code": settings.kreluna_enrollment_code,
-            "agent_id": "pc-test-enroll-2",
+            "enrollment_code": code,
+            "agent_id": role,
             "hostname": "test-host-2",
-            "public_key": b64e(public),
+            "public_key": b64e(other_public),
             "capabilities": ["notepad_write"],
         },
     )
     assert replay.status_code == 409
+    async with SessionLocal() as session:
+        stored = (
+            await session.execute(
+                select(EnrollmentCode).where(EnrollmentCode.used_by_device_id == device_id)
+            )
+        ).scalar_one()
+        assert stored.code != code
+        assert stored.code.startswith("sha256:")
     token = await login(client)
     revoked = await client.post(f"/devices/{device_id}/revoke", headers=auth(token))
     assert revoked.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_owner_can_pause_and_resume_one_agent(client: AsyncClient):
-    suffix = str(uuid4())
-    code = f"KRELUNA-PAUSE-{suffix}"
-    async with SessionLocal() as session:
-        session.add(EnrollmentCode(tenant_id=DEMO_TENANT_ID, code=code))
-        await session.commit()
+async def test_predictable_and_expired_enrollment_codes_are_rejected(client: AsyncClient):
+    _, public = generate_device_keypair()
+    predictable = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": "KRELUNA-PC-FATTURE",
+            "agent_id": "pc-fatture",
+            "hostname": "intruso",
+            "public_key": b64e(public),
+            "capabilities": ["invoice_prepare_demo"],
+        },
+    )
+    assert predictable.status_code == 401
 
-    _private, public = generate_device_keypair()
-    enrolled = await client.post(
+    role = f"pc-expired-{uuid4()}"
+    code = await issue_agent_code(client, role, ["notepad_write"])
+    async with SessionLocal() as session:
+        record = (
+            await session.execute(
+                select(EnrollmentCode).where(EnrollmentCode.agent_id == role)
+            )
+        ).scalar_one()
+        record.expires_at = utcnow() - timedelta(seconds=1)
+        await session.commit()
+    expired = await client.post(
         "/enrollment/redeem",
         json={
             "enrollment_code": code,
-            "agent_id": f"pc-pause-{suffix}",
-            "hostname": "pause-test-host",
+            "agent_id": role,
+            "hostname": "troppo-tardi",
             "public_key": b64e(public),
             "capabilities": ["notepad_write"],
         },
     )
-    assert enrolled.status_code == 200
-    device_id = enrolled.json()["device_id"]
+    assert expired.status_code == 410
+
+
+@pytest.mark.asyncio
+async def test_agent_result_signature_covers_payload_assignment_and_nonce(client: AsyncClient):
+    role = f"pc-signed-result-{uuid4()}"
+    private, device_id, _code = await enroll_test_agent(
+        client,
+        role=role,
+        capabilities=["notepad_write"],
+    )
+    other_private, other_device_id, _other_code = await enroll_test_agent(
+        client,
+        role=f"pc-other-result-{uuid4()}",
+        capabilities=["notepad_write"],
+    )
+    async with SessionLocal() as session:
+        task = Task(
+            tenant_id=DEMO_TENANT_ID,
+            requested_by="22222222-2222-2222-2222-222222222222",
+            goal="Risultato firmato",
+            capability="notepad_write",
+            args_json="{}",
+            risk="low",
+            status="assigned",
+            idempotency_key=f"signed-result-{uuid4()}",
+            assigned_device_id=device_id,
+        )
+        session.add(task)
+        await session.commit()
+        task_id = task.id
+
+    payload = signed_ingest(
+        private,
+        device_id=device_id,
+        task_id=task_id,
+        ok=True,
+        result={"text": "originale"},
+    )
+    tampered = {**payload, "result": {"text": "alterato"}}
+    assert (await client.post("/agent/ingest", json=tampered)).status_code == 401
+
+    wrong_device = signed_ingest(
+        other_private,
+        device_id=other_device_id,
+        task_id=task_id,
+        ok=True,
+        result={"text": "rubato"},
+    )
+    assert (await client.post("/agent/ingest", json=wrong_device)).status_code == 403
+
+    accepted = await client.post("/agent/ingest", json=payload)
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "completed"
+    assert (await client.post("/agent/ingest", json=payload)).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_owner_can_pause_and_resume_one_agent(client: AsyncClient):
+    suffix = str(uuid4())
+    _private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-pause-{suffix}",
+        capabilities=["notepad_write"],
+    )
     token = await login(client)
 
     paused = await client.post(f"/agents/{device_id}/pause", headers=auth(token))
@@ -277,39 +453,36 @@ async def test_owner_can_pause_and_resume_one_agent(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_studio_slot_agent_can_reinstall(client: AsyncClient):
-    _, public = generate_device_keypair()
-    first = await client.post(
-        "/enrollment/redeem",
-        json={
-            "enrollment_code": "KRELUNA-PC-FATTURE",
-            "agent_id": "pc-fatture",
-            "hostname": "pc-fatture-1",
-            "public_key": b64e(public),
-            "capabilities": ["invoice_prepare_demo"],
-            "platform": "windows",
-        },
+async def test_reinstall_requires_owner_revoke_and_a_fresh_code(client: AsyncClient):
+    role = f"pc-reinstall-{uuid4()}"
+    _private, device_id, first_code = await enroll_test_agent(
+        client,
+        role=role,
+        capabilities=["invoice_prepare_demo"],
+        platform="windows",
     )
-    assert first.status_code == 200
-    device_id = first.json()["device_id"]
     _, public2 = generate_device_keypair()
     again = await client.post(
         "/enrollment/redeem",
         json={
-            "enrollment_code": "KRELUNA-PC-FATTURE",
-            "agent_id": "pc-fatture",
+            "enrollment_code": first_code,
+            "agent_id": role,
             "hostname": "pc-fatture-1",
             "public_key": b64e(public2),
             "capabilities": ["invoice_prepare_demo"],
             "platform": "windows",
         },
     )
-    assert again.status_code == 200
-    assert again.json()["device_id"] == device_id
+    assert again.status_code == 409
+    owner = await login(client)
+    blocked_code = await client.post(f"/agents/{role}/enrollment", headers=auth(owner))
+    assert blocked_code.status_code == 409
+    assert (await client.post(f"/devices/{device_id}/revoke", headers=auth(owner))).status_code == 200
+    replacement_code = await issue_agent_code(client, role, ["invoice_prepare_demo"])
     wrong = await client.post(
         "/enrollment/redeem",
         json={
-            "enrollment_code": "KRELUNA-PC-FATTURE",
+            "enrollment_code": replacement_code,
             "agent_id": "pc-pagamenti",
             "hostname": "altro",
             "public_key": b64e(public2),
@@ -318,6 +491,19 @@ async def test_studio_slot_agent_can_reinstall(client: AsyncClient):
         },
     )
     assert wrong.status_code == 400
+    replacement = await client.post(
+        "/enrollment/redeem",
+        json={
+            "enrollment_code": replacement_code,
+            "agent_id": role,
+            "hostname": "pc-fatture-1",
+            "public_key": b64e(public2),
+            "capabilities": ["invoice_prepare_demo"],
+            "platform": "windows",
+        },
+    )
+    assert replacement.status_code == 200
+    assert replacement.json()["device_id"] == device_id
 
 
 @pytest.mark.asyncio
@@ -511,22 +697,11 @@ async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient
     """Dopo Ferma il lavoro non si perde: torna in coda e riparte con Riprendi."""
 
     token = await login(client)
-    async with SessionLocal() as session:
-        session.add(EnrollmentCode(tenant_id=DEMO_TENANT_ID, code="ONCE-FERMA", used=False))
-        await session.commit()
-    private, public = generate_device_keypair()
-    enrolled = await client.post(
-        "/enrollment/redeem",
-        json={
-            "enrollment_code": "ONCE-FERMA",
-            "agent_id": "pc-ferma",
-            "hostname": "pc-ferma",
-            "public_key": b64e(public),
-            "capabilities": ["visure_prepare"],
-            "platform": "macos",
-        },
+    private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-ferma-{uuid4()}",
+        capabilities=["visure_prepare"],
     )
-    device_id = enrolled.json()["device_id"]
     planned = await client.post(
         "/chat",
         headers=auth(token),
@@ -541,15 +716,13 @@ async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient
 
     refused = await client.post(
         "/agent/ingest",
-        json={
-            "device_id": device_id,
-            "task_id": task_id,
-            "signature": b64e(sign_bytes(private, task_id.encode())),
-            "ok": False,
-            "result": {},
-            "error": "AGENT_KILLED",
-            "evidence": [],
-        },
+        json=signed_ingest(
+            private,
+            device_id=device_id,
+            task_id=task_id,
+            ok=False,
+            error="AGENT_KILLED",
+        ),
     )
     assert refused.status_code == 200
     assert refused.json()["status"] == "queued"
@@ -567,23 +740,11 @@ async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient
 @pytest.mark.asyncio
 async def test_approval_token_single_use_and_kill(client: AsyncClient, planned_by_test_model):
     token = await login(client)
-    async with SessionLocal() as session:
-        session.add(
-            EnrollmentCode(tenant_id=DEMO_TENANT_ID, code="ONCE-APPROVAL", used=False),
-        )
-        await session.commit()
-    private, public = generate_device_keypair()
-    enrolled = await client.post(
-        "/enrollment/redeem",
-        json={
-            "enrollment_code": "ONCE-APPROVAL",
-            "agent_id": "pc-approval",
-            "hostname": "pc-approval",
-            "public_key": b64e(public),
-            "capabilities": ["invoice_prepare_demo", "invoice_submit_demo"],
-        },
+    private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-approval-{uuid4()}",
+        capabilities=["invoice_prepare_demo", "invoice_submit_demo"],
     )
-    device_id = enrolled.json()["device_id"]
     planned = await client.post(
         "/chat",
         headers=auth(token),
@@ -607,17 +768,17 @@ async def test_approval_token_single_use_and_kill(client: AsyncClient, planned_b
         draft_id = draft.id
         task = (await session.execute(select(Task).where(Task.id == task_id, Task.tenant_id == DEMO_TENANT_ID))).scalar_one()
         task.assigned_device_id = device_id
+        task.status = "assigned"
         await session.commit()
 
-    signature = b64e(sign_bytes(private, task_id.encode()))
     ingest = await client.post(
         "/agent/ingest",
-        json={
-            "device_id": device_id,
-            "task_id": task_id,
-            "signature": signature,
-            "ok": True,
-            "result": {
+        json=signed_ingest(
+            private,
+            device_id=device_id,
+            task_id=task_id,
+            ok=True,
+            result={
                 "observed": {
                     "draft_id": draft_id,
                     "client": "Bianchi",
@@ -630,8 +791,7 @@ async def test_approval_token_single_use_and_kill(client: AsyncClient, planned_b
                 "expected": {"client": "Bianchi", "net": 200.0, "vat": 44.0, "total": 244.0, "status": "draft"},
                 "verification": {"ok": True, "checks": {}},
             },
-            "evidence": [],
-        },
+        ),
     )
     assert ingest.json()["status"] == "waiting_approval"
     approvals = await client.get("/approvals", headers=auth(token))

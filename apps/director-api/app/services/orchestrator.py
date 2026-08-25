@@ -198,7 +198,7 @@ async def kill_all(session: AsyncSession, tenant_id: str, actor: str) -> int:
     for task in running:
         task.status = "cancelled"
         task.error = "kill_switch"
-    await hub.broadcast_agents({"type": "kill", "reason": "FERMA TUTTO"})
+    await hub.broadcast_agents(tenant_id, {"type": "kill", "reason": "FERMA TUTTO"})
     await write_audit(
         session,
         tenant_id=tenant_id,
@@ -207,5 +207,5 @@ async def kill_all(session: AsyncSession, tenant_id: str, actor: str) -> int:
         result="ok",
         detail=f"devices={count}",
     )
-    await hub.broadcast_dashboard({"type": "kill", "tenant_id": tenant_id})
+    await hub.broadcast_dashboard(tenant_id, {"type": "kill", "tenant_id": tenant_id})
     return count

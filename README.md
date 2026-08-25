@@ -21,7 +21,8 @@ portale esterno.
 Il Director è autonomo: gli Agent sono opzionali e si installano separatamente
 quando vuoi collegare i PC operativi.
 
-Login demo: `andrea@studio.demo` / `demo`
+L'app installata crea al primo avvio credenziali personali casuali e le mostra una
+sola volta. Le credenziali `*.demo` esistono soltanto nell'ambiente di sviluppo.
 
 Per ricreare gli zip:
 
@@ -106,6 +107,13 @@ Poi apri [http://127.0.0.1:5173](http://127.0.0.1:5173)
 Il programma controlla le release ufficiali e avvisa se c’è una versione nuova. Su Mac,
 da **Aggiornamento → Installa ora**, verifica il pacchetto, sostituisce l’app in
 Applicazioni e si riapre; i dati restano. Dettagli: `docs/INSTALL.md`.
+
+## Collegare un Agent
+
+Sulla scheda gialla **Da installare** premi l'interruttore: il Director genera un
+codice casuale valido 20 minuti e una sola volta. Inseriscilo nell'installer Mac o
+Windows del PC scelto. Il Director conserva soltanto l'impronta del codice. Un PC
+già collegato non può essere sostituito finché il titolare non lo revoca.
 
 ## Test
 

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from agent.main import AgentApp
+from agent.safety import SafetyState
 from kreluna_shared.crypto import generate_device_keypair
 
 
@@ -13,7 +14,19 @@ def agent_without_network() -> AgentApp:
     private, _ = generate_device_keypair()
     app.identity = SimpleNamespace(private_key=private, device_id=str(uuid4()))
     app.director = "http://127.0.0.1:8080"
+    app.safety = SafetyState()
     return app
+
+
+class OwnedProcess:
+    def __init__(self) -> None:
+        self.terminated = False
+
+    def poll(self):
+        return 0 if self.terminated else None
+
+    def terminate(self) -> None:
+        self.terminated = True
 
 
 @pytest.mark.asyncio
@@ -45,10 +58,11 @@ async def test_slow_screen_work_does_not_stop_the_heartbeat():
 async def test_async_handlers_still_work():
     app = agent_without_network()
 
-    async def handler(client, director_url, device_id, task_id, signature) -> dict:
+    async def handler(client, director_url, device_id, task_id, sign_request) -> dict:
         assert client is not None
         assert director_url.startswith("http")
-        assert device_id and task_id and signature
+        assert device_id and task_id
+        assert sign_request("/agent/test", {"device_id": device_id})["signature"]
         return {"ok": True, "async": True}
 
     result = await app._invoke(handler, {}, str(uuid4()))
@@ -64,3 +78,25 @@ async def test_handler_only_gets_the_arguments_it_declares():
 
     result = await app._invoke(handler, {"client_name": "Andrea Gadducci", "roba_in_piu": 1}, str(uuid4()))
     assert result["client_name"] == "Andrea Gadducci"
+
+
+def test_kill_and_task_cancel_stop_owned_ui_processes():
+    safety = SafetyState()
+    killed_process = OwnedProcess()
+    safety.register_process(killed_process)
+    safety.begin_task("task-1")
+
+    safety.kill()
+
+    assert killed_process.terminated is True
+    with pytest.raises(PermissionError, match="AGENT_KILLED"):
+        safety.assert_task_active("task-1")
+
+    safety.resume()
+    cancelled_process = OwnedProcess()
+    safety.register_process(cancelled_process)
+    safety.cancel_task("task-2")
+
+    assert cancelled_process.terminated is True
+    with pytest.raises(PermissionError, match="TASK_CANCELLED"):
+        safety.assert_task_active("task-2")

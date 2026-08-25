@@ -15,12 +15,14 @@ from app.models import Device, Task, utcnow
 class ConnectionHub:
     def __init__(self) -> None:
         self.agents: dict[str, WebSocket] = {}
-        self.dashboards: list[WebSocket] = []
+        self.agent_tenants: dict[str, str] = {}
+        self.dashboards: dict[WebSocket, str] = {}
 
-    async def register_agent(self, device_id: str, ws: WebSocket) -> None:
+    async def register_agent(self, device_id: str, tenant_id: str, ws: WebSocket) -> None:
         self.agents[device_id] = ws
+        self.agent_tenants[device_id] = tenant_id
 
-    def drop_agent(self, device_id: str, ws: WebSocket | None = None) -> None:
+    def drop_agent(self, device_id: str, ws: WebSocket | None = None) -> bool:
         """Rimuove solo la connessione che si è davvero chiusa.
 
         Durante una riconnessione la nuova WebSocket può essere registrata prima
@@ -31,6 +33,9 @@ class ConnectionHub:
         current = self.agents.get(device_id)
         if ws is None or current is ws:
             self.agents.pop(device_id, None)
+            self.agent_tenants.pop(device_id, None)
+            return True
+        return False
 
     async def send_agent(self, device_id: str, payload: dict) -> bool:
         ws = self.agents.get(device_id)
@@ -39,9 +44,14 @@ class ConnectionHub:
         await ws.send_json(payload)
         return True
 
-    async def broadcast_agents(self, payload: dict) -> int:
+    async def broadcast_agents(self, tenant_id: str, payload: dict) -> int:
         sent = 0
-        for ws in list(self.agents.values()):
+        sockets = [
+            self.agents[device_id]
+            for device_id, owner in list(self.agent_tenants.items())
+            if owner == tenant_id and device_id in self.agents
+        ]
+        for ws in sockets:
             try:
                 await ws.send_json(payload)
                 sent += 1
@@ -49,16 +59,23 @@ class ConnectionHub:
                 continue
         return sent
 
-    async def broadcast_dashboard(self, payload: dict) -> None:
+    def register_dashboard(self, tenant_id: str, ws: WebSocket) -> None:
+        self.dashboards[ws] = tenant_id
+
+    def drop_dashboard(self, ws: WebSocket) -> None:
+        self.dashboards.pop(ws, None)
+
+    async def broadcast_dashboard(self, tenant_id: str, payload: dict) -> None:
         stale: list[WebSocket] = []
-        for ws in self.dashboards:
+        for ws, owner in list(self.dashboards.items()):
+            if owner != tenant_id:
+                continue
             try:
                 await ws.send_json(payload)
             except Exception:
                 stale.append(ws)
         for ws in stale:
-            if ws in self.dashboards:
-                self.dashboards.remove(ws)
+            self.drop_dashboard(ws)
 
 
 hub = ConnectionHub()

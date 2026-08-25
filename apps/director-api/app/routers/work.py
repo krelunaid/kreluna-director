@@ -200,7 +200,10 @@ async def chat(
         created.append(task)
     dispatched = await dispatch_queued(session)
     await session.commit()
-    await hub.broadcast_dashboard({"type": "tasks", "tenant_id": actor.tenant_id})
+    await hub.broadcast_dashboard(
+        actor.tenant_id,
+        {"type": "tasks", "tenant_id": actor.tenant_id},
+    )
     return {
         "ok": True,
         "summary": plan.summary + _waiting_pc_note(created),
@@ -270,7 +273,10 @@ async def cancel_task(
         return {"ok": True, "status": task.status}
     task.status = "cancelled"
     if task.assigned_device_id:
-        await hub.send_agent(task.assigned_device_id, {"type": "kill", "reason": "task_cancel"})
+        await hub.send_agent(
+            task.assigned_device_id,
+            {"type": "cancel_task", "task_id": task.id, "reason": "task_cancel"},
+        )
     await session.commit()
     return {"ok": True, "status": "cancelled"}
 

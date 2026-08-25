@@ -69,18 +69,85 @@ def _managed_ai_token() -> str:
     return value
 
 
+def _initial_owner() -> dict[str, str]:
+    """Create one strong local owner account instead of shipping demo credentials."""
+
+    path = SUPPORT / "owner-access.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        data = {}
+    email = str(data.get("email") or "titolare@kreluna.local").strip().lower()
+    password = str(data.get("password") or "")
+    if len(password) < 20:
+        password = secrets.token_urlsafe(24)
+        path.write_text(
+            json.dumps({"email": email, "password": password}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return {"email": email, "password": password}
+
+
 def prepare_env() -> None:
     SUPPORT.mkdir(parents=True, exist_ok=True)
     (SUPPORT / "data").mkdir(parents=True, exist_ok=True)
+    owner = _initial_owner()
+    os.environ.setdefault("DIRECTOR_ENV", "desktop")
     os.environ.setdefault("DIRECTOR_DATABASE_URL", f"sqlite+aiosqlite:///{SUPPORT / 'data' / 'kreluna.db'}")
     os.environ.setdefault("DIRECTOR_EVIDENCE_DIR", str(SUPPORT / "data" / "evidence"))
+    os.environ.setdefault("DIRECTOR_SIGNING_SEED", _local_secret("signing.seed"))
+    os.environ.setdefault("DIRECTOR_SESSION_SECRET", _local_secret("session.key"))
+    os.environ.setdefault("DIRECTOR_EVIDENCE_KEY", _local_secret("evidence.key"))
     os.environ.setdefault("DIRECTOR_CREDENTIAL_KEY", _local_secret("credential.key"))
+    os.environ.setdefault("DIRECTOR_BOOTSTRAP_EMAIL", owner["email"])
+    os.environ.setdefault("DIRECTOR_BOOTSTRAP_PASSWORD", owner["password"])
+    os.environ.setdefault("DIRECTOR_BOOTSTRAP_NAME", "Titolare studio")
     managed_token = _managed_ai_token()
     if managed_token:
         os.environ.setdefault("KRELUNA_MANAGED_AI_TOKEN", managed_token)
     os.environ.setdefault("KRELUNA_DIRECTOR_URL", API_URL)
     sys.path.insert(0, str(ROOT / "packages" / "kreluna-shared" / "src"))
     sys.path.insert(0, str(ROOT / "apps" / "director-api"))
+
+
+def show_initial_access_once() -> None:
+    stamp = SUPPORT / "owner-access-shown"
+    if stamp.exists():
+        return
+    owner = _initial_owner()
+    text = (
+        "Credenziali iniziali Kreluna\n\n"
+        f"Email: {owner['email']}\nPassword: {owner['password']}\n\n"
+        "Conservale in un posto sicuro. Non sono credenziali demo."
+    )
+    if sys.platform == "darwin":
+        subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'on run argv\ndisplay dialog (item 1 of argv) buttons {"Ho salvato"} default button "Ho salvato" with title "Kreluna Director"\nend run',
+                text,
+            ],
+            check=False,
+        )
+    elif sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(0, text, "Kreluna Director", 0x40)
+        except Exception:
+            return
+    else:
+        return
+    stamp.write_text("shown\n", encoding="utf-8")
+    try:
+        stamp.chmod(0o600)
+    except OSError:
+        pass
 
 
 def port_open(port: int) -> bool:
@@ -277,9 +344,9 @@ def main() -> int:
                 cwd=str(ROOT),
                 env=env,
             )
-        notify("Kreluna è aperta. Entra con andrea@studio.demo / demo")
+        show_initial_access_once()
+        notify("Kreluna è aperta. Usa le credenziali personali della tua installazione.")
         print("Kreluna Director:", url)
-        print("Login: andrea@studio.demo / demo")
         check_updates()
         try:
             open_window(url)

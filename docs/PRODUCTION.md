@@ -6,11 +6,17 @@ Questo prototipo **non è certificato** ISO e **non è candidato** all’uso fis
 
 Con `DIRECTOR_ENV=production` l'applicazione non parte finché non sono configurati
 quattro segreti distinti di almeno 32 caratteri (`DIRECTOR_SIGNING_SEED`,
-`DIRECTOR_SESSION_SECRET`, `DIRECTOR_EVIDENCE_KEY`, `KRELUNA_ENROLLMENT_CODE`) e le
+`DIRECTOR_SESSION_SECRET`, `DIRECTOR_EVIDENCE_KEY`, `DIRECTOR_CREDENTIAL_KEY`) e le
 credenziali iniziali del titolare (`DIRECTOR_BOOTSTRAP_EMAIL` e una
 `DIRECTOR_BOOTSTRAP_PASSWORD` di almeno 14 caratteri). In produzione non vengono
 creati account demo. Le password sono memorizzate con Argon2id; gli hash SHA-256
 esistenti vengono migrati ad Argon2id al primo login valido.
+
+Anche la modalità desktop installata applica lo stesso fail-closed. Al primo avvio
+genera quattro segreti distinti per installazione, con permessi locali `0600`, e
+credenziali titolare casuali. I codici Agent non sono segreti globali di configurazione:
+sono token casuali, monouso, validi 20 minuti, legati a tenant e ruolo e conservati
+nel database soltanto come digest.
 
 ## Provider IA e diagnostica
 
@@ -27,11 +33,14 @@ tutti i task presenti nel database.
 
 Checklist coperta in codice/documenti:
 
-- [x] Kill switch
+- [x] Kill switch tenant-scoped e cancellazione cooperativa tra i passi Agent
 - [x] Cross-tenant deny (test)
 - [x] Grant firmati, nonce, device-bound
-- [x] Approval token monouso
-- [x] Audit + redaction
+- [x] WebSocket Agent challenge-response; dashboard autenticata e hub per tenant
+- [x] Risultati e richieste HTTP Agent firmati per intero, legati all'endpoint e
+      al PC assegnato, con timestamp e anti-replay
+- [ ] Approval legata a payload congelato e hash immutabile
+- [ ] Audit append-only protetto dal database
 - [x] Retention evidenze
 - [x] Licenza cloud ACTIVE/GRACE/SUSPENDED
 - [x] Installer Agent Windows (script)

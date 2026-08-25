@@ -9,6 +9,6 @@ Solo Mac con chip Apple (M1, M2, M3, M4). Niente Intel.
 3. Menu Mela → Impostazioni di Sistema → Privacy e sicurezza
    → in basso → Apri comunque.
 
-Login: andrea@studio.demo / demo
+Al primo avvio Kreluna mostra le credenziali personali una sola volta: conservale.
 Non serve Python.
 Kreluna si apre in una finestra propria: Google Chrome e Safari non servono.

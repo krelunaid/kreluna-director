@@ -29,8 +29,12 @@ Dettagli: `docs/WINDOWS.md`.
 
 ## Agent (programma a parte dal Director)
 
-- **Mac:** `Kreluna-Agent-Mac.zip` → trascina **Kreluna Agent** in Applicazioni → scegli il ruolo (PC-FATTURE, …)
-- **Windows:** `Kreluna-Agenti-Windows.zip` → **Installa PC-FATTURE.bat** (un file per PC)
+1. Nel Director premi l'interruttore della scheda gialla **Da installare** e copia
+   il codice monouso. Il codice vale 20 minuti ed è legato a quel preciso ruolo.
+2. **Mac:** `Kreluna-Agent-Mac.zip` → trascina **Kreluna Agent** in Applicazioni →
+   scegli lo stesso ruolo e incolla il codice.
+3. **Windows:** `Kreluna-Agenti-Windows.zip` → **Installa PC-FATTURE.bat** (o il
+   ruolo scelto) → incolla il codice quando viene richiesto.
 
 Un Agent per computer. Non è il cervello.
 
@@ -62,8 +66,8 @@ cambiare questa configurazione.
 ## Accesso
 
 - Si apre da sola la finestra **Kreluna Director**; l'indirizzo locale resta interno
-- Email: `andrea@studio.demo`
-- Password: `demo`
+- Al primo avvio il programma mostra email e password personali casuali una sola volta
+- Conservale: il pacchetto installabile non contiene account o password demo
 
 ## Aggiornamenti (anche se è già installata)
 

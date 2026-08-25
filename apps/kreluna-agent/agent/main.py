@@ -5,13 +5,23 @@ import base64
 import inspect
 import json
 import os
+import secrets
+import time
 from pathlib import Path
 from uuid import UUID
 
 import httpx
 import websockets
 from kreluna_shared.agents import capabilities_for_role
-from kreluna_shared.crypto import b64d, b64e, sign_bytes, verify_grant
+from kreluna_shared.crypto import (
+    agent_challenge_payload,
+    agent_http_payload,
+    b64d,
+    b64e,
+    canonical_json_bytes,
+    sign_bytes,
+    verify_grant,
+)
 
 from agent.capabilities import CAPABILITY_ALLOWLIST
 from agent.identity import AgentIdentity
@@ -38,10 +48,13 @@ class AgentApp:
         )
         self.director = env("AGENT_DIRECTOR_URL", "http://127.0.0.1:8080").rstrip("/")
         self.wss = env("AGENT_DIRECTOR_WSS", "ws://127.0.0.1:8080/ws/agent")
-        self.enroll_code = env("KRELUNA_ENROLLMENT_CODE", "KRELUNA-DEV-ENROLL")
+        enrollment_path = env("KRELUNA_ENROLLMENT_CODE_FILE")
+        self.enroll_code_path = Path(enrollment_path) if enrollment_path else None
+        self.enroll_code = env("KRELUNA_ENROLLMENT_CODE") or self._read_enrollment_code()
         self.safety = SafetyState()
         self.server_pubkey: bytes | None = None
         self.used_nonces: set[str] = set()
+        self.task_jobs: dict[str, asyncio.Task] = {}
         self.role_caps = capabilities_for_role(self.identity.agent_id)
         if not self.role_caps:
             self.role_caps = ["notepad_write"]
@@ -55,7 +68,10 @@ class AgentApp:
 
     async def ensure_enrolled(self, client: httpx.AsyncClient) -> None:
         if self.identity.device_id:
+            self._discard_enrollment_code()
             return
+        if not self.enroll_code:
+            raise RuntimeError("Serve un nuovo codice monouso generato dal Director")
         response = await client.post(
             f"{self.director}/enrollment/redeem",
             json={
@@ -72,6 +88,24 @@ class AgentApp:
         response.raise_for_status()
         data = response.json()
         self.identity.save_enrollment(data["device_id"], data["tenant_id"])
+        self._discard_enrollment_code()
+
+    def _read_enrollment_code(self) -> str:
+        if self.enroll_code_path is None:
+            return ""
+        try:
+            return self.enroll_code_path.read_text(encoding="utf-8").strip()
+        except (FileNotFoundError, OSError, UnicodeDecodeError):
+            return ""
+
+    def _discard_enrollment_code(self) -> None:
+        self.enroll_code = ""
+        os.environ.pop("KRELUNA_ENROLLMENT_CODE", None)
+        if self.enroll_code_path is not None:
+            try:
+                self.enroll_code_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     async def loop(self) -> None:
         while True:
@@ -94,6 +128,22 @@ class AgentApp:
 
     async def session(self) -> None:
         async with websockets.connect(self.wss, ping_interval=10, ping_timeout=10) as ws:
+            challenge_message = json.loads(await ws.recv())
+            if challenge_message.get("type") != "challenge":
+                raise EnrollmentRejectedError("Il Director non ha autenticato la connessione")
+            challenge = str(challenge_message.get("challenge") or "")
+            if not challenge:
+                raise EnrollmentRejectedError("Challenge Agent mancante")
+            signature = b64e(
+                sign_bytes(
+                    self.identity.private_key,
+                    agent_challenge_payload(
+                        str(self.identity.device_id),
+                        self.identity.agent_id,
+                        challenge,
+                    ),
+                )
+            )
             await ws.send(
                 json.dumps(
                     {
@@ -104,6 +154,8 @@ class AgentApp:
                         "display_name": self.identity.display_name,
                         "capabilities": self.role_caps,
                         "platform": self.identity.platform,
+                        "challenge": challenge,
+                        "signature": signature,
                     }
                 )
             )
@@ -134,26 +186,52 @@ class AgentApp:
             message = json.loads(raw)
             msg_type = message.get("type")
             if msg_type == "kill":
-                self.safety.killed = True
-                self.safety.active_task_id = None
-                await ws.send(json.dumps({"type": "killed", "device_id": self.identity.device_id}))
+                active_task_id = self.safety.active_task_id
+                self.safety.kill()
+                self._cancel_jobs()
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "killed",
+                            "device_id": self.identity.device_id,
+                            "active_task_id": active_task_id,
+                        }
+                    )
+                )
                 print("[kreluna-agent] KILLED", flush=True)
             elif msg_type == "pause":
-                self.safety.paused = True
+                self.safety.pause()
+                self._cancel_jobs()
             elif msg_type == "resume":
-                self.safety.killed = False
-                self.safety.paused = False
+                self.safety.resume()
                 print("[kreluna-agent] RESUMED", flush=True)
             elif msg_type == "task":
-                asyncio.create_task(self.run_task(message))
-            elif msg_type == "error" and message.get("error") == "DEVICE_REVOKED_OR_UNKNOWN":
+                task_id = str(message.get("task_id") or "")
+                if task_id and task_id not in self.task_jobs:
+                    job = asyncio.create_task(self.run_task(message))
+                    self.task_jobs[task_id] = job
+                    job.add_done_callback(lambda _job, key=task_id: self.task_jobs.pop(key, None))
+            elif msg_type == "cancel_task":
+                task_id = str(message.get("task_id") or "")
+                self.safety.cancel_task(task_id)
+                self._cancel_jobs(task_id)
+            elif msg_type == "error" and message.get("error") in {
+                "DEVICE_REVOKED_OR_UNKNOWN",
+                "AGENT_AUTH_INVALID",
+                "AGENT_AUTH_REQUIRED",
+            }:
                 raise EnrollmentRejectedError("Il Director non riconosce più questo Agent")
+
+    def _cancel_jobs(self, task_id: str | None = None) -> None:
+        for current_id, job in list(self.task_jobs.items()):
+            if task_id is None or current_id == task_id:
+                job.cancel()
 
     async def run_task(self, message: dict) -> None:
         task_id = message["task_id"]
         capability = message["capability"]
         try:
-            self.safety.assert_not_killed()
+            self.safety.assert_task_active(task_id)
             if not self.identity.device_id or self.server_pubkey is None:
                 raise PermissionError("NOT_READY")
             verify_grant(
@@ -172,21 +250,27 @@ class AgentApp:
             self.safety.active_task_id = task_id
             args = dict(message.get("args") or {})
             async with self.safety.gui_lock:
+                self.safety.begin_task(task_id)
+                self.safety.assert_task_active(task_id)
                 result = await self._invoke(handler, args, task_id)
+                self.safety.assert_task_active(task_id)
             await self.report(task_id, True, result, None)
+        except asyncio.CancelledError:
+            print(f"[kreluna-agent] task {task_id} -> interrotto", flush=True)
         except Exception as exc:
             await self.report(task_id, False, {}, str(exc))
         finally:
-            self.safety.active_task_id = None
+            self.safety.finish_task(task_id)
 
     async def _invoke(self, handler, args: dict, task_id: str):
-        signature = b64e(sign_bytes(self.identity.private_key, task_id.encode()))
         extra = {
             "client": httpx.AsyncClient(),
             "director_url": self.director,
             "device_id": self.identity.device_id,
             "task_id": task_id,
-            "signature": signature,
+            "sign_request": self._sign_request,
+            "cancel_check": lambda: self.safety.assert_task_active(task_id),
+            "register_process": self.safety.register_process,
         }
         try:
             accepted = set(inspect.signature(handler).parameters)
@@ -202,6 +286,22 @@ class AgentApp:
         finally:
             await extra["client"].aclose()
 
+    def _sign_request(self, path: str, payload: dict) -> dict:
+        envelope = {
+            **payload,
+            "nonce": secrets.token_hex(16),
+            "sent_at": int(time.time()),
+        }
+        return {
+            **envelope,
+            "signature": b64e(
+                sign_bytes(
+                    self.identity.private_key,
+                    agent_http_payload(path, envelope),
+                )
+            ),
+        }
+
     async def report(self, task_id: str, ok: bool, result: dict, error: str | None) -> None:
         evidence = []
         clean_result = dict(result)
@@ -215,19 +315,23 @@ class AgentApp:
                     "metadata": item.get("metadata") or {},
                 }
             )
-        signature = b64e(sign_bytes(self.identity.private_key, task_id.encode()))
+        envelope = {
+            "device_id": self.identity.device_id,
+            "task_id": task_id,
+            "nonce": secrets.token_hex(16),
+            "sent_at": int(time.time()),
+            "ok": ok,
+            "result": clean_result,
+            "error": error,
+            "evidence": evidence,
+        }
+        signature = b64e(
+            sign_bytes(self.identity.private_key, canonical_json_bytes(envelope))
+        )
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.director}/agent/ingest",
-                json={
-                    "device_id": self.identity.device_id,
-                    "task_id": task_id,
-                    "signature": signature,
-                    "ok": ok,
-                    "result": clean_result,
-                    "error": error,
-                    "evidence": evidence,
-                },
+                json={**envelope, "signature": signature},
                 timeout=30,
             )
             response.raise_for_status()

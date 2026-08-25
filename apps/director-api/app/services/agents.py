@@ -40,7 +40,7 @@ def _from_device(row: Device, slot: AgentSlot | None, retired: bool = False) -> 
         "connected": row.id in hub.agents,
         "job": slot.job if slot else "",
         "program": slot.program if slot else "",
-        "enrollment_code": slot.enrollment_code if slot else "",
+        "enrollment_required": not bool(slot and slot.device_id),
         "supported_platforms": platforms_for_role(row.agent_id),
     }
 
@@ -65,7 +65,7 @@ def _from_slot(slot: AgentSlot) -> dict[str, Any]:
         "connected": False,
         "job": slot.job,
         "program": slot.program,
-        "enrollment_code": slot.enrollment_code,
+        "enrollment_required": True,
         "supported_platforms": platforms_for_role(slot.role),
     }
 

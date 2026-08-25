@@ -26,15 +26,15 @@ import sys
 
 out = Path(sys.argv[1])
 roles = [
-    ("pc-fatture", "PC-FATTURE", "KRELUNA-PC-FATTURE"),
-    ("pc-f24", "PC-F24", "KRELUNA-PC-F24"),
-    ("pc-contabilita", "PC-CONTABILITA", "KRELUNA-PC-CONTABILITA"),
-    ("pc-camerali", "PC-CAMERALI", "KRELUNA-PC-CAMERALI"),
-    ("pc-contratti", "PC-CONTRATTI", "KRELUNA-PC-CONTRATTI"),
-    ("pc-durc", "PC-DURC", "KRELUNA-PC-DURC"),
-    ("pc-visure", "PC-VISURE", "KRELUNA-PC-VISURE"),
+    ("pc-fatture", "PC-FATTURE"),
+    ("pc-f24", "PC-F24"),
+    ("pc-contabilita", "PC-CONTABILITA"),
+    ("pc-camerali", "PC-CAMERALI"),
+    ("pc-contratti", "PC-CONTRATTI"),
+    ("pc-durc", "PC-DURC"),
+    ("pc-visure", "PC-VISURE"),
 ]
-for role, display, code in roles:
+for role, display in roles:
     bat = out / f"Installa {display}.bat"
     bat.write_text(
         "\r\n".join(
@@ -44,7 +44,7 @@ for role, display, code in roles:
                 (
                     'powershell -NoProfile -ExecutionPolicy Bypass -File '
                     '"%~dp0Installa-Agent.ps1"'
-                    f" -Role {role} -DisplayName {display} -EnrollCode {code}"
+                    f" -Role {role} -DisplayName {display}"
                 ),
                 "if errorlevel 1 pause",
                 "",

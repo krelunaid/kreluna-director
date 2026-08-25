@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 from pathlib import Path
 
 from kreluna_shared.agents import load_agent_roles
@@ -20,7 +21,7 @@ OTHER_USER_ID = "44444444-4444-4444-4444-444444444444"
 async def seed_if_empty(session: AsyncSession) -> None:
     existing = (await session.execute(select(Tenant).limit(1))).scalar_one_or_none()
     if existing is None:
-        if settings.is_production:
+        if settings.requires_unique_secrets:
             studio = Tenant(
                 name=settings.director_bootstrap_tenant_name,
                 slug=settings.director_bootstrap_tenant_slug,
@@ -37,11 +38,6 @@ async def seed_if_empty(session: AsyncSession) -> None:
                         password_hash=hash_password(settings.director_bootstrap_password),
                     ),
                     License(tenant_id=studio.id, state="active", plan="studio"),
-                    EnrollmentCode(
-                        tenant_id=studio.id,
-                        code=settings.kreluna_enrollment_code,
-                        used=False,
-                    ),
                 ]
             )
             await session.commit()
@@ -70,7 +66,6 @@ async def seed_if_empty(session: AsyncSession) -> None:
                 ),
                 License(tenant_id=DEMO_TENANT_ID, state="active", plan="studio-demo"),
                 License(tenant_id=OTHER_TENANT_ID, state="active", plan="studio-demo"),
-                EnrollmentCode(tenant_id=DEMO_TENANT_ID, code=settings.kreluna_enrollment_code, used=False),
                 User(
                     id="55555555-5555-5555-5555-555555555555",
                     tenant_id=DEMO_TENANT_ID,
@@ -82,6 +77,12 @@ async def seed_if_empty(session: AsyncSession) -> None:
             ]
         )
         await session.commit()
+    if settings.is_desktop:
+        owner = await _migrate_desktop_demo_accounts(session, existing)
+        await _disable_legacy_enrollment_codes(session, owner.tenant_id)
+        await session.commit()
+        await seed_agent_slots(session, owner.tenant_id)
+        return
     if settings.is_production:
         demo_user = (
             await session.execute(
@@ -124,15 +125,11 @@ async def seed_agent_slots(session: AsyncSession, tenant_id: str) -> None:
             slot.program = role.program
             slot.display_name = role.display_name
             slot.capabilities = json.dumps(role.capabilities)
+            if slot.enrollment_code and not slot.enrollment_code.startswith("sha256:"):
+                slot.enrollment_code = ""
             continue
         if role.retired:
             continue
-        code = f"KRELUNA-{role.role.upper().replace('_', '-')}"
-        already = (
-            await session.execute(select(EnrollmentCode).where(EnrollmentCode.code == code))
-        ).scalar_one_or_none()
-        if already is None:
-            session.add(EnrollmentCode(tenant_id=tenant_id, code=code, used=False))
         session.add(
             AgentSlot(
                 tenant_id=tenant_id,
@@ -141,7 +138,67 @@ async def seed_agent_slots(session: AsyncSession, tenant_id: str) -> None:
                 job=role.job,
                 program=role.program,
                 capabilities=json.dumps(role.capabilities),
-                enrollment_code=code,
+                enrollment_code="",
             )
         )
     await session.commit()
+
+
+async def _migrate_desktop_demo_accounts(session: AsyncSession, fallback: Tenant) -> User:
+    """Preserve the local studio data while removing every known demo login."""
+
+    email = settings.director_bootstrap_email.strip().lower()
+    owner = (
+        await session.execute(select(User).where(User.email == email))
+    ).scalar_one_or_none()
+    if owner is None:
+        owner = (
+            await session.execute(
+                select(User)
+                .where(User.email == "andrea@studio.demo")
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if owner is None:
+        owner = User(
+            tenant_id=fallback.id,
+            email=email,
+            name=settings.director_bootstrap_name,
+            role="studio_owner",
+            password_hash=hash_password(settings.director_bootstrap_password),
+        )
+        session.add(owner)
+        await session.flush()
+    else:
+        owner.email = email
+        owner.name = settings.director_bootstrap_name
+        owner.role = "studio_owner"
+        owner.password_hash = hash_password(settings.director_bootstrap_password)
+
+    demo_users = (
+        await session.execute(
+            select(User).where(
+                User.email.in_(("andrea@studio.demo", "altro@studio.demo", "viewer@studio.demo")),
+                User.id != owner.id,
+            )
+        )
+    ).scalars().all()
+    for user in demo_users:
+        user.email = f"disabled-{user.id}@invalid.local"
+        user.password_hash = hash_password(secrets.token_urlsafe(32))
+    return owner
+
+
+async def _disable_legacy_enrollment_codes(session: AsyncSession, tenant_id: str) -> None:
+    codes = (
+        await session.execute(select(EnrollmentCode).where(EnrollmentCode.tenant_id == tenant_id))
+    ).scalars().all()
+    for code in codes:
+        if not code.code.startswith("sha256:"):
+            code.used = True
+    slots = (
+        await session.execute(select(AgentSlot).where(AgentSlot.tenant_id == tenant_id))
+    ).scalars().all()
+    for slot in slots:
+        if slot.enrollment_code and not slot.enrollment_code.startswith("sha256:"):
+            slot.enrollment_code = ""

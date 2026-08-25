@@ -97,8 +97,10 @@ class EnrollmentCode(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
     code: Mapped[str] = mapped_column(String(80), unique=True)
+    agent_id: Mapped[str] = mapped_column(String(80), default="")
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     used_by_device_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

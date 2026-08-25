@@ -10,6 +10,31 @@ GitHub del branch predefinito.
 Questa fase è soltanto di audit. Non modifica il comportamento del programma, la
 grafica, il database o le barriere di sicurezza esistenti.
 
+## Aggiornamento implementazione — v0.5.26
+
+Il branch `codex/security-channel-hardening` chiude i cinque problemi di identità e
+runtime scelti per il primo intervento:
+
+- **P0-01 chiuso nel pacchetto desktop:** quattro segreti distinti per installazione,
+  modalità desktop fail-closed, titolare casuale e migrazione/disattivazione degli
+  account demo noti;
+- **P0-02 chiuso:** enrollment casuale ad alta entropia, digest server-side, scadenza
+  20 minuti, uso singolo, binding tenant/ruolo e revoca titolare prima della
+  sostituzione della chiave;
+- **P0-03 chiuso:** challenge-response Ed25519 per Agent, sessione obbligatoria per
+  dashboard WebSocket e registry/broadcast separati per tenant;
+- **P0-04 chiuso:** firma canonica di risultati, evidenze e richieste HTTP Agent,
+  binding all'endpoint, timestamp, nonce persistito, controllo del PC assegnato e
+  dello stato;
+- **P0-06 chiuso nel runtime Agent:** kill inviato soltanto al tenant, job asyncio
+  cancellati, processi UI posseduti terminati e controlli cooperativi prima/dopo ogni
+  passo di browser e compilazione.
+
+I punti non inclusi in questo branch restano aperti: soprattutto P0-05 payload di
+approvazione non congelato, P0-07 endpoint demo/simulazione, P0-08 firma vendor degli
+aggiornamenti e P0-09 filtro dei segreti digitati nella chat. Di conseguenza il
+verdetto generale non cambia: **demo locale, non uso fiscale reale**.
+
 ## Verdetto esecutivo
 
 Kreluna Director 0.5.15 è un prototipo locale dimostrativo con diversi controlli utili

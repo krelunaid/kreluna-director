@@ -63,15 +63,20 @@ def test_payments_and_invoice_check_are_split():
     assert preferred_role("invoice_prepare_demo") == "pc-fatture"
     assert preferred_role("payment_prepare") == "pc-pagamenti"
     assert preferred_role("contabilita_prepare") == "pc-contabilita"
-    from agent.mac_boot import enroll_code_for_role
+    from agent.mac_boot import validated_enrollment_code
     from kreluna_shared.agents import capabilities_for_role
 
     assert "invoice_prepare_demo" in capabilities_for_role("pc-fatture")
     assert "payment_prepare" not in capabilities_for_role("pc-fatture")
     assert "invoice_prepare_demo" not in capabilities_for_role("pc-pagamenti")
     assert "durc_prepare" in capabilities_for_role("pc-durc")
-    assert enroll_code_for_role("pc-fatture") == "KRELUNA-PC-FATTURE"
-    assert enroll_code_for_role("pc-durc") == "KRELUNA-PC-DURC"
+    secure_code = "KRELUNA-ENROLL-" + "a" * 43
+    assert validated_enrollment_code(secure_code) == secure_code
+
+    import pytest
+
+    with pytest.raises(ValueError, match="monouso"):
+        validated_enrollment_code("KRELUNA-PC-FATTURE")
 
 
 def test_planner_routes_delta_programs():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from datetime import UTC, timedelta
 from pathlib import Path
@@ -8,7 +9,15 @@ from typing import Annotated, Any
 
 from cryptography.exceptions import InvalidTag
 from fastapi import APIRouter, Depends, HTTPException, Request
-from kreluna_shared.crypto import b64d, decrypt_bytes, encrypt_bytes, sha256_hex, verify_bytes
+from kreluna_shared.crypto import (
+    agent_http_payload,
+    b64d,
+    canonical_json_bytes,
+    decrypt_bytes,
+    encrypt_bytes,
+    sha256_hex,
+    verify_bytes,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,13 +45,15 @@ router = APIRouter()
 class EvidenceIn(BaseModel):
     kind: str
     sha256: str
-    png_b64: str | None = None
+    png_b64: str | None = Field(default=None, max_length=12_000_000)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class IngestBody(BaseModel):
     device_id: str
     task_id: str
+    nonce: str = Field(min_length=32, max_length=32, pattern=r"^[0-9a-f]{32}$")
+    sent_at: int
     signature: str
     ok: bool
     result: dict[str, Any] = Field(default_factory=dict)
@@ -53,6 +64,8 @@ class IngestBody(BaseModel):
 class CredentialLeaseBody(BaseModel):
     device_id: str
     task_id: str
+    nonce: str = Field(min_length=32, max_length=32, pattern=r"^[0-9a-f]{32}$")
+    sent_at: int
     signature: str
 
 
@@ -64,13 +77,35 @@ TASK_PORTALS = {
 }
 
 
-def _verify_device(device: Device, task_id: str, signature: str) -> None:
-    payload = task_id.encode()
+async def _verify_agent_request(
+    session: AsyncSession,
+    device: Device,
+    path: str,
+    payload: dict[str, Any],
+) -> None:
+    nonce = str(payload.get("nonce") or "")
+    sent_at = payload.get("sent_at")
+    if len(nonce) != 32 or any(char not in "0123456789abcdef" for char in nonce):
+        raise HTTPException(status_code=401, detail="Nonce Agent non valido")
+    if not isinstance(sent_at, int) or abs(int(utcnow().timestamp()) - sent_at) > 180:
+        raise HTTPException(status_code=401, detail="Richiesta Agent scaduta")
+    signed = {key: value for key, value in payload.items() if key != "signature"}
     try:
-        if not verify_bytes(b64d(device.public_key), payload, b64d(signature)):
+        if not verify_bytes(
+            b64d(device.public_key),
+            agent_http_payload(path, signed),
+            b64d(str(payload.get("signature") or "")),
+        ):
             raise PermissionError("bad sig")
-    except Exception as exc:
+    except (ValueError, TypeError, binascii.Error, PermissionError) as exc:
         raise HTTPException(status_code=401, detail="Firma dispositivo non valida") from exc
+    request_nonce = f"agent-http:{device.id}:{nonce}"
+    replay = (
+        await session.execute(select(UsedNonce).where(UsedNonce.nonce == request_nonce))
+    ).scalar_one_or_none()
+    if replay is not None:
+        raise HTTPException(status_code=409, detail="Richiesta Agent già ricevuta")
+    session.add(UsedNonce(nonce=request_nonce))
 
 
 def _credential_transport_allowed(request: Request) -> bool:
@@ -98,7 +133,12 @@ async def credential_lease(
     ).scalar_one_or_none()
     if device is None or device.status != "active" or device.killed or device.paused:
         raise HTTPException(status_code=401, detail="Agent non autorizzato")
-    _verify_device(device, body.task_id, body.signature)
+    await _verify_agent_request(
+        session,
+        device,
+        "/agent/credential-lease",
+        body.model_dump(mode="json"),
+    )
     task = (
         await session.execute(
             select(Task).where(Task.id == body.task_id, Task.tenant_id == device.tenant_id)
@@ -170,13 +210,37 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
     device = (await session.execute(select(Device).where(Device.id == body.device_id))).scalar_one_or_none()
     if device is None or device.status != "active":
         raise HTTPException(status_code=401, detail="Device sconosciuto o revocato")
-    _verify_device(device, body.task_id, body.signature)
+    now = int(utcnow().timestamp())
+    if abs(now - body.sent_at) > 180:
+        raise HTTPException(status_code=401, detail="Risultato Agent scaduto")
+    signed = body.model_dump(mode="json", exclude={"signature"})
+    try:
+        valid_signature = verify_bytes(
+            b64d(device.public_key),
+            canonical_json_bytes(signed),
+            b64d(body.signature),
+        )
+    except (ValueError, TypeError, binascii.Error):
+        valid_signature = False
+    if not valid_signature:
+        raise HTTPException(status_code=401, detail="Firma risultato Agent non valida")
+    result_nonce = f"agent-result:{device.id}:{body.nonce}"
+    replay = (
+        await session.execute(select(UsedNonce).where(UsedNonce.nonce == result_nonce))
+    ).scalar_one_or_none()
+    if replay is not None:
+        raise HTTPException(status_code=409, detail="Risultato Agent già ricevuto")
 
     task = (
         await session.execute(select(Task).where(Task.id == body.task_id, Task.tenant_id == device.tenant_id))
     ).scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=404, detail="Task non trovato")
+    if task.assigned_device_id != device.id:
+        raise HTTPException(status_code=403, detail="Il task non è assegnato a questo Agent")
+    if task.status not in {"assigned", "running"}:
+        raise HTTPException(status_code=409, detail="Il task non accetta più risultati")
+    session.add(UsedNonce(nonce=result_nonce))
 
     settings.evidence_path.mkdir(parents=True, exist_ok=True)
     saved: list[str] = []
@@ -261,13 +325,16 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
         detail=body.error or "",
     )
     await session.commit()
-    await hub.broadcast_dashboard({"type": "task_result", "task_id": task.id, "status": task.status})
+    await hub.broadcast_dashboard(
+        device.tenant_id,
+        {"type": "task_result", "task_id": task.id, "status": task.status},
+    )
     return {"ok": True, "status": task.status, "evidence_hashes": saved}
 
 
 @router.post("/agent/demo-invoice/prepare")
 async def agent_prepare_invoice(payload: dict[str, Any], session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
-    device = await _require_device(session, payload)
+    device = await _require_device(session, payload, "/agent/demo-invoice/prepare")
     draft = create_draft(
         device.tenant_id,
         payload["client_name"],
@@ -295,7 +362,7 @@ async def agent_prepare_invoice(payload: dict[str, Any], session: Annotated[Asyn
 
 @router.post("/agent/demo-invoice/submit")
 async def agent_submit_invoice(payload: dict[str, Any], session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
-    device = await _require_device(session, payload)
+    device = await _require_device(session, payload, "/agent/demo-invoice/submit")
     draft = (
         await session.execute(
             select(InvoiceDraft).where(
@@ -328,11 +395,26 @@ def _readable_error(error: str | None, device: Device) -> str:
     return raw or "Errore senza spiegazione dal PC."
 
 
-async def _require_device(session: AsyncSession, payload: dict[str, Any]) -> Device:
+async def _require_device(session: AsyncSession, payload: dict[str, Any], path: str) -> Device:
     device = (await session.execute(select(Device).where(Device.id == payload.get("device_id")))).scalar_one_or_none()
     if device is None or device.status != "active":
         raise HTTPException(status_code=401, detail="Device sconosciuto o revocato")
-    _verify_device(device, payload.get("task_id") or payload.get("device_id"), payload.get("signature") or "")
+    task_id = str(payload.get("task_id") or "")
+    await _verify_agent_request(session, device, path, payload)
+    task = (
+        await session.execute(
+            select(Task).where(
+                Task.id == task_id,
+                Task.tenant_id == device.tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if (
+        task is None
+        or task.assigned_device_id != device.id
+        or task.status not in {"assigned", "running"}
+    ):
+        raise HTTPException(status_code=403, detail="Task non assegnato a questo Agent")
     return device
 
 

@@ -60,7 +60,6 @@ class Settings(BaseSettings):
     kreluna_openai_base_url: str = "https://api.openai.com/v1"
     kreluna_openai_api_key: str = ""
     kreluna_openai_model: str = ""
-    kreluna_enrollment_code: str = "KRELUNA-DEV-ENROLL"
     kreluna_update_api_url: str = (
         "https://api.github.com/repos/krelunaid/kreluna-director/releases/latest"
     )
@@ -77,6 +76,14 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.director_env.strip().lower() in {"production", "prod"}
 
+    @property
+    def is_desktop(self) -> bool:
+        return self.director_env.strip().lower() == "desktop"
+
+    @property
+    def requires_unique_secrets(self) -> bool:
+        return self.is_production or self.is_desktop
+
     @model_validator(mode="after")
     def production_must_be_explicit(self) -> "Settings":
         explicit_provider = self.kreluna_llm_provider.strip().lower()
@@ -84,14 +91,13 @@ class Settings(BaseSettings):
             raise ValueError(
                 "KRELUNA_LLM_PROVIDER deve essere uno tra: " + ", ".join(AI_PROVIDERS)
             )
-        if not self.is_production:
+        if not self.requires_unique_secrets:
             return self
         secrets = {
             "DIRECTOR_SIGNING_SEED": self.director_signing_seed,
             "DIRECTOR_SESSION_SECRET": self.director_session_secret,
             "DIRECTOR_EVIDENCE_KEY": self.director_evidence_key,
             "DIRECTOR_CREDENTIAL_KEY": self.director_credential_key,
-            "KRELUNA_ENROLLMENT_CODE": self.kreluna_enrollment_code,
         }
         invalid = [
             name
