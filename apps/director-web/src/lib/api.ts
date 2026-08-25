@@ -234,6 +234,13 @@ export const api = {
       body: JSON.stringify({ provider, model, api_key: apiKey || null }),
     }),
   agents: () => request<{ agents: Agent[] }>("/agents"),
+  issueAgentEnrollment: (agentId: string) =>
+    request<{
+      agent_id: string;
+      enrollment_code: string;
+      expires_at: string;
+      single_use: true;
+    }>(`/agents/${agentId}/enrollment`, { method: "POST" }),
   tasks: () => request<{ tasks: Task[] }>("/tasks"),
   approvals: () => request<{ approvals: Approval[] }>("/approvals"),
   chat: (message: string, history: Array<{ role: "user" | "assistant"; content: string }> = []) =>

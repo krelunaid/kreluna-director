@@ -1,96 +1,140 @@
 from __future__ import annotations
 
+import binascii
 import json
+import secrets
+import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from kreluna_shared.crypto import agent_challenge_payload, b64d, verify_bytes
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import SessionLocal
-from app.models import AgentSlot, Device, utcnow
+from app.models import Device, User, utcnow
+from app.security import read_session
 from app.services.orchestrator import dispatch_queued
 from app.services.registry import hub, parse_caps, requeue_device_tasks
 
 router = APIRouter()
+CHALLENGE_TTL_SECONDS = 20
 
 
-async def rebind_role(session, device: Device, claimed_role: str | None) -> bool:
-    """Il PC dice che lavoro fa adesso. Se quel posto è libero, glielo diamo davvero."""
+def _bearer_from_websocket(ws: WebSocket) -> str:
+    authorization = ws.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return authorization.split(" ", 1)[1].strip()
+    return ws.query_params.get("token", "").strip()
 
-    role = (claimed_role or "").strip().lower()
-    if not role or role == device.agent_id:
-        return False
-    slot = (
-        await session.execute(
-            select(AgentSlot).where(AgentSlot.tenant_id == device.tenant_id, AgentSlot.role == role)
-        )
-    ).scalar_one_or_none()
-    if slot is None:
-        return False
-    if slot.device_id and slot.device_id != device.id:
-        # Quel lavoro è già di un altro computer: non lo si porta via da qui.
-        return False
-    taken = (
-        await session.execute(
-            select(Device).where(
-                Device.tenant_id == device.tenant_id,
-                Device.agent_id == role,
-                Device.id != device.id,
-                Device.status == "active",
+
+async def _dashboard_tenant(ws: WebSocket) -> str | None:
+    token = _bearer_from_websocket(ws)
+    if not token:
+        return None
+    try:
+        claims = read_session(settings.director_session_secret, token)
+    except (PermissionError, KeyError, TypeError, ValueError):
+        return None
+    async with SessionLocal() as session:
+        user = (
+            await session.execute(
+                select(User).where(
+                    User.id == claims.get("user_id"),
+                    User.tenant_id == claims.get("tenant_id"),
+                )
             )
-        )
-    ).scalars().first()
-    if taken is not None:
-        return False
-    old = (
-        await session.execute(
-            select(AgentSlot).where(AgentSlot.tenant_id == device.tenant_id, AgentSlot.device_id == device.id)
-        )
-    ).scalars().all()
-    for previous in old:
-        if previous.role != role:
-            previous.device_id = None
-    device.agent_id = role
-    device.display_name = slot.display_name or device.display_name
-    slot.device_id = device.id
-    return True
+        ).scalar_one_or_none()
+    return user.tenant_id if user is not None else None
 
 
 @router.websocket("/ws/agent")
 async def agent_socket(ws: WebSocket) -> None:
     await ws.accept()
+    challenge = secrets.token_urlsafe(32)
+    challenge_expires = int(time.time()) + CHALLENGE_TTL_SECONDS
+    await ws.send_json(
+        {
+            "type": "challenge",
+            "challenge": challenge,
+            "expires_at": challenge_expires,
+        }
+    )
     device_id: str | None = None
+    tenant_id: str | None = None
     try:
         while True:
             message = await ws.receive_json()
             msg_type = message.get("type")
-            if msg_type == "hello":
+            if device_id is None:
+                if msg_type != "hello" or int(time.time()) > challenge_expires:
+                    await ws.send_json({"type": "error", "error": "AGENT_AUTH_REQUIRED"})
+                    await ws.close(code=4401)
+                    return
                 async with SessionLocal() as session:
                     device = (
-                        await session.execute(select(Device).where(Device.id == message.get("device_id")))
+                        await session.execute(
+                            select(Device).where(Device.id == message.get("device_id"))
+                        )
                     ).scalar_one_or_none()
                     if device is None or device.status != "active":
-                        await ws.send_json({"type": "error", "error": "DEVICE_REVOKED_OR_UNKNOWN"})
-                        await ws.close()
+                        await ws.send_json(
+                            {"type": "error", "error": "DEVICE_REVOKED_OR_UNKNOWN"}
+                        )
+                        await ws.close(code=4401)
+                        return
+                    claimed_agent = str(message.get("agent_id") or "")
+                    signature = str(message.get("signature") or "")
+                    if (
+                        message.get("challenge") != challenge
+                        or claimed_agent != device.agent_id
+                        or not signature
+                    ):
+                        await ws.send_json({"type": "error", "error": "AGENT_AUTH_INVALID"})
+                        await ws.close(code=4401)
+                        return
+                    try:
+                        authenticated = verify_bytes(
+                            b64d(device.public_key),
+                            agent_challenge_payload(device.id, device.agent_id, challenge),
+                            b64d(signature),
+                        )
+                    except (ValueError, TypeError, binascii.Error):
+                        authenticated = False
+                    if not authenticated:
+                        await ws.send_json({"type": "error", "error": "AGENT_AUTH_INVALID"})
+                        await ws.close(code=4401)
                         return
                     if device.killed:
                         await ws.send_json({"type": "kill", "reason": "still_killed"})
                     device_id = device.id
+                    tenant_id = device.tenant_id
                     device.presence = "killed" if device.killed else "online"
                     device.hostname = message.get("hostname") or device.hostname
-                    device.capabilities = json.dumps(message.get("capabilities") or parse_caps(device.capabilities))
+                    device.capabilities = json.dumps(
+                        message.get("capabilities") or parse_caps(device.capabilities)
+                    )
                     device.platform = message.get("platform") or device.platform
                     device.last_seen_at = utcnow()
                     device.display_name = message.get("display_name") or device.display_name
-                    await rebind_role(session, device, message.get("agent_id"))
                     await session.commit()
-                    await hub.register_agent(device.id, ws)
+                    await hub.register_agent(device.id, device.tenant_id, ws)
                     await ws.send_json({"type": "welcome", "device_id": device.id})
                     await dispatch_queued(session)
                     await session.commit()
-                    await hub.broadcast_dashboard({"type": "agent", "device_id": device.id, "presence": device.presence})
-            elif msg_type == "heartbeat" and device_id:
+                    await hub.broadcast_dashboard(
+                        device.tenant_id,
+                        {
+                            "type": "agent",
+                            "device_id": device.id,
+                            "presence": device.presence,
+                        },
+                    )
+                continue
+            if msg_type == "heartbeat":
                 async with SessionLocal() as session:
-                    device = (await session.execute(select(Device).where(Device.id == device_id))).scalar_one_or_none()
+                    device = (
+                        await session.execute(select(Device).where(Device.id == device_id))
+                    ).scalar_one_or_none()
                     if device is None or device.status != "active":
                         await ws.send_json({"type": "kill", "reason": "revoked"})
                         break
@@ -105,9 +149,11 @@ async def agent_socket(ws: WebSocket) -> None:
                     else:
                         device.presence = "busy" if device.busy else "online"
                     await session.commit()
-            elif msg_type == "killed" and device_id:
+            elif msg_type == "killed":
                 async with SessionLocal() as session:
-                    device = (await session.execute(select(Device).where(Device.id == device_id))).scalar_one_or_none()
+                    device = (
+                        await session.execute(select(Device).where(Device.id == device_id))
+                    ).scalar_one_or_none()
                     if device:
                         device.killed = True
                         device.busy = False
@@ -116,27 +162,37 @@ async def agent_socket(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        if device_id:
-            hub.drop_agent(device_id, ws)
+        if device_id and hub.drop_agent(device_id, ws):
             async with SessionLocal() as session:
-                device = (await session.execute(select(Device).where(Device.id == device_id))).scalar_one_or_none()
+                device = (
+                    await session.execute(select(Device).where(Device.id == device_id))
+                ).scalar_one_or_none()
                 if device:
                     device.presence = "offline"
                     device.busy = False
                     device.active_task_id = None
                     await requeue_device_tasks(session, device.id)
                     await session.commit()
-            await hub.broadcast_dashboard({"type": "agent", "device_id": device_id, "presence": "offline"})
+            if tenant_id:
+                await hub.broadcast_dashboard(
+                    tenant_id,
+                    {"type": "agent", "device_id": device_id, "presence": "offline"},
+                )
 
 
 @router.websocket("/ws/dashboard")
 async def dashboard_socket(ws: WebSocket) -> None:
+    tenant_id = await _dashboard_tenant(ws)
+    if tenant_id is None:
+        await ws.close(code=4401)
+        return
     await ws.accept()
-    hub.dashboards.append(ws)
+    hub.register_dashboard(tenant_id, ws)
     try:
         await ws.send_json({"type": "hello", "service": "director"})
         while True:
             await ws.receive_text()
     except WebSocketDisconnect:
-        if ws in hub.dashboards:
-            hub.dashboards.remove(ws)
+        pass
+    finally:
+        hub.drop_dashboard(ws)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -15,14 +17,18 @@ async def prepare(
     director_url: str,
     device_id: str,
     task_id: str,
-    signature: str,
+    sign_request: Callable[[str, dict[str, Any]], dict[str, Any]],
     account_name: str | None = None,
     client_name: str,
     description: str,
     net_eur: float,
     vat_rate: float = 0.22,
     vat_note: str = "",
+    cancel_check: Callable[[], None] | None = None,
+    register_process: Callable[[subprocess.Popen], None] | None = None,
 ) -> dict[str, Any]:
+    check = cancel_check or (lambda: None)
+    check()
     live = await asyncio.to_thread(
         prepare_invoice_portal,
         account_name=account_name or "",
@@ -31,7 +37,9 @@ async def prepare(
         net_eur=net_eur,
         vat_rate=vat_rate,
         vat_note=vat_note,
+        cancel_check=check,
     )
+    check()
     evidence = list(live.get("evidence") or [])
     if not live.get("filled"):
         evidence.extend(
@@ -43,21 +51,27 @@ async def prepare(
                 vat_rate=vat_rate,
                 vat_note=vat_note,
                 status="draft",
+                cancel_check=check,
+                register_process=register_process,
             )
         )
+    check()
+    path = "/agent/demo-invoice/prepare"
     response = await client.post(
-        f"{director_url}/agent/demo-invoice/prepare",
-        json={
-            "device_id": device_id,
-            "task_id": task_id,
-            "signature": signature,
-            "account_name": account_name or "",
-            "client_name": client_name,
-            "description": description,
-            "net_eur": net_eur,
-            "vat_rate": vat_rate,
-            "vat_note": vat_note,
-        },
+        f"{director_url}{path}",
+        json=sign_request(
+            path,
+            {
+                "device_id": device_id,
+                "task_id": task_id,
+                "account_name": account_name or "",
+                "client_name": client_name,
+                "description": description,
+                "net_eur": net_eur,
+                "vat_rate": vat_rate,
+                "vat_note": vat_note,
+            },
+        ),
         timeout=15,
     )
     response.raise_for_status()
@@ -87,25 +101,33 @@ async def submit(
     director_url: str,
     device_id: str,
     task_id: str,
-    signature: str,
+    sign_request: Callable[[str, dict[str, Any]], dict[str, Any]],
     draft_id: str,
     client_name: str = "Cliente",
     description: str = "Prestazione",
     net_eur: float = 0.0,
     vat_rate: float = 0.22,
+    cancel_check: Callable[[], None] | None = None,
+    register_process: Callable[[subprocess.Popen], None] | None = None,
 ) -> dict[str, Any]:
+    check = cancel_check or (lambda: None)
+    check()
+    path = "/agent/demo-invoice/submit"
     response = await client.post(
-        f"{director_url}/agent/demo-invoice/submit",
-        json={
-            "device_id": device_id,
-            "task_id": task_id,
-            "signature": signature,
-            "draft_id": draft_id,
-        },
+        f"{director_url}{path}",
+        json=sign_request(
+            path,
+            {
+                "device_id": device_id,
+                "task_id": task_id,
+                "draft_id": draft_id,
+            },
+        ),
         timeout=15,
     )
     response.raise_for_status()
     data = response.json()
+    check()
     observed = data.get("observed") or {}
     net = float(observed.get("net") or 0)
     evidence = fill_invoice_on_pc(
@@ -114,6 +136,8 @@ async def submit(
         net_eur=net if net > 0 else 1.0,
         vat_rate=vat_rate,
         status="issued",
+        cancel_check=check,
+        register_process=register_process,
     )
     return {
         "ok": True,

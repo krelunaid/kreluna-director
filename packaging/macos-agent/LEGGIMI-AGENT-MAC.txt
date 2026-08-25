@@ -1,4 +1,4 @@
-KRELUNA AGENT PER MAC (Apple Silicon, versione 0.5.25)
+KRELUNA AGENT PER MAC (Apple Silicon, versione 0.5.26)
 =====================================================
 
 Questa NON è Kreluna Director. È l'Agent: il programma del PC.
@@ -11,9 +11,11 @@ Se hai già una versione vecchia:
 
 1. Trascina "Kreluna Agent" su Applicazioni.
 2. Aprila. Finestra gialla: Fine, poi Privacy e sicurezza → Apri comunque.
-3. Scegli il lavoro DI QUESTO Mac (PC-FATTURE, PC-F24, PC-VISURE…).
-4. L'indirizzo del Director è già scritto. Cambia solo se il cervello sta su un altro computer.
-5. Se scegli PC-FATTURE puoi indicare il percorso dell'app fatture o l'indirizzo HTTPS del portale.
+3. Nel Director premi l'interruttore della scheda "Da installare" del lavoro scelto.
+   Copia il codice monouso mostrato: dura 20 minuti.
+4. Scegli lo stesso lavoro su questo Mac e incolla il codice quando richiesto.
+5. L'indirizzo del Director è già scritto. Cambia solo se il cervello sta su un altro computer.
+6. Se scegli PC-FATTURE puoi indicare il percorso dell'app fatture o l'indirizzo HTTPS del portale.
 
 PC-FATTURE muove il puntatore in modo visibile. Compila soltanto i campi
 riconosciuti e si ferma prima di Salva, Emetti o Invia.

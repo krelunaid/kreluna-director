@@ -8,7 +8,10 @@ Ogni altro PC dello studio ha UN Agent, diverso.
    Scrivi l'indirizzo del Director, una riga sola.
    Esempio: http://192.168.1.10:8080
 
-2. Sul PC giusto fai DOPPIO CLIC su UN file solo:
+2. Nel Director premi l'interruttore della scheda "Da installare" del lavoro.
+   Copia il codice monouso mostrato: dura 20 minuti.
+
+3. Sul PC giusto fai DOPPIO CLIC su UN file solo:
    - Installa PC-FATTURE.bat      → Webdesk / sito AdE
    - Installa PC-F24.bat          → IPSOA, poi Telematico
    - Installa PC-CONTABILITA.bat  → scarico AdE, carico IPSOA
@@ -17,7 +20,9 @@ Ogni altro PC dello studio ha UN Agent, diverso.
    - Installa PC-DURC.bat         → sito INPS
    - Installa PC-VISURE.bat       → sito CGN
 
-3. Se Windows avvisa: Altre informazioni → Esegui comunque.
+4. Incolla il codice monouso quando l'installer lo chiede.
+
+5. Se Windows avvisa: Altre informazioni → Esegui comunque.
 
 Sul desktop compare "Kreluna Agent …". Lascialo acceso.
 In dashboard Kreluna quel PC diventa online.

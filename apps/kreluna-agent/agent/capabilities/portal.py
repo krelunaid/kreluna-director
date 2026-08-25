@@ -55,9 +55,12 @@ def prepare_invoice_portal(
     supported: Callable[[], bool] = mac_browser.is_supported,
     sleep: Callable[[float], None] = time.sleep,
     mover: Callable[..., bool] | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Compila la bozza sul portale configurato e si ferma prima dell'invio."""
 
+    check = cancel_check or (lambda: None)
+    check()
     spec = portal_for_key("fatture-webdesk")
     if spec is None or not spec.configured:
         return {
@@ -97,6 +100,7 @@ def prepare_invoice_portal(
     run = runner or mac_browser.Runner()
     browser = mac_browser.pick_browser(run, settings.mac_browser)
     mac_browser.open_url(run, browser, spec.url)
+    check()
     evidence = [_evidence(mac_browser.screenshot(run), "fatture-aperto", spec.key)]
     required = {"client_name", "description", "net_eur"}
     if not required.issubset(spec.invoice_fields):
@@ -115,6 +119,7 @@ def prepare_invoice_portal(
     first = spec.invoice_fields["client_name"]
     waited = 0
     while not mac_browser.field_is_there(run, browser, first) and waited < settings.wait_for_login_seconds:
+        check()
         sleep(settings.poll_seconds)
         waited += settings.poll_seconds
     if not mac_browser.field_is_there(run, browser, first):
@@ -147,6 +152,7 @@ def prepare_invoice_portal(
     }
     moved = False
     for name, selector in spec.invoice_fields.items():
+        check()
         value = values.get(name, "")
         if not selector or not value:
             continue
@@ -196,9 +202,12 @@ def learn_portal(
     *,
     runner: mac_browser.Runner | None = None,
     supported: Callable[[], bool] = mac_browser.is_supported,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Guarda la pagina che hai davanti e scrive i nomi dei campi. Non tocca niente."""
 
+    check = cancel_check or (lambda: None)
+    check()
     spec = portal_for_key(portal)
     if spec is None:
         raise ValueError(f"PORTALE_SCONOSCIUTO:{portal}")
@@ -209,6 +218,7 @@ def learn_portal(
     run = runner or mac_browser.Runner()
     browser = mac_browser.pick_browser(run, settings.mac_browser)
     page = mac_browser.page_fields(run, browser)
+    check()
     campi = page.get("campi") or []
     proposte = [
         {
@@ -245,11 +255,14 @@ def open_portal(
     director_url: str = "",
     device_id: str | None = None,
     task_id: str = "",
-    signature: str = "",
+    sign_request: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
     runner: mac_browser.Runner | None = None,
     supported: Callable[[], bool] = mac_browser.is_supported,
     sleep: Callable[[float], None] = time.sleep,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
+    check = cancel_check or (lambda: None)
+    check()
     spec = portal_for_key(portal)
     if spec is None:
         raise ValueError(f"PORTALE_SCONOSCIUTO:{portal}")
@@ -307,6 +320,7 @@ def open_portal(
     evidence: list[dict[str, Any]] = []
 
     mac_browser.open_url(run, browser, spec.url)
+    check()
     evidence.append(_evidence(mac_browser.screenshot(run), "portale-aperto", portal))
 
     def stop(
@@ -351,11 +365,12 @@ def open_portal(
                 "campi-login-non-trovati",
                 f"{spec.name}: non riconosco i campi di accesso. Non ho richiesto né mostrato la password.",
             )
-        if not director_url or not device_id or not task_id or not signature:
+        if not director_url or not device_id or not task_id or sign_request is None:
             raise RuntimeError("CASSAFORTE_AGENT_NON_AUTORIZZATA")
+        path = "/agent/credential-lease"
         response = httpx.post(
-            f"{director_url.rstrip('/')}/agent/credential-lease",
-            json={"device_id": device_id, "task_id": task_id, "signature": signature},
+            f"{director_url.rstrip('/')}{path}",
+            json=sign_request(path, {"device_id": device_id, "task_id": task_id}),
             timeout=15,
         )
         if not response.is_success:
@@ -393,6 +408,7 @@ def open_portal(
     waited = 0
     found = mac_browser.field_is_there(run, browser, spec.field) if spec.field else False
     while not found and waited < settings.wait_for_login_seconds:
+        check()
         sleep(settings.poll_seconds)
         waited += settings.poll_seconds
         found = mac_browser.field_is_there(run, browser, spec.field)

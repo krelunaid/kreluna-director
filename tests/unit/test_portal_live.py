@@ -243,7 +243,12 @@ def test_saved_access_is_filled_once_without_login_click_or_final_screenshot(mon
         director_url="https://director.example.it",
         device_id="device-1",
         task_id="task-1",
-        signature="firma",
+        sign_request=lambda _path, payload: {
+            **payload,
+            "nonce": "a" * 32,
+            "sent_at": 1,
+            "signature": "firma",
+        },
     )
 
     assert result["filled"] is True

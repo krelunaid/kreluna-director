@@ -14,6 +14,8 @@ class AgentHello(BaseModel):
     capabilities: list[str]
     display_name: str | None = None
     platform: str = "linux"
+    challenge: str
+    signature: str
 
 
 class Heartbeat(BaseModel):
@@ -33,8 +35,9 @@ class TaskCommand(BaseModel):
 
 
 class ControlCommand(BaseModel):
-    type: Literal["kill", "pause", "resume"]
+    type: Literal["kill", "pause", "resume", "cancel_task"]
     reason: str | None = None
+    task_id: str | None = None
 
 
 class TaskAck(BaseModel):
@@ -45,6 +48,10 @@ class TaskAck(BaseModel):
 class TaskResult(BaseModel):
     type: Literal["task_result"] = "task_result"
     task_id: str
+    device_id: str
+    nonce: str
+    sent_at: int
+    signature: str
     ok: bool
     result: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None

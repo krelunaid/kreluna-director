@@ -10,7 +10,8 @@ def test_director_package_does_not_require_or_copy_agent() -> None:
     mac_launcher = (ROOT / "packaging" / "macos" / "Kreluna").read_text()
     windows_launcher = (ROOT / "packaging" / "windows" / "Avvia.bat").read_text()
 
-    assert "--exclude 'apps/kreluna-agent'" in copy_script
+    assert '"$ROOT/apps/director-api/app"' in copy_script
+    assert '"$ROOT/apps/kreluna-agent"' not in copy_script
     assert "apps/kreluna-agent" not in mac_launcher
     assert "apps\\kreluna-agent" not in windows_launcher
     assert "KRELUNA_AGENT_ID" not in mac_launcher

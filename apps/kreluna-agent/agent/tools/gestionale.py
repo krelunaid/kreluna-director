@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 
@@ -120,6 +121,7 @@ def show_invoice_on_this_mac(
     account_name: str = "",
     vat_rate: float = 0.22,
     vat_note: str = "",
+    register_process: Callable[[subprocess.Popen], None] | None = None,
 ) -> bool:
     if sys.platform != "darwin":
         return False
@@ -138,12 +140,14 @@ def show_invoice_on_this_mac(
         ensure_ascii=False,
     )
     try:
-        subprocess.Popen(
+        process = subprocess.Popen(
             [sys.executable, str(script), payload],
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        if register_process is not None:
+            register_process(process)
         return True
     except OSError:
         return False
@@ -158,7 +162,11 @@ def fill_invoice_on_pc(
     vat_rate: float = 0.22,
     vat_note: str = "",
     status: str = "draft",
+    cancel_check: Callable[[], None] | None = None,
+    register_process: Callable[[subprocess.Popen], None] | None = None,
 ) -> list[dict]:
+    if cancel_check is not None:
+        cancel_check()
     vat = round(net_eur * vat_rate, 2)
     total = round(net_eur + vat, 2)
     net_label = f"€ {net_eur:,.2f}"
@@ -172,7 +180,10 @@ def fill_invoice_on_pc(
         net_eur=net_eur,
         vat_rate=vat_rate,
         vat_note=vat_note,
+        register_process=register_process,
     )
+    if cancel_check is not None:
+        cancel_check()
     frames = [
         {
             "typed_client": "",
@@ -220,6 +231,8 @@ def fill_invoice_on_pc(
         )
     evidence = []
     for index, frame in enumerate(frames, start=1):
+        if cancel_check is not None:
+            cancel_check()
         png = render_invoice_window(
             account_name=account_name,
             client=client_name,

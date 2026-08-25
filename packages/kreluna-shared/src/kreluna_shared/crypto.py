@@ -50,6 +50,33 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def canonical_json_bytes(value: object) -> bytes:
+    return json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def agent_challenge_payload(device_id: str, agent_id: str, challenge: str) -> bytes:
+    return canonical_json_bytes(
+        {
+            "agent_id": agent_id,
+            "challenge": challenge,
+            "device_id": device_id,
+            "purpose": "kreluna-agent-websocket-v1",
+        }
+    )
+
+
+def agent_http_payload(path: str, body: dict[str, object]) -> bytes:
+    """Bind an Agent request signature to both its endpoint and complete body."""
+
+    return canonical_json_bytes(
+        {
+            "body": body,
+            "path": path,
+            "purpose": "kreluna-agent-http-v1",
+        }
+    )
+
+
 def b64e(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("ascii")
 
@@ -115,7 +142,7 @@ def server_public_bytes(seed: str) -> bytes:
 
 def sign_grant(secret: str, grant: SignedGrant) -> str:
     body = grant.model_dump(mode="json")
-    payload = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+    payload = canonical_json_bytes(body)
     sig = server_private_from_seed(secret).sign(payload)
     return b64e(payload) + "." + b64e(sig)
 

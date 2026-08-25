@@ -16,17 +16,27 @@ def migrate_compatible_schema(connection) -> None:
     from sqlalchemy import inspect
 
     inspector = inspect(connection)
-    if "invoice_drafts" not in inspector.get_table_names():
-        return
-    columns = {item["name"] for item in inspector.get_columns("invoice_drafts")}
-    if "account_name" not in columns:
-        connection.exec_driver_sql(
-            "ALTER TABLE invoice_drafts ADD COLUMN account_name VARCHAR(200) NOT NULL DEFAULT ''"
-        )
-    if "vat_note" not in columns:
-        connection.exec_driver_sql(
-            "ALTER TABLE invoice_drafts ADD COLUMN vat_note VARCHAR(300) NOT NULL DEFAULT ''"
-        )
+    tables = set(inspector.get_table_names())
+    if "invoice_drafts" in tables:
+        columns = {item["name"] for item in inspector.get_columns("invoice_drafts")}
+        if "account_name" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE invoice_drafts ADD COLUMN account_name VARCHAR(200) NOT NULL DEFAULT ''"
+            )
+        if "vat_note" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE invoice_drafts ADD COLUMN vat_note VARCHAR(300) NOT NULL DEFAULT ''"
+            )
+    if "enrollment_codes" in tables:
+        columns = {item["name"] for item in inspector.get_columns("enrollment_codes")}
+        if "agent_id" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE enrollment_codes ADD COLUMN agent_id VARCHAR(80) NOT NULL DEFAULT ''"
+            )
+        if "expires_at" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE enrollment_codes ADD COLUMN expires_at DATETIME NULL"
+            )
 
 
 def _engine_url() -> str:

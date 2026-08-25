@@ -10,6 +10,7 @@ Tu parli solo con **Kreluna Director**.
 
 Non registri il monitor. Non insegni i click. I programmi si collegano dopo, un PC alla volta.
 
-Login demo: `andrea@studio.demo` / `demo`
+Nell'app installata le credenziali personali vengono create e mostrate una sola volta
+al primo avvio. Il login demo esiste soltanto con `make demo` nello sviluppo.
 
 Installazione sul computer: `docs/INSTALL.md` (zip Mac e zip Windows, senza installare Python).

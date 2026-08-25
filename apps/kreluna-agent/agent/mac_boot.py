@@ -20,8 +20,15 @@ def config_path() -> Path:
     return support_dir() / "config.json"
 
 
-def enroll_code_for_role(role: str) -> str:
-    return "KRELUNA-" + role.upper().replace("_", "-")
+def enrollment_path() -> Path:
+    return support_dir() / "enrollment.once"
+
+
+def validated_enrollment_code(value: str) -> str:
+    code = value.strip()
+    if not code.startswith("KRELUNA-ENROLL-") or not 50 <= len(code) <= 100:
+        raise ValueError("Usa il codice monouso generato dal Director")
+    return code
 
 
 def roles_yaml() -> Path:
@@ -99,7 +106,23 @@ def load_config() -> dict[str, str]:
 
 def save_config(data: dict[str, str]) -> None:
     support_dir().mkdir(parents=True, exist_ok=True)
+    code = data.pop("enrollment_code", "").strip()
+    if code:
+        try:
+            validated_enrollment_code(code)
+        except ValueError:
+            enrollment_path().unlink(missing_ok=True)
+        else:
+            enrollment_path().write_text(code + "\n", encoding="utf-8")
+            try:
+                enrollment_path().chmod(0o600)
+            except OSError:
+                pass
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
+    try:
+        config_path().chmod(0o600)
+    except OSError:
+        pass
 
 
 def apply_config(data: dict[str, str]) -> None:
@@ -107,7 +130,18 @@ def apply_config(data: dict[str, str]) -> None:
     url = validated_director_url(data["director_url"])
     os.environ["KRELUNA_AGENT_ID"] = role
     os.environ["KRELUNA_AGENT_DISPLAY_NAME"] = data.get("display_name") or role.upper()
-    os.environ["KRELUNA_ENROLLMENT_CODE"] = enroll_code_for_role(role)
+    enrollment_code = data.get("enrollment_code", "").strip()
+    if not enrollment_code:
+        try:
+            enrollment_code = enrollment_path().read_text(encoding="utf-8").strip()
+        except (FileNotFoundError, OSError, UnicodeDecodeError):
+            enrollment_code = ""
+    if enrollment_code:
+        os.environ["KRELUNA_ENROLLMENT_CODE"] = validated_enrollment_code(enrollment_code)
+        os.environ["KRELUNA_ENROLLMENT_CODE_FILE"] = str(enrollment_path())
+    else:
+        os.environ.pop("KRELUNA_ENROLLMENT_CODE", None)
+        os.environ.pop("KRELUNA_ENROLLMENT_CODE_FILE", None)
     os.environ["AGENT_DIRECTOR_URL"] = url
     os.environ["AGENT_DIRECTOR_WSS"] = url.replace("http://", "ws://").replace("https://", "wss://") + "/ws/agent"
     target = data.get("fatture_target", "").strip()
@@ -158,7 +192,33 @@ return text returned of answer
             check=False,
         )
         return None
-    data = {"role": found.role, "display_name": found.display_name, "director_url": url}
+    code_script = '''
+set answer to display dialog "Codice monouso dell'Agent (generato dal Director)" default answer "" buttons {"Annulla", "Continua"} default button "Continua" with title "Kreluna Agent"
+if button returned of answer is "Annulla" then return "CANCEL"
+return text returned of answer
+'''
+    code_answer = subprocess.run(
+        ["osascript", "-e", code_script], capture_output=True, text=True, check=False
+    )
+    code = code_answer.stdout.strip()
+    if code_answer.returncode != 0 or code == "CANCEL":
+        return None
+    try:
+        code = validated_enrollment_code(code)
+    except ValueError as exc:
+        subprocess.run(
+            ["osascript", "-e", f'display dialog "{exc}" buttons {{"OK"}} default button "OK"'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return None
+    data = {
+        "role": found.role,
+        "display_name": found.display_name,
+        "director_url": url,
+        "enrollment_code": code,
+    }
     if found.role == "pc-fatture":
         target = ask_invoice_target("")
         if target is not None:
@@ -246,6 +306,7 @@ def main() -> int:
             "role": preset_role,
             "display_name": os.environ.get("KRELUNA_AGENT_DISPLAY_NAME", ""),
             "director_url": preset_url,
+            "enrollment_code": os.environ.get("KRELUNA_ENROLLMENT_CODE", ""),
             "fatture_target": os.environ.get("KRELUNA_FATTURE_TARGET", ""),
         }
     elif not data.get("role") or not data.get("director_url"):

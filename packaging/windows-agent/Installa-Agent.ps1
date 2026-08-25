@@ -35,7 +35,12 @@ if (-not [string]::IsNullOrEmpty($DirectorUri.UserInfo) -or -not [string]::IsNul
 $DirectorUrl = $DirectorUrl.TrimEnd("/")
 
 if (-not $DisplayName) { $DisplayName = $Role.ToUpper() }
-if (-not $EnrollCode) { $EnrollCode = "KRELUNA-" + $Role.ToUpper().Replace("_", "-") }
+if (-not $EnrollCode) {
+  $EnrollCode = (Read-Host "Codice monouso generato dal Director").Trim()
+}
+if (-not $EnrollCode.StartsWith("KRELUNA-ENROLL-") -or $EnrollCode.Length -lt 50 -or $EnrollCode.Length -gt 100) {
+  throw "Usa il codice monouso generato dal Director."
+}
 
 if ($Role -eq "pc-fatture" -and -not $FattureTarget) {
   $FattureTarget = (Read-Host "Percorso del programma fatture (.exe) o indirizzo HTTPS del portale; Invio per prova locale").Trim()
@@ -71,6 +76,8 @@ Copy-Item -Path (Join-Path $Source "*") -Destination $App -Recurse -Force
 Copy-Item -Path $UrlFile -Destination (Join-Path $Install "director.url") -Force
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $Install "fatture.target"), $FattureTarget, $Utf8NoBom)
+$EnrollPath = Join-Path $Install "enrollment.once"
+[IO.File]::WriteAllText($EnrollPath, $EnrollCode, $Utf8NoBom)
 
 $Py = Join-Path $App "runtime\python.exe"
 if (-not (Test-Path $Py)) {
@@ -89,7 +96,7 @@ for /f "usebackq delims=" %%U in ("%INSTALL%\director.url") do (
 :goturl
 set "AGENT_DIRECTOR_WSS=%AGENT_DIRECTOR_URL:http://=ws://%"
 set "AGENT_DIRECTOR_WSS=%AGENT_DIRECTOR_WSS:https://=wss://%/ws/agent"
-set KRELUNA_ENROLLMENT_CODE=$EnrollCode
+set KRELUNA_ENROLLMENT_CODE_FILE=%INSTALL%\enrollment.once
 set KRELUNA_AGENT_ID=$Role
 set KRELUNA_AGENT_DISPLAY_NAME=$DisplayName
 set KRELUNA_AGENT_DATA_DIR=%INSTALL%\data

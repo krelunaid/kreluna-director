@@ -31,6 +31,11 @@ def test_production_rejects_defaults_and_missing_bootstrap_credentials():
         Settings(_env_file=None, director_env="production")
 
 
+def test_desktop_rejects_the_same_shared_defaults_as_production():
+    with pytest.raises(ValidationError, match="Produzione bloccata"):
+        Settings(_env_file=None, director_env="desktop")
+
+
 def test_production_accepts_only_explicit_distinct_secrets():
     configured = Settings(
         _env_file=None,
@@ -39,7 +44,6 @@ def test_production_accepts_only_explicit_distinct_secrets():
         director_session_secret="session-2b151073caf54ded87ab123456789012",
         director_evidence_key="evidence-79b39b59743046ddac45123456789012",
         director_credential_key="credential-a8b71c2d964f4a72bc45123456789012",
-        kreluna_enrollment_code="enroll-c278a9f446aa4d2d90c8123456789012",
         director_bootstrap_email="titolare@example.test",
         director_bootstrap_password="frase segreta molto lunga",
     )
