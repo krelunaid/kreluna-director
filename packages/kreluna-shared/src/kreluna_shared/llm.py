@@ -37,6 +37,68 @@ ASK_AMOUNT = "Mi manca l'importo. Non invento cifre: quanto devo scrivere in fat
 ASK_CLIENT = "Non ho capito per quale cliente. Scrivimi il nome, non lo invento."
 ASK_DESCRIPTION = "Non ho capito il lavoro da fatturare. Scrivilo in poche parole."
 ASK_VAT = "Non ho capito il regime IVA. Indica aliquota o esenzione."
+OUT_OF_SCOPE = (
+    "Posso aiutarti solo con contabilità, fiscale, paghe, clienti e attività di Kreluna Director. "
+    "Non cerco ricette, film o altri contenuti generici."
+)
+
+OUT_OF_SCOPE_MARKERS = (
+    "ricett",
+    "cucin",
+    "film",
+    "cinema",
+    "serie tv",
+    "canzon",
+    "musica",
+    "calcio",
+    "partita",
+    "sport",
+    "meteo",
+    "vacanza",
+    "viaggio",
+    "hotel",
+    "ristorante",
+    "videogioc",
+    "gossip",
+    "oroscopo",
+)
+
+PROFESSIONAL_MARKERS = (
+    "fattur",
+    "f24",
+    "iva",
+    "contab",
+    "bilanc",
+    "dichiaraz",
+    "redditi",
+    "fiscal",
+    "imposta",
+    "tribut",
+    "inps",
+    "inail",
+    "durc",
+    "paghe",
+    "cedolin",
+    "contribut",
+    "assunz",
+    "licenzi",
+    "contratt",
+    "cameral",
+    "visur",
+    "agenzia delle entrate",
+    "cliente",
+    "azienda",
+    "studio",
+    "kreluna",
+    "agent",
+)
+
+
+def _explicitly_out_of_scope(message: str) -> bool:
+    lowered = " ".join(message.lower().split())
+    outside = any(marker in lowered for marker in OUT_OF_SCOPE_MARKERS)
+    professional = any(marker in lowered for marker in PROFESSIONAL_MARKERS)
+    return outside and not professional
 
 
 def _amount_is_in_the_text(value: float, message: str) -> bool:
@@ -103,6 +165,12 @@ Il titolare scrive in italiano parlato. Conversa in modo naturale e, quando ti d
 operativo supportato, traducilo in compiti per i PC dello studio.
 Interpreta anche piccoli refusi e parole fonetiche (per esempio "pae", "pre" o "pe" al posto
 di "per"), senza inventare nomi: conserva le parole che sembrano il nome del cliente.
+
+Ambito esclusivo: contabilità, fiscale, paghe e lavoro, clienti dello studio e funzioni di
+Kreluna Director. Non rispondere a richieste su ricette, film, intrattenimento, sport, meteo,
+viaggi, acquisti o altri argomenti generici. Non effettuare ricerche web e non fingere di
+averle effettuate. Per una richiesta fuori ambito rispondi soltanto che Kreluna lavora sulle
+attività professionali dello studio, usando il formato JSON informativo indicato sotto.
 
 PC dello studio e programmi:
 {role_catalog()}
@@ -394,4 +462,6 @@ async def plan_with_llm(
     parsed = parse_llm_payload(content, user_evidence)
     if parsed is None:
         return _llm_error("invalid_response", "risposta del provider priva di un piano JSON valido")
+    if _explicitly_out_of_scope(message):
+        return PlanResult(ok=True, summary=OUT_OF_SCOPE, source="llm-domain")
     return parsed

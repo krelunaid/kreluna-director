@@ -27,6 +27,7 @@ from kreluna_shared.crypto import (
     sha256_hex,
     sign_bytes,
 )
+from kreluna_shared.planner import plan_deterministic
 from sqlalchemy import select
 
 
@@ -49,6 +50,19 @@ async def login(client: AsyncClient, email: str = "andrea@studio.demo") -> str:
 
 def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def planned_by_test_model(monkeypatch):
+    """Le integrazioni collaudano la coda con un modello locale prevedibile."""
+
+    async def plan(message: str, **_kwargs):
+        result = plan_deterministic(message)
+        if not result.denied and result.source != "deterministic-kill":
+            result.source = "llm"
+        return result
+
+    monkeypatch.setattr("app.routers.work.plan_message", plan)
 
 
 @pytest.mark.asyncio
@@ -307,7 +321,7 @@ async def test_studio_slot_agent_can_reinstall(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_chat_policy_and_task_queue(client: AsyncClient):
+async def test_chat_policy_and_task_queue(client: AsyncClient, planned_by_test_model):
     token = await login(client)
     denied = await client.post("/chat", headers=auth(token), json={"message": "Disattiva la sicurezza"})
     assert denied.json()["denied"] is True
@@ -323,7 +337,7 @@ async def test_chat_policy_and_task_queue(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_spoken_invoice_keeps_issuer_recipient_and_tax_regime(client: AsyncClient):
+async def test_spoken_invoice_keeps_issuer_recipient_and_tax_regime(client: AsyncClient, planned_by_test_model):
     token = await login(client)
     response = await client.post(
         "/chat",
@@ -493,7 +507,7 @@ async def test_owner_saves_grok_key_encrypted_without_returning_it(
 
 
 @pytest.mark.asyncio
-async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient):
+async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient, planned_by_test_model):
     """Dopo Ferma il lavoro non si perde: torna in coda e riparte con Riprendi."""
 
     token = await login(client)
@@ -551,7 +565,7 @@ async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_approval_token_single_use_and_kill(client: AsyncClient):
+async def test_approval_token_single_use_and_kill(client: AsyncClient, planned_by_test_model):
     token = await login(client)
     async with SessionLocal() as session:
         session.add(
@@ -693,7 +707,7 @@ async def test_evidence_tenant_isolation_and_retention(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_ready_viewer_and_billing(client: AsyncClient, monkeypatch):
+async def test_ready_viewer_and_billing(client: AsyncClient, monkeypatch, planned_by_test_model):
     import hashlib
     import hmac
     import json

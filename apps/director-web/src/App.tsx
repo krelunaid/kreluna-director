@@ -17,6 +17,13 @@ type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; sourc
 
 const INITIAL_CHAT: ChatItem[] = [{ role: "director", text: "Ciao Andrea, sono Kreluna, il tuo assistente IA operativo. Posso aiutarti con fatture elettroniche, F24, contabilità, pratiche camerali, contratti, DURC e visure.\n\nPer lavorare su un sito vero aggiungi «vera» o «apri il sito». Importi e nomi non li invento: se mancano, te li chiedo.\n\nNiente invii, niente pagamenti: prima chiedo Approva." }];
 
+function chatSource(item: ChatItem): string {
+  if (!item.source) return "";
+  if (item.source.startsWith("llm")) return " · IA";
+  if (item.deny || item.source === "deterministic-kill") return " · Sicurezza";
+  return "";
+}
+
 const SUGGESTIONS = [
   { short: "Fattura Gadducci", full: "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera" },
   { short: "F24 IPSOA", full: "Prepara gli F24 in scadenza, ma non inviarli" },
@@ -468,7 +475,7 @@ export default function App() {
               <label className="provider-compact" id="ai-settings"><select value={overview?.ai_provider || "grok"} onChange={async (event) => { await api.chooseAIProvider(event.target.value); await refresh(); }} aria-label="Provider IA">{aiProviders.map((item) => <option key={item.provider} value={item.provider}>{item.label}{item.configured ? "" : item.managed ? " · licenza non attiva" : " · da configurare"}</option>)}</select></label>
             </div>
             {!aiConnected ? <button className="ai-diagnostic" title={overview?.ai_detail || "Configurazione incompleta"} onClick={() => openAISettings()}><strong>{providerLabel}</strong>: {overview?.ai_detail || "servizio non disponibile"}. {aiManaged ? "Controlla la licenza." : "Configura ora."}</button> : null}
-            <div className="chat-log" ref={logRef}>{chat.map((item, index) => <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}><strong>{item.role === "user" ? "Tu" : `Kreluna${item.source ? item.source.startsWith("llm") ? " · IA" : " · Regole" : ""}`}</strong><div>{item.text}</div></div>)}{busy ? <div className="typing"><i /><i /><i /></div> : null}</div>
+            <div className="chat-log" ref={logRef}>{chat.map((item, index) => <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}><strong>{item.role === "user" ? "Tu" : `Kreluna${chatSource(item)}`}</strong><div>{item.text}</div></div>)}{busy ? <div className="typing"><i /><i /><i /></div> : null}</div>
             <div className="chips">{SUGGESTIONS.map((item) => <button key={item.full} className="chip" onClick={() => void send(item.full)} disabled={busy}>{item.short}</button>)}</div>
             <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(draft); }}><span className="mic">♩</span><textarea value={draft} aria-label="Scrivi una richiesta a Kreluna" placeholder="Scrivi qui la tua richiesta…" onChange={(event) => setDraft(event.target.value)} /><button className="send-button" disabled={busy} aria-label="Invia">➤</button></form>
           </section>
