@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import hmac
 import io
 import re
 import unicodedata
 from dataclasses import dataclass
 
+from cryptography.exceptions import InvalidTag
 from kreluna_shared.crypto import decrypt_secret_text, encrypt_secret_text
 
 from app.config import settings
@@ -13,8 +16,17 @@ from app.models import ClientCredential
 
 MAX_CSV_BYTES = 1_000_000
 MAX_CSV_ROWS = 500
-FORBIDDEN_LOGIN_KINDS = ("spid", "cns", "cie", "smart-card", "smartcard")
-SECRET_KINDS = {"password", "api_token", "client_secret", "pin"}
+FORBIDDEN_LOGIN_KINDS = (
+    "spid",
+    "cns",
+    "cie",
+    "carta-identita-elettronica",
+    "smart-card",
+    "smartcard",
+    "one-time-password",
+    "otp",
+)
+SECRET_KINDS = {"password", "api_token", "client_secret"}
 SECRET_PLACEHOLDERS = {
     "cambia-questa-password",
     "inserisci-password",
@@ -125,6 +137,62 @@ def _secret_kind(row: dict[str, str], columns: dict[str, str]) -> str:
     return value
 
 
+def normalize_credential(
+    *,
+    client_name: str,
+    portal: str,
+    username: str,
+    secret: str,
+    secret_kind: str = "password",
+    credential_label: str = "principale",
+    row_number: int = 0,
+) -> ParsedCredential:
+    """Validate one credential from either the UI or a CSV row.
+
+    Keeping one validation path prevents the manual form from bypassing the
+    non-negotiable SPID/CNS/CIE/OTP exclusions enforced by CSV imports.
+    """
+
+    clean_client_name = _clean_public(client_name, field="cliente", max_length=200)
+    client_key = client_key_for_name(clean_client_name)
+    portal_raw = _clean_public(portal, field="portale", max_length=80)
+    clean_portal = _ascii_slug(portal_raw, max_length=70)
+    clean_portal = PORTAL_ALIASES.get(clean_portal, clean_portal)
+    clean_username = _clean_public(username, field="username", max_length=320)
+    clean_secret = secret.strip()
+    if not clean_secret or len(clean_secret) > 2048 or "\x00" in clean_secret:
+        raise VaultImportError("password/token mancante o troppo lungo")
+    if clean_secret.casefold() in SECRET_PLACEHOLDERS:
+        raise VaultImportError("sostituisci il valore di esempio con la password/token reale")
+    clean_kind = secret_kind.strip().lower().replace("-", "_") or "password"
+    clean_kind = {
+        "token": "api_token",
+        "api": "api_token",
+        "clientsecret": "client_secret",
+    }.get(clean_kind, clean_kind)
+    if clean_kind not in SECRET_KINDS:
+        raise VaultImportError("tipo di credenziale non supportato")
+    clean_label = _clean_public(
+        credential_label or "principale", field="etichetta", max_length=120
+    )
+    label_key = _ascii_slug(clean_label, max_length=100)
+    if not client_key or not clean_portal or not label_key:
+        raise VaultImportError("cliente, portale o etichetta non validi")
+    forbidden_shape = f"{clean_portal}-{clean_kind}-{label_key}"
+    if any(item in forbidden_shape for item in FORBIDDEN_LOGIN_KINDS):
+        raise VaultImportError("SPID, CNS, CIE, smart card e OTP restano sempre manuali")
+    return ParsedCredential(
+        row_number=row_number,
+        client_name=clean_client_name,
+        client_key=client_key,
+        portal=clean_portal,
+        username=clean_username,
+        secret=clean_secret,
+        secret_kind=clean_kind,
+        credential_label=label_key,
+    )
+
+
 def parse_credentials_csv(data: bytes) -> tuple[list[ParsedCredential], list[dict[str, int | str]]]:
     if not data:
         raise VaultImportError("Il CSV è vuoto")
@@ -154,48 +222,22 @@ def parse_credentials_csv(data: bytes) -> tuple[list[ParsedCredential], list[dic
         if not any(str(value or "").strip() for value in row.values()):
             continue
         try:
-            client_name = _clean_public(
-                str(row.get(columns["client_name"]) or ""), field="cliente", max_length=200
-            )
-            client_key = client_key_for_name(client_name)
-            portal_raw = _clean_public(
-                str(row.get(columns["portal"]) or ""), field="portale", max_length=80
-            )
-            portal = _ascii_slug(portal_raw, max_length=70)
-            portal = PORTAL_ALIASES.get(portal, portal)
-            username = _clean_public(
-                str(row.get(columns["username"]) or ""), field="username", max_length=320
-            )
-            secret = str(row.get(columns["secret"]) or "").strip()
-            if not secret or len(secret) > 2048 or "\x00" in secret:
-                raise VaultImportError("password/token mancante o troppo lungo")
-            if secret.casefold() in SECRET_PLACEHOLDERS:
-                raise VaultImportError("sostituisci il valore di esempio con la password/token reale")
             kind = _secret_kind(row, columns)
             label = str(row.get(columns.get("credential_label", "")) or "principale")
-            label = _clean_public(label, field="etichetta", max_length=120)
-            label_key = _ascii_slug(label, max_length=100)
-            if not client_key or not portal or not label_key:
-                raise VaultImportError("cliente, portale o etichetta non validi")
-            forbidden_shape = f"{portal}-{kind}-{label_key}"
-            if any(item in forbidden_shape for item in FORBIDDEN_LOGIN_KINDS):
-                raise VaultImportError("SPID, CNS, CIE e smart card restano sempre manuali")
-            dedupe = (client_key, portal, label_key)
+            item = normalize_credential(
+                client_name=str(row.get(columns["client_name"]) or ""),
+                portal=str(row.get(columns["portal"]) or ""),
+                username=str(row.get(columns["username"]) or ""),
+                secret=str(row.get(columns["secret"]) or ""),
+                secret_kind=kind,
+                credential_label=label,
+                row_number=index,
+            )
+            dedupe = (item.client_key, item.portal, item.credential_label)
             if dedupe in seen:
                 raise VaultImportError("accesso duplicato nello stesso CSV")
             seen.add(dedupe)
-            parsed.append(
-                ParsedCredential(
-                    row_number=index,
-                    client_name=client_name,
-                    client_key=client_key,
-                    portal=portal,
-                    username=username,
-                    secret=secret,
-                    secret_kind=kind,
-                    credential_label=label_key,
-                )
-            )
+            parsed.append(item)
         except VaultImportError as exc:
             warnings.append({"row_number": index, "message": str(exc)})
     if not parsed:
@@ -211,34 +253,54 @@ def credential_context(row: ClientCredential, field: str) -> str:
     )
 
 
+def tenant_vault_key(tenant_id: str) -> str:
+    """Derive a distinct Fort Knox key for each studio from the server master key."""
+
+    return hmac.new(
+        settings.director_credential_key.encode("utf-8"),
+        f"kreluna-fort-knox-v2:{tenant_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def encrypt_credential_fields(row: ClientCredential, *, username: str, secret: str) -> None:
     row.username_ciphertext = encrypt_secret_text(
-        settings.director_credential_key,
+        tenant_vault_key(row.tenant_id),
         username,
         context=credential_context(row, "username"),
     )
     row.secret_ciphertext = encrypt_secret_text(
-        settings.director_credential_key,
+        tenant_vault_key(row.tenant_id),
         secret,
         context=credential_context(row, "secret"),
     )
 
 
 def decrypt_username(row: ClientCredential) -> str:
-    return decrypt_secret_text(
-        settings.director_credential_key,
-        row.username_ciphertext,
-        context=credential_context(row, "username"),
-    )
+    context = credential_context(row, "username")
+    try:
+        return decrypt_secret_text(
+            tenant_vault_key(row.tenant_id), row.username_ciphertext, context=context
+        )
+    except InvalidTag:
+        # Read credentials created before Fort Knox v2. They are rewritten with
+        # the tenant-derived key the next time the owner updates them.
+        return decrypt_secret_text(
+            settings.director_credential_key, row.username_ciphertext, context=context
+        )
 
 
 def decrypt_credential(row: ClientCredential) -> tuple[str, str]:
     username = decrypt_username(row)
-    secret = decrypt_secret_text(
-        settings.director_credential_key,
-        row.secret_ciphertext,
-        context=credential_context(row, "secret"),
-    )
+    context = credential_context(row, "secret")
+    try:
+        secret = decrypt_secret_text(
+            tenant_vault_key(row.tenant_id), row.secret_ciphertext, context=context
+        )
+    except InvalidTag:
+        secret = decrypt_secret_text(
+            settings.director_credential_key, row.secret_ciphertext, context=context
+        )
     return username, secret
 
 

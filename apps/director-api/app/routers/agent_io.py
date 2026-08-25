@@ -127,7 +127,7 @@ async def credential_lease(
     """Release one credential once, only to the device already assigned to the task."""
 
     if not _credential_transport_allowed(request):
-        raise HTTPException(status_code=409, detail="La Cassaforte richiede una connessione HTTPS")
+        raise HTTPException(status_code=409, detail="Fort Knox richiede una connessione HTTPS")
     device = (
         await session.execute(select(Device).where(Device.id == body.device_id))
     ).scalar_one_or_none()
@@ -150,10 +150,10 @@ async def credential_lease(
         or task.capability != "portal_open"
         or task.status not in {"assigned", "running"}
     ):
-        raise HTTPException(status_code=403, detail="Il task non può usare la Cassaforte")
+        raise HTTPException(status_code=403, detail="Il task non può usare Fort Knox")
     args = json.loads(task.args_json or "{}")
     if args.get("use_saved_access") is not True:
-        raise HTTPException(status_code=403, detail="L'uso della Cassaforte non è stato richiesto")
+        raise HTTPException(status_code=403, detail="L'uso di Fort Knox non è stato richiesto")
     portal_key = str(args.get("portal") or "")
     client_key = client_key_for_name(str(args.get("query") or ""))
     allowed_portals = TASK_PORTALS.get(portal_key, set())

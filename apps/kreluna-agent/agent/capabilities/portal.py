@@ -300,7 +300,7 @@ def open_portal(
             "message": (
                 f"Ho aperto {spec.name} sul PC Windows. "
                 + (
-                    "Per sicurezza la Cassaforte non compila ancora questo browser: inserisci l'accesso e l'OTP a mano. "
+                    "Per sicurezza Fort Knox non compila ancora questo browser: inserisci l'accesso e l'OTP a mano. "
                     if use_saved_access
                     else "Completa il login a mano. "
                 )
@@ -355,7 +355,7 @@ def open_portal(
         if not mac_browser.same_site(spec.url, where):
             return stop(
                 "sito-sbagliato",
-                f"Sul {browser} adesso c'è un altro sito, non {spec.name}. Non uso la Cassaforte.",
+                f"Sul {browser} adesso c'è un altro sito, non {spec.name}. Non uso Fort Knox.",
             )
         sleep(settings.poll_seconds)
         has_username = mac_browser.field_is_there(run, browser, spec.username_field)
@@ -400,7 +400,7 @@ def open_portal(
             )
         return stop(
             "accesso-compilato",
-            f"{spec.name}: accesso compilato dalla Cassaforte. Clicca tu per entrare; io non invio il modulo.",
+            f"{spec.name}: accesso compilato da Fort Knox. Clicca tu per entrare; io non invio il modulo.",
             filled=True,
             capture=False,
         )

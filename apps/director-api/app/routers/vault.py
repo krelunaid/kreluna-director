@@ -5,6 +5,7 @@ from typing import Annotated
 from cryptography.exceptions import InvalidTag
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,15 +20,61 @@ from app.services.vault import (
     decrypt_username,
     encrypt_credential_fields,
     mask_username,
+    normalize_credential,
     parse_credentials_csv,
 )
 
 router = APIRouter(prefix="/vault", tags=["vault"])
 
 
+class VaultCredentialWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_name: str = Field(min_length=1, max_length=200)
+    portal: str = Field(min_length=1, max_length=80)
+    username: str = Field(min_length=1, max_length=320)
+    secret: SecretStr = Field(min_length=1, max_length=2048)
+    secret_kind: str = Field(default="password", min_length=1, max_length=40)
+    credential_label: str = Field(default="principale", min_length=1, max_length=120)
+
+
 def _require_owner(actor: Actor) -> None:
     if actor.role not in {"studio_owner", "platform_admin"}:
-        raise HTTPException(status_code=403, detail="Solo il titolare può gestire la Cassaforte")
+        raise HTTPException(status_code=403, detail="Solo il titolare può gestire Fort Knox")
+
+
+def _validated(body: VaultCredentialWrite):
+    try:
+        return normalize_credential(
+            client_name=body.client_name,
+            portal=body.portal,
+            username=body.username,
+            secret=body.secret.get_secret_value(),
+            secret_kind=body.secret_kind,
+            credential_label=body.credential_label,
+        )
+    except VaultImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+async def _find_same_credential(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    client_key: str,
+    portal: str,
+    credential_label: str,
+) -> ClientCredential | None:
+    return (
+        await session.execute(
+            select(ClientCredential).where(
+                ClientCredential.tenant_id == tenant_id,
+                ClientCredential.client_key == client_key,
+                ClientCredential.portal == portal,
+                ClientCredential.credential_label == credential_label,
+            )
+        )
+    ).scalar_one_or_none()
 
 
 async def _read_csv(upload: UploadFile) -> bytes:
@@ -77,6 +124,124 @@ async def list_credentials(
             }
         )
     return {"credentials": items, "count": len(items)}
+
+
+@router.post("/credentials", status_code=201)
+async def create_credential(
+    body: VaultCredentialWrite,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Create one encrypted credential without ever returning its plaintext."""
+
+    _require_owner(actor)
+    item = _validated(body)
+    row = await _find_same_credential(
+        session,
+        tenant_id=actor.tenant_id,
+        client_key=item.client_key,
+        portal=item.portal,
+        credential_label=item.credential_label,
+    )
+    if row is not None and row.status != "revoked":
+        raise HTTPException(
+            status_code=409,
+            detail="Questo accesso esiste già in Fort Knox: usa Aggiorna.",
+        )
+    if row is None:
+        row = ClientCredential(
+            tenant_id=actor.tenant_id,
+            client_name=item.client_name,
+            client_key=item.client_key,
+            portal=item.portal,
+            credential_label=item.credential_label,
+            secret_kind=item.secret_kind,
+            username_ciphertext="",
+            secret_ciphertext="",
+            updated_by=actor.user_id,
+        )
+        session.add(row)
+    row.client_name = item.client_name
+    row.secret_kind = item.secret_kind
+    row.status = "ready"
+    row.updated_by = actor.user_id
+    row.updated_at = utcnow()
+    encrypt_credential_fields(row, username=item.username, secret=item.secret)
+    await session.flush()
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="fort_knox.credential_create",
+        result="ok",
+        detail=f"credential_id={row.id};portal={row.portal}",
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "id": row.id,
+        "state": "ready",
+        "username_masked": mask_username(item.username),
+        "sent_to_ai": False,
+    }
+
+
+@router.put("/credentials/{credential_id}")
+async def update_credential(
+    credential_id: str,
+    body: VaultCredentialWrite,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Replace one credential; the old plaintext is never exposed to the UI."""
+
+    _require_owner(actor)
+    row = (
+        await session.execute(
+            select(ClientCredential).where(
+                ClientCredential.id == credential_id,
+                ClientCredential.tenant_id == actor.tenant_id,
+                ClientCredential.status != "revoked",
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Accesso non trovato")
+    item = _validated(body)
+    duplicate = await _find_same_credential(
+        session,
+        tenant_id=actor.tenant_id,
+        client_key=item.client_key,
+        portal=item.portal,
+        credential_label=item.credential_label,
+    )
+    if duplicate is not None and duplicate.id != row.id:
+        raise HTTPException(status_code=409, detail="Esiste già un accesso con questi dati")
+    row.client_name = item.client_name
+    row.client_key = item.client_key
+    row.portal = item.portal
+    row.credential_label = item.credential_label
+    row.secret_kind = item.secret_kind
+    row.status = "ready"
+    row.updated_by = actor.user_id
+    row.updated_at = utcnow()
+    encrypt_credential_fields(row, username=item.username, secret=item.secret)
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="fort_knox.credential_update",
+        result="ok",
+        detail=f"credential_id={row.id};portal={row.portal}",
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "id": row.id,
+        "state": "ready",
+        "username_masked": mask_username(item.username),
+        "sent_to_ai": False,
+    }
 
 
 @router.post("/import/preview")
@@ -252,5 +417,5 @@ async def csv_template(actor: Annotated[Actor, Depends(get_actor)]) -> PlainText
     )
     return PlainTextResponse(
         body,
-        headers={"Content-Disposition": 'attachment; filename="kreluna-cassaforte-modello.csv"'},
+        headers={"Content-Disposition": 'attachment; filename="kreluna-fort-knox-modello.csv"'},
     )

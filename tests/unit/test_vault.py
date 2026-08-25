@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import pytest
+from app.config import settings
 from app.models import ClientCredential
 from app.services.vault import (
     VaultImportError,
+    credential_context,
     decrypt_credential,
     encrypt_credential_fields,
     mask_username,
+    normalize_credential,
     parse_credentials_csv,
+    tenant_vault_key,
 )
 from cryptography.exceptions import InvalidTag
+from kreluna_shared.crypto import encrypt_secret_text
 
 
 def test_csv_is_recognized_locally_without_returning_secrets() -> None:
@@ -32,6 +37,17 @@ def test_csv_refuses_spid_cns_and_missing_columns() -> None:
         parse_credentials_csv(b"cliente;portale;username;password\nRossi;SPID;mario;segreto\n")
     with pytest.raises(VaultImportError, match="Colonne mancanti"):
         parse_credentials_csv(b"cliente;username\nRossi;mario\n")
+
+
+@pytest.mark.parametrize("portal", ["SPID", "cns", "CIE", "smart-card", "otp"])
+def test_manual_credentials_refuse_personal_identity_and_otp(portal: str) -> None:
+    with pytest.raises(VaultImportError, match="restano sempre manuali"):
+        normalize_credential(
+            client_name="Cliente Rossi",
+            portal=portal,
+            username="mario",
+            secret="Segreto-123",
+        )
 
 
 def test_csv_refuses_template_placeholder() -> None:
@@ -62,3 +78,29 @@ def test_credentials_are_context_bound_and_masked() -> None:
     row.portal = "cgn"
     with pytest.raises(InvalidTag):
         decrypt_credential(row)
+
+
+def test_fort_knox_uses_distinct_tenant_keys_and_reads_legacy_rows() -> None:
+    assert tenant_vault_key("tenant-a") != tenant_vault_key("tenant-b")
+    legacy = ClientCredential(
+        tenant_id="tenant-legacy",
+        client_name="Cliente storico",
+        client_key="cliente-storico",
+        portal="webdesk",
+        credential_label="principale",
+        secret_kind="password",
+        username_ciphertext="",
+        secret_ciphertext="",
+        updated_by="owner",
+    )
+    legacy.username_ciphertext = encrypt_secret_text(
+        settings.director_credential_key,
+        "legacy@example.it",
+        context=credential_context(legacy, "username"),
+    )
+    legacy.secret_ciphertext = encrypt_secret_text(
+        settings.director_credential_key,
+        "Vecchio-Segreto",
+        context=credential_context(legacy, "secret"),
+    )
+    assert decrypt_credential(legacy) == ("legacy@example.it", "Vecchio-Segreto")

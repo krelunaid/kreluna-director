@@ -45,12 +45,13 @@ il lavoro al primo avvio; nello zip Windows c'è un pulsante di installazione pe
 Se l'Agent è su un computer diverso dal Director, configura un indirizzo **HTTPS**.
 L'indirizzo HTTP è accettato soltanto quando Director e Agent sono sullo stesso computer.
 
-## Cassaforte clienti
+## Kreluna Fort Knox
 
-1. Apri **Cassaforte** nella barra laterale.
-2. Premi **Scarica modello** e compila il CSV senza righe SPID/CNS/CIE.
-3. Premi **Importa CSV**, controlla l'anteprima mascherata e scegli **Cifra e importa**.
-4. Per compilare un accesso senza effettuare il login, chiedi ad esempio:
+1. Apri **Fort Knox** nella barra laterale.
+2. Premi **Nuovo cliente**, inserisci portale e accesso, quindi scegli **Cifra e salva**.
+3. Per molti clienti puoi usare **Scarica modello** e **Importa CSV**.
+4. SPID, CNS, CIE, smart card e OTP non possono essere salvati.
+5. Per compilare un accesso senza effettuare il login, chiedi ad esempio:
    `Apri il sito CGN per Bianchi usando l'accesso salvato`.
 
 Il CSV non viene conservato dal Director e non viene inviato al provider IA.

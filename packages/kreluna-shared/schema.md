@@ -20,7 +20,7 @@ Tutto il resto è rifiutato. `eval`, shell remota e export credenziali sono deny
 Il Director autentica `hello` con una challenge breve firmata dalla chiave Ed25519
 del device. Il risultato HTTP contiene `device_id`, `task_id`, timestamp, nonce,
 esito, dati ed evidenze sotto un'unica firma canonica; nonce e risultati tardivi
-sono rifiutati. Anche Cassaforte e API fattura demo ricevono richieste firmate sul
+sono rifiutati. Anche Fort Knox e API fattura demo ricevono richieste firmate sul
 corpo completo e sul percorso HTTP, con timestamp e nonce monouso.
 
 I task operativi portano un grant Ed25519 firmato dal server: `tenant_id + device_id + task_id + capability + exp + nonce`.

@@ -11,6 +11,7 @@ import {
   tokenIsPersistent,
   UpdateStatus,
   VaultCredential,
+  VaultCredentialInput,
   VaultPreview,
 } from "./lib/api";
 
@@ -52,6 +53,14 @@ const TASK_LABEL: Record<string, string> = {
 };
 
 const UPDATE_REMINDER_KEY = "kreluna.update.reminder";
+const EMPTY_VAULT_FORM: VaultCredentialInput = {
+  client_name: "",
+  portal: "",
+  username: "",
+  secret: "",
+  secret_kind: "password",
+  credential_label: "principale",
+};
 
 function updateReminderExpired(version: string): boolean {
   try {
@@ -125,6 +134,9 @@ export default function App() {
   const [vaultBusy, setVaultBusy] = useState(false);
   const [vaultMessage, setVaultMessage] = useState("");
   const [vaultError, setVaultError] = useState("");
+  const [vaultFormOpen, setVaultFormOpen] = useState(false);
+  const [vaultEditingId, setVaultEditingId] = useState<string | null>(null);
+  const [vaultForm, setVaultForm] = useState<VaultCredentialInput>({ ...EMPTY_VAULT_FORM });
   const [aiSettingsOpen, setAISettingsOpen] = useState(false);
   const [aiSettingsProvider, setAISettingsProvider] = useState<AIProviderOption["provider"]>("grok");
   const [aiSettingsModel, setAISettingsModel] = useState("grok-4.6");
@@ -261,7 +273,46 @@ export default function App() {
   async function openVault() {
     setVaultOpen(true); setVaultError(""); setVaultMessage("");
     try { await loadVault(); }
-    catch (err) { setVaultError(err instanceof Error ? err.message : "Cassaforte non disponibile"); }
+    catch (err) { setVaultError(err instanceof Error ? err.message : "Fort Knox non disponibile"); }
+  }
+
+  function closeVault() {
+    setVaultOpen(false); setVaultFormOpen(false); setVaultEditingId(null);
+    setVaultForm({ ...EMPTY_VAULT_FORM }); setVaultFile(null); setVaultPreview(null);
+  }
+
+  function newVaultCredential() {
+    setVaultEditingId(null); setVaultForm({ ...EMPTY_VAULT_FORM });
+    setVaultFormOpen(true); setVaultError(""); setVaultMessage("");
+  }
+
+  function editVaultCredential(item: VaultCredential) {
+    setVaultEditingId(item.id);
+    setVaultForm({
+      client_name: item.client_name,
+      portal: item.portal,
+      username: "",
+      secret: "",
+      secret_kind: item.secret_kind as VaultCredentialInput["secret_kind"],
+      credential_label: item.credential_label,
+    });
+    setVaultFormOpen(true); setVaultError(""); setVaultMessage("");
+  }
+
+  function closeVaultForm() {
+    setVaultFormOpen(false); setVaultEditingId(null); setVaultForm({ ...EMPTY_VAULT_FORM });
+  }
+
+  async function saveVaultCredential(event: FormEvent) {
+    event.preventDefault(); setVaultBusy(true); setVaultError(""); setVaultMessage("");
+    try {
+      if (vaultEditingId) await api.updateVaultCredential(vaultEditingId, vaultForm);
+      else await api.createVaultCredential(vaultForm);
+      const action = vaultEditingId ? "aggiornato" : "salvato";
+      closeVaultForm(); await loadVault();
+      setVaultMessage(`Accesso ${action} in Fort Knox. La password non verrà mai mostrata.`);
+    } catch (err) { setVaultError(err instanceof Error ? err.message : "Salvataggio non riuscito"); }
+    finally { setVaultBusy(false); }
   }
 
   async function previewVaultFile(file: File | null) {
@@ -287,7 +338,7 @@ export default function App() {
   async function downloadVaultTemplate() {
     try {
       const blob = await api.vaultTemplate(); const url = URL.createObjectURL(blob); const link = document.createElement("a");
-      link.href = url; link.download = "kreluna-cassaforte-modello.csv"; link.click(); URL.revokeObjectURL(url);
+      link.href = url; link.download = "kreluna-fort-knox-modello.csv"; link.click(); URL.revokeObjectURL(url);
     } catch (err) { setVaultError(err instanceof Error ? err.message : "Download non riuscito"); }
   }
 
@@ -298,7 +349,7 @@ export default function App() {
   }
 
   async function revokeVaultCredential(id: string) {
-    if (!window.confirm("Rimuovere questo accesso dalla Cassaforte?")) return;
+    if (!window.confirm("Rimuovere questo accesso da Fort Knox?")) return;
     setVaultError("");
     try { await api.revokeVaultCredential(id); setVaultMessage("Accesso rimosso."); await loadVault(); }
     catch (err) { setVaultError(err instanceof Error ? err.message : "Rimozione non riuscita"); }
@@ -471,7 +522,7 @@ export default function App() {
           <NavButton active={activeNav === "errors"} icon="△" label="Errori" count={overview?.active_errors} onClick={() => goTo("errors")} />
           <NavButton icon="▤" label="Contratti" onClick={() => goTo("chat", SUGGESTIONS[4].full)} />
           <NavButton icon="▧" label="Visure" onClick={() => goTo("chat", SUGGESTIONS[6].full)} />
-          <NavButton icon="▦" label="Cassaforte" count={vaultCredentials.length || undefined} onClick={() => void openVault()} />
+          <NavButton icon="▦" label="Fort Knox" count={vaultCredentials.length || undefined} onClick={() => void openVault()} />
           <NavButton icon="▤" label="Documenti" onClick={() => goTo("requests")} />
           <NavButton icon="⚙" label="Impostazioni" onClick={() => openAISettings()} />
           <button
@@ -557,11 +608,24 @@ export default function App() {
       <small>La verifica usa il provider selezionato. Nessun fallback automatico verso OpenAI.</small>
     </form></div> : null}
     {vaultOpen ? <div className="vault-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-title"><div className="vault-card">
-      <div className="vault-heading"><div><span className="vault-eyebrow">CASSAFORTE CLIENTI</span><h2 id="vault-title">Accessi protetti per cliente</h2><p>Il CSV viene riconosciuto nel Director. Password e token sono cifrati e non vengono inviati all’IA.</p></div><button className="vault-close" aria-label="Chiudi Cassaforte" onClick={() => setVaultOpen(false)}>×</button></div>
-      <div className="vault-toolbar"><input ref={vaultInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void previewVaultFile(event.target.files?.[0] || null)} /><button className="primary" disabled={vaultBusy} onClick={() => vaultInput.current?.click()}>{vaultBusy ? "Riconosco il CSV…" : "Importa CSV"}</button><button disabled={vaultBusy} onClick={() => void downloadVaultTemplate()}>Scarica modello</button><span>🔒 Nessun segreto mostrato</span></div>
+      <div className="vault-heading"><div><span className="vault-eyebrow">KRELUNA FORT KNOX</span><h2 id="vault-title">Cassaforte digitale clienti</h2><p>Inserisci un cliente oppure importa un CSV. Ogni accesso è cifrato separatamente per lo studio e non viene inviato all’IA.</p></div><button className="vault-close" aria-label="Chiudi Fort Knox" onClick={closeVault}>×</button></div>
+      <div className="vault-toolbar"><input ref={vaultInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void previewVaultFile(event.target.files?.[0] || null)} /><button className="primary" disabled={vaultBusy} onClick={newVaultCredential}>＋ Nuovo cliente</button><button disabled={vaultBusy} onClick={() => vaultInput.current?.click()}>{vaultBusy ? "Elaborazione…" : "Importa CSV"}</button><button disabled={vaultBusy} onClick={() => void downloadVaultTemplate()}>Scarica modello</button><span>🔒 Nessun segreto mostrato</span></div>
       {vaultError ? <div className="vault-alert error" role="alert">{vaultError}</div> : null}{vaultMessage ? <div className="vault-alert success">{vaultMessage}</div> : null}
+      {vaultFormOpen ? <form className="vault-form" onSubmit={saveVaultCredential} autoComplete="off">
+        <div className="vault-form-heading"><div><strong>{vaultEditingId ? "Aggiorna accesso" : "Nuovo cliente"}</strong><span>{vaultEditingId ? "Reinserisci username e password: Fort Knox non può mostrarli." : "I dati vengono cifrati appena premi Salva."}</span></div><button type="button" onClick={closeVaultForm}>×</button></div>
+        <div className="vault-form-grid">
+          <label>Cliente<input required maxLength={200} value={vaultForm.client_name} onChange={(event) => setVaultForm({ ...vaultForm, client_name: event.target.value })} placeholder="Ragione sociale o nome" /></label>
+          <label>Portale<input required maxLength={80} list="fort-knox-portals" value={vaultForm.portal} onChange={(event) => setVaultForm({ ...vaultForm, portal: event.target.value })} placeholder="es. Webdesk, CGN, AdE" /><datalist id="fort-knox-portals"><option value="webdesk" /><option value="ade" /><option value="cgn" /><option value="comunica" /><option value="ipsoa" /><option value="inps" /></datalist></label>
+          <label>Username<input required maxLength={320} value={vaultForm.username} onChange={(event) => setVaultForm({ ...vaultForm, username: event.target.value })} placeholder="Username o email" autoComplete="off" /></label>
+          <label>Password o token<input required type="password" maxLength={2048} value={vaultForm.secret} onChange={(event) => setVaultForm({ ...vaultForm, secret: event.target.value })} placeholder="Non verrà più mostrato" autoComplete="new-password" /></label>
+          <label>Tipo<select value={vaultForm.secret_kind} onChange={(event) => setVaultForm({ ...vaultForm, secret_kind: event.target.value as VaultCredentialInput["secret_kind"] })}><option value="password">Password</option><option value="api_token">Token API</option><option value="client_secret">Client secret</option></select></label>
+          <label>Profilo<input required maxLength={120} value={vaultForm.credential_label} onChange={(event) => setVaultForm({ ...vaultForm, credential_label: event.target.value })} placeholder="principale" /></label>
+        </div>
+        <div className="vault-form-note">SPID, CNS, CIE, smart card e OTP non possono essere salvati: l’Agent si fermerà e chiederà l’intervento umano.</div>
+        <div className="vault-form-actions"><button type="button" onClick={closeVaultForm}>Annulla</button><button className="primary" disabled={vaultBusy}>{vaultBusy ? "Cifro…" : "Cifra e salva"}</button></div>
+      </form> : null}
       {vaultPreview ? <section className="vault-preview"><div><strong>{vaultPreview.recognized} accessi riconosciuti</strong><span>{vaultPreview.warnings.length ? ` · ${vaultPreview.warnings.length} righe da correggere` : " · CSV pronto"}</span></div><div className="vault-preview-list">{vaultPreview.rows.slice(0, 8).map((row) => <span key={`${row.row_number}-${row.client_name}-${row.portal}`}><b>{row.client_name}</b><i>{row.portal}</i><em>{row.username_masked}</em></span>)}</div><div className="vault-preview-actions"><button onClick={() => { setVaultFile(null); setVaultPreview(null); }}>Annulla</button><button className="primary" disabled={vaultBusy} onClick={() => void importVaultFile()}>Cifra e importa</button></div></section> : null}
-      <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}</span></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Usa il modello CSV: cliente, portale, username e password/token.</span></div> : null}</div>
+      <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}</span></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => editVaultCredential(item)}>Aggiorna</button><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Premi Nuovo cliente oppure importa il modello CSV.</span></div> : null}</div>
       <div className="vault-safety"><strong>Barriere sempre attive</strong><span>Niente SPID/CNS automatico · niente invio fatture, F24, PEC o pagamenti · OTP inserito dalla persona.</span></div>
     </div></div> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>

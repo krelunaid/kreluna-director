@@ -10,16 +10,16 @@
 8. Il kill switch deve funzionare anche se un task è in corso.
 9. Ogni task è idempotente o protetto da doppia esecuzione.
 10. Ogni risultato importante ha evidenza: dati riletti, screenshot, file, API response o hash.
-11. Password e token dei clienti stanno nella Cassaforte cifrata, mai nei prompt, nei log o nelle prove.
+11. Password e token dei clienti stanno in Fort Knox cifrati, mai nei prompt, nei log o nelle prove.
 12. Una credenziale può essere consegnata una sola volta all'Agent già assegnato al task, solo su HTTPS o sullo stesso computer.
 
-## Cassaforte clienti
+## Kreluna Fort Knox
 
-- Il CSV viene letto dal Director con limiti di formato, dimensione e righe; il file sorgente non viene conservato.
-- Username e segreto sono cifrati con AES-GCM e legati a studio, cliente, portale ed etichetta.
+- Il titolare può inserire un accesso direttamente oppure importarlo via CSV; il file sorgente non viene conservato.
+- Username e segreto sono cifrati con AES-GCM, usando una chiave derivata distinta per studio e un contesto legato a cliente, portale ed etichetta.
 - La chiave `DIRECTOR_CREDENTIAL_KEY` è distinta dagli altri segreti e obbligatoria in produzione.
 - La UI restituisce solo username mascherati. Non esiste un endpoint di esportazione.
-- SPID, CNS, CIE e smart card sono rifiutati dall'importatore e restano manuali.
+- SPID, CNS, CIE, smart card e OTP sono rifiutati sia dal modulo sia dall'importatore e restano manuali.
 - L'Agent può soltanto compilare username/password dopo una richiesta esplicita; non clicca Accedi e non fotografa i campi compilati.
 
 ## Dispatch Agent
