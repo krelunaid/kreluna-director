@@ -7,6 +7,7 @@ import io
 import re
 import unicodedata
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from cryptography.exceptions import InvalidTag
 from kreluna_shared.crypto import decrypt_secret_text, encrypt_secret_text
@@ -38,6 +39,7 @@ SECRET_PLACEHOLDERS = {
 HEADER_ALIASES = {
     "client_name": {"cliente", "client", "client_name", "ragione_sociale", "azienda", "ditta"},
     "portal": {"portale", "portal", "sistema", "servizio", "provider", "programma"},
+    "portal_url": {"link", "url", "link_portale", "portal_url", "indirizzo", "sito"},
     "username": {"username", "utente", "user", "email", "login", "utenza"},
     "secret": {"password", "secret", "segreto", "token", "api_key", "chiave", "pin"},
     "secret_kind": {"tipo", "tipo_segreto", "secret_kind", "tipo_chiave"},
@@ -65,6 +67,7 @@ class ParsedCredential:
     client_name: str
     client_key: str
     portal: str
+    portal_url: str
     username: str
     secret: str
     secret_kind: str
@@ -75,6 +78,7 @@ class ParsedCredential:
             "row_number": self.row_number,
             "client_name": self.client_name,
             "portal": self.portal,
+            "portal_url": self.portal_url,
             "username_masked": mask_username(self.username),
             "secret_kind": self.secret_kind,
             "credential_label": self.credential_label,
@@ -102,6 +106,31 @@ def _clean_public(value: str, *, field: str, max_length: int) -> str:
         raise VaultImportError(f"{field} mancante")
     if len(clean) > max_length:
         raise VaultImportError(f"{field} troppo lungo")
+    return clean
+
+
+def normalize_portal_url(value: str) -> str:
+    """Accept only browser addresses that cannot embed login credentials."""
+
+    clean = value.strip()
+    if not clean:
+        return ""
+    if len(clean) > 1000 or any(char in clean for char in ("\x00", "\r", "\n")):
+        raise VaultImportError("link del portale non valido")
+    parsed = urlparse(clean)
+    if (
+        parsed.scheme.lower() not in {"https", "http"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise VaultImportError("il link deve iniziare con https:// e non contenere credenziali")
+    if parsed.scheme.lower() == "http" and parsed.hostname.lower() not in {
+        "127.0.0.1",
+        "localhost",
+        "::1",
+    }:
+        raise VaultImportError("per proteggere le credenziali il link del portale deve usare HTTPS")
     return clean
 
 
@@ -141,6 +170,7 @@ def normalize_credential(
     *,
     client_name: str,
     portal: str,
+    portal_url: str = "",
     username: str,
     secret: str,
     secret_kind: str = "password",
@@ -158,6 +188,7 @@ def normalize_credential(
     portal_raw = _clean_public(portal, field="portale", max_length=80)
     clean_portal = _ascii_slug(portal_raw, max_length=70)
     clean_portal = PORTAL_ALIASES.get(clean_portal, clean_portal)
+    clean_portal_url = normalize_portal_url(portal_url)
     clean_username = _clean_public(username, field="username", max_length=320)
     clean_secret = secret.strip()
     if not clean_secret or len(clean_secret) > 2048 or "\x00" in clean_secret:
@@ -186,6 +217,7 @@ def normalize_credential(
         client_name=clean_client_name,
         client_key=client_key,
         portal=clean_portal,
+        portal_url=clean_portal_url,
         username=clean_username,
         secret=clean_secret,
         secret_kind=clean_kind,
@@ -227,6 +259,7 @@ def parse_credentials_csv(data: bytes) -> tuple[list[ParsedCredential], list[dic
             item = normalize_credential(
                 client_name=str(row.get(columns["client_name"]) or ""),
                 portal=str(row.get(columns["portal"]) or ""),
+                portal_url=str(row.get(columns.get("portal_url", "")) or ""),
                 username=str(row.get(columns["username"]) or ""),
                 secret=str(row.get(columns["secret"]) or ""),
                 secret_kind=kind,

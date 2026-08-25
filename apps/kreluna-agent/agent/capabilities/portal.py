@@ -10,6 +10,7 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from kreluna_shared.crypto import sha256_hex
@@ -41,6 +42,31 @@ def _open_local_app(path_value: str) -> None:
         startfile(str(path))
         return
     raise RuntimeError("Il programma fatture locale è supportato su Mac e Windows.")
+
+
+def _safe_portal_target_url(value: str) -> str:
+    """Defend the Agent even if a stored portal address is corrupted."""
+
+    clean = value.strip()
+    if not clean:
+        return ""
+    if len(clean) > 1000 or any(char in clean for char in ("\x00", "\r", "\n")):
+        raise RuntimeError("FORT_KNOX_LINK_PORTALE_NON_VALIDO")
+    parsed = urlparse(clean)
+    if (
+        parsed.scheme.lower() not in {"https", "http"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise RuntimeError("FORT_KNOX_LINK_PORTALE_NON_VALIDO")
+    if parsed.scheme.lower() == "http" and parsed.hostname.lower() not in {
+        "127.0.0.1",
+        "localhost",
+        "::1",
+    }:
+        raise RuntimeError("FORT_KNOX_LINK_PORTALE_NON_SICURO")
+    return clean
 
 
 def prepare_invoice_portal(
@@ -266,11 +292,32 @@ def open_portal(
     spec = portal_for_key(portal)
     if spec is None:
         raise ValueError(f"PORTALE_SCONOSCIUTO:{portal}")
-    if not spec.configured:
-        raise RuntimeError(
-            f"{spec.name}: percorso non configurato. Apri Kreluna Agent e scegli Percorso fatture."
+    target_url = spec.url if spec.configured and not spec.app_path else ""
+    if use_saved_access:
+        if not director_url or not device_id or not task_id or sign_request is None:
+            raise RuntimeError("CASSAFORTE_AGENT_NON_AUTORIZZATA")
+        location_path = "/agent/portal-location"
+        location_response = httpx.post(
+            f"{director_url.rstrip('/')}{location_path}",
+            json=sign_request(location_path, {"device_id": device_id, "task_id": task_id}),
+            timeout=15,
         )
-    if spec.app_path:
+        if not location_response.is_success:
+            try:
+                detail = str(location_response.json().get("detail") or "Accesso non disponibile")
+            except (ValueError, AttributeError):
+                detail = "Accesso non disponibile"
+            raise RuntimeError(detail)
+        saved_target = _safe_portal_target_url(
+            str(location_response.json().get("portal_url") or "")
+        )
+        if saved_target:
+            target_url = saved_target
+    if not spec.configured and not target_url:
+        raise RuntimeError(
+            f"{spec.name}: link non configurato. Inseriscilo in Fort Knox."
+        )
+    if spec.app_path and not target_url:
         _open_local_app(spec.app_path)
         return {
             "ok": True,
@@ -287,7 +334,7 @@ def open_portal(
             "evidence": [],
         }
     if not supported() and sys.platform == "win32":
-        webbrowser.open(spec.url)
+        webbrowser.open(target_url)
         return {
             "ok": True,
             "live": True,
@@ -295,7 +342,7 @@ def open_portal(
             "filled": False,
             "browser": "predefinito Windows",
             "portal": spec.name,
-            "url": spec.url,
+            "url": target_url,
             "query": query,
             "message": (
                 f"Ho aperto {spec.name} sul PC Windows. "
@@ -319,7 +366,7 @@ def open_portal(
     browser = mac_browser.pick_browser(run, settings.mac_browser)
     evidence: list[dict[str, Any]] = []
 
-    mac_browser.open_url(run, browser, spec.url)
+    mac_browser.open_url(run, browser, target_url)
     check()
     evidence.append(_evidence(mac_browser.screenshot(run), "portale-aperto", portal))
 
@@ -339,7 +386,7 @@ def open_portal(
             "filled": filled,
             "browser": browser,
             "portal": spec.name,
-            "url": spec.url,
+            "url": target_url,
             "query": query,
             "message": message,
             "evidence": evidence,
@@ -352,7 +399,7 @@ def open_portal(
                 f"{spec.name}: questo accesso resta manuale. SPID, CNS, CIE e smart card non vengono compilati.",
             )
         where = mac_browser.current_url(run, browser)
-        if not mac_browser.same_site(spec.url, where):
+        if not mac_browser.same_site(target_url, where):
             return stop(
                 "sito-sbagliato",
                 f"Sul {browser} adesso c'è un altro sito, non {spec.name}. Non uso Fort Knox.",
@@ -365,8 +412,6 @@ def open_portal(
                 "campi-login-non-trovati",
                 f"{spec.name}: non riconosco i campi di accesso. Non ho richiesto né mostrato la password.",
             )
-        if not director_url or not device_id or not task_id or sign_request is None:
-            raise RuntimeError("CASSAFORTE_AGENT_NON_AUTORIZZATA")
         path = "/agent/credential-lease"
         response = httpx.post(
             f"{director_url.rstrip('/')}{path}",
@@ -422,7 +467,7 @@ def open_portal(
 
     # Prima di scrivere: la pagina davanti deve essere quella del portale.
     where = mac_browser.current_url(run, browser)
-    if not mac_browser.same_site(spec.url, where):
+    if not mac_browser.same_site(target_url, where):
         return stop(
             "sito-sbagliato",
             f"Sul {browser} adesso c'è un altro sito, non {spec.name}. "

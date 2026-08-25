@@ -157,7 +157,7 @@ def test_unknown_portal_is_refused():
 
 
 def test_unconfigured_invoice_placeholder_is_never_opened():
-    with pytest.raises(RuntimeError, match="percorso non configurato"):
+    with pytest.raises(RuntimeError, match="link non configurato"):
         open_portal(portal="fatture-webdesk", supported=lambda: True)
 
 
@@ -229,12 +229,25 @@ def test_saved_access_is_filled_once_without_login_click_or_final_screenshot(mon
     class Response:
         is_success = True
 
-        @staticmethod
-        def json():
-            return {"username": "cliente@example.it", "secret": "Sicura'123", "secret_kind": "password"}
+        def __init__(self, payload):
+            self.payload = payload
 
-    monkeypatch.setattr("agent.capabilities.portal.httpx.post", lambda *args, **kwargs: Response())
-    fake = FakeMac(page_url="https://www.cgn.it/login")
+        def json(self):
+            return self.payload
+
+    def post(url, *args, **kwargs):
+        if url.endswith("/agent/portal-location"):
+            return Response({"portal_url": "https://area.cgn.example.it/login"})
+        return Response(
+            {
+                "username": "cliente@example.it",
+                "secret": "Sicura'123",
+                "secret_kind": "password",
+            }
+        )
+
+    monkeypatch.setattr("agent.capabilities.portal.httpx.post", post)
+    fake = FakeMac(page_url="https://area.cgn.example.it/login")
     result, _ = run(
         fake,
         portal="visure-cgn",
@@ -254,6 +267,7 @@ def test_saved_access_is_filled_once_without_login_click_or_final_screenshot(mon
     assert result["filled"] is True
     assert "clicca tu" in result["message"].lower()
     joined = " ".join(fake.scripts)
+    assert "https://area.cgn.example.it/login" in joined
     assert "cliente@example.it" in joined
     assert "Sicura'123" in joined
     assert "submit" not in joined.lower()

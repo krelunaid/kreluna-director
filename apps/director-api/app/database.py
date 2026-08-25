@@ -37,6 +37,13 @@ def migrate_compatible_schema(connection) -> None:
             connection.exec_driver_sql(
                 "ALTER TABLE enrollment_codes ADD COLUMN expires_at DATETIME NULL"
             )
+    if "client_credentials" in tables:
+        columns = {item["name"] for item in inspector.get_columns("client_credentials")}
+        if "portal_url" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE client_credentials "
+                "ADD COLUMN portal_url VARCHAR(1000) NOT NULL DEFAULT ''"
+            )
 
 
 def _engine_url() -> str:

@@ -32,6 +32,7 @@ class VaultCredentialWrite(BaseModel):
 
     client_name: str = Field(min_length=1, max_length=200)
     portal: str = Field(min_length=1, max_length=80)
+    portal_url: str = Field(default="", max_length=1000)
     username: str = Field(min_length=1, max_length=320)
     secret: SecretStr = Field(min_length=1, max_length=2048)
     secret_kind: str = Field(default="password", min_length=1, max_length=40)
@@ -48,6 +49,7 @@ def _validated(body: VaultCredentialWrite):
         return normalize_credential(
             client_name=body.client_name,
             portal=body.portal,
+            portal_url=body.portal_url,
             username=body.username,
             secret=body.secret.get_secret_value(),
             secret_kind=body.secret_kind,
@@ -116,6 +118,7 @@ async def list_credentials(
                 "id": row.id,
                 "client_name": row.client_name,
                 "portal": row.portal,
+                "portal_url": row.portal_url,
                 "credential_label": row.credential_label,
                 "secret_kind": row.secret_kind,
                 "username_masked": username_masked,
@@ -154,6 +157,7 @@ async def create_credential(
             client_name=item.client_name,
             client_key=item.client_key,
             portal=item.portal,
+            portal_url=item.portal_url,
             credential_label=item.credential_label,
             secret_kind=item.secret_kind,
             username_ciphertext="",
@@ -162,6 +166,7 @@ async def create_credential(
         )
         session.add(row)
     row.client_name = item.client_name
+    row.portal_url = item.portal_url
     row.secret_kind = item.secret_kind
     row.status = "ready"
     row.updated_by = actor.user_id
@@ -220,6 +225,7 @@ async def update_credential(
     row.client_name = item.client_name
     row.client_key = item.client_key
     row.portal = item.portal
+    row.portal_url = item.portal_url
     row.credential_label = item.credential_label
     row.secret_kind = item.secret_kind
     row.status = "ready"
@@ -294,6 +300,7 @@ async def import_credentials(
                 client_name=item.client_name,
                 client_key=item.client_key,
                 portal=item.portal,
+                portal_url=item.portal_url,
                 credential_label=item.credential_label,
                 secret_kind=item.secret_kind,
                 username_ciphertext="",
@@ -305,6 +312,7 @@ async def import_credentials(
         else:
             updated += 1
         row.client_name = item.client_name
+        row.portal_url = item.portal_url
         row.secret_kind = item.secret_kind
         row.status = "ready"
         row.updated_by = actor.user_id
@@ -412,8 +420,9 @@ async def revoke_credential(
 async def csv_template(actor: Annotated[Actor, Depends(get_actor)]) -> PlainTextResponse:
     _require_owner(actor)
     body = (
-        "cliente;portale;username;password;tipo_segreto;etichetta\n"
-        "Esempio Cliente;webdesk;utente@example.it;SOSTITUISCI;password;principale\n"
+        "cliente;portale;link_portale;username;password;tipo_segreto;etichetta\n"
+        "Esempio Cliente;webdesk;https://portale.esempio.it/login;"
+        "utente@example.it;SOSTITUISCI;password;principale\n"
     )
     return PlainTextResponse(
         body,

@@ -72,6 +72,16 @@ def test_packaged_apps_open_a_native_window_instead_of_a_browser() -> None:
     assert 'set "KRELUNA_DESKTOP_APP=1"' in windows_launcher
 
 
+def test_mac_native_window_supports_csv_import_and_download() -> None:
+    source = (ROOT / "packaging" / "macos" / "KrelunaWindow.swift").read_text()
+
+    assert "WKDownloadDelegate" in source
+    assert "navigationAction.shouldPerformDownload" in source
+    assert "runOpenPanelWith parameters" in source
+    assert "UTType.commaSeparatedText" in source
+    assert ".downloadsDirectory" in source
+
+
 def test_release_publishes_director_and_agents_for_mac_and_windows() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
 
