@@ -85,14 +85,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            release/Kreluna-Director-Mac.zip \
-            release/Kreluna-Director-Mac.zip.sha256 \
-            release/Kreluna-Director-Windows.zip \
-            release/Kreluna-Director-Windows.zip.sha256 \
-            release/Kreluna-Agent-Mac.zip \
-            release/Kreluna-Agent-Mac.zip.sha256 \
-            release/Kreluna-Agenti-Windows.zip \
-            release/Kreluna-Agenti-Windows.zip.sha256 \
+            release/dist-macos/Kreluna-Director-Mac.zip \
+            release/dist-macos/Kreluna-Director-Mac.zip.sha256 \
+            release/dist-windows/Kreluna-Director-Windows.zip \
+            release/dist-windows/Kreluna-Director-Windows.zip.sha256 \
+            release/dist-macos-agent/Kreluna-Agent-Mac.zip \
+            release/dist-macos-agent/Kreluna-Agent-Mac.zip.sha256 \
+            release/dist-agents/Kreluna-Agenti-Windows.zip \
+            release/dist-agents/Kreluna-Agenti-Windows.zip.sha256 \
             --repo "${GITHUB_REPOSITORY}" \
             --generate-notes \
             --title "Kreluna Director ${GITHUB_REF_NAME#v}"
