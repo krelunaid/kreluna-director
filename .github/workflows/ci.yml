@@ -21,11 +21,17 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: apps/director-web/package-lock.json
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
       - name: Install Python dependencies
         run: python -m pip install -e ".[dev]"
       - name: Install web dependencies
         working-directory: apps/director-web
         run: npm ci
+      - name: Install managed AI gateway dependencies
+        working-directory: apps/kreluna-ai-gateway
+        run: pnpm install --frozen-lockfile
       - name: Lint
         run: python -m ruff check packages apps tests
       - name: Test
@@ -33,3 +39,6 @@ jobs:
       - name: Build web app
         working-directory: apps/director-web
         run: npm run build
+      - name: Check managed AI gateway
+        working-directory: apps/kreluna-ai-gateway
+        run: pnpm run check

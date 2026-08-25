@@ -51,6 +51,7 @@ async def _ask(
         api_key=config.api_key,
         model=config.model,
         client=client,
+        timeout=45.0 if config.managed else 15.0,
         allow_anonymous=config.provider == "ollama",
     )
     if result is not None and result.source == "llm-error":

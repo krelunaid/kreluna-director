@@ -75,3 +75,22 @@ async def test_without_a_key_reports_that_ai_is_not_configured():
     assert plan.source == "llm-error"
     assert plan.diagnostic and plan.diagnostic["code"] == "not_configured"
     assert "non configurata" in plan.summary
+
+
+@pytest.mark.asyncio
+async def test_managed_gateway_quota_error_is_explicit(monkeypatch):
+    monkeypatch.setattr(settings, "kreluna_managed_ai_token", "kreluna_live_" + "A" * 43)
+
+    def quota(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            429,
+            json={"error": {"code": "quota_exhausted", "message": "quota"}},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(quota)) as client:
+        plan = await plan_message("organizza la pratica speciale per Bianchi", client=client)
+
+    assert not plan.ok
+    assert plan.source == "llm-error"
+    assert plan.diagnostic and plan.diagnostic["code"] == "quota_exhausted"
+    assert "quota Grok" in plan.summary

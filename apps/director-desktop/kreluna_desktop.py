@@ -52,12 +52,32 @@ def _local_secret(name: str) -> str:
     return value
 
 
+def _managed_ai_token() -> str:
+    """Load the revocable Kreluna license; never bundle the upstream xAI key."""
+
+    path = SUPPORT / "managed_ai.token"
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except (FileNotFoundError, OSError, UnicodeDecodeError):
+        return ""
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    if not value.startswith("kreluna_live_") or not 50 <= len(value) <= 100:
+        return ""
+    return value
+
+
 def prepare_env() -> None:
     SUPPORT.mkdir(parents=True, exist_ok=True)
     (SUPPORT / "data").mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("DIRECTOR_DATABASE_URL", f"sqlite+aiosqlite:///{SUPPORT / 'data' / 'kreluna.db'}")
     os.environ.setdefault("DIRECTOR_EVIDENCE_DIR", str(SUPPORT / "data" / "evidence"))
     os.environ.setdefault("DIRECTOR_CREDENTIAL_KEY", _local_secret("credential.key"))
+    managed_token = _managed_ai_token()
+    if managed_token:
+        os.environ.setdefault("KRELUNA_MANAGED_AI_TOKEN", managed_token)
     os.environ.setdefault("KRELUNA_DIRECTOR_URL", API_URL)
     sys.path.insert(0, str(ROOT / "packages" / "kreluna-shared" / "src"))
     sys.path.insert(0, str(ROOT / "apps" / "director-api"))

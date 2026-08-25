@@ -408,6 +408,7 @@ async def test_owner_saves_grok_key_encrypted_without_returning_it(
     monkeypatch,
 ):
     secret = "xai-test-secret-that-must-never-be-returned"
+    monkeypatch.setattr(settings, "kreluna_managed_ai_url", "")
 
     async def healthy(config, **_kwargs):
         assert config.provider == "grok"
