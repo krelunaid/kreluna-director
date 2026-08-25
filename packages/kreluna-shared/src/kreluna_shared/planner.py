@@ -422,7 +422,13 @@ def plan_deterministic(text: str) -> PlanResult:
         client = _client_name(raw) or _client_name(lowered) or ""
         use_saved_access = any(
             phrase in lowered
-            for phrase in ("accesso salvato", "credenziali salvate", "password salvata", "usa la cassaforte")
+            for phrase in (
+                "accesso salvato",
+                "credenziali salvate",
+                "password salvata",
+                "usa la cassaforte",
+                "usa fort knox",
+            )
         )
         return PlanResult(
             ok=True,
@@ -430,7 +436,7 @@ def plan_deterministic(text: str) -> PlanResult:
                 f"Lavoro vero su {portal_name}: apro il sito nel browser del PC"
                 + (f" e cerco {client}" if client else "")
                 + (
-                    ". Compilo l'accesso dalla Cassaforte e mi fermo prima del login."
+                    ". Compilo l'accesso da Fort Knox e mi fermo prima del login."
                     if use_saved_access
                     else ". Il login lo fai tu."
                 )

@@ -23,6 +23,7 @@ from app.models import (
 from app.routers.agent_io import purge_expired_evidence
 from app.security import read_session
 from app.seed import DEMO_TENANT_ID, OTHER_TENANT_ID, seed_if_empty
+from app.services.vault import decrypt_credential
 from httpx import ASGITransport, AsyncClient
 from kreluna_shared.crypto import (
     agent_http_payload,
@@ -223,6 +224,107 @@ async def test_health_and_login(client: AsyncClient):
     assert "IPSOA" in programs["pc-f24"]
     assert "CGN" in programs["pc-visure"]
     assert overview.json()["agents_total"] == len(agents.json()["agents"])
+
+
+@pytest.mark.asyncio
+async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncClient):
+    token = await login(client)
+    client_name = f"Cliente Fort Knox {uuid4()}"
+    secret = "Fort-Knox-Segreto-123"
+    created = await client.post(
+        "/vault/credentials",
+        headers=auth(token),
+        json={
+            "client_name": client_name,
+            "portal": "webdesk",
+            "username": "fortknox@example.it",
+            "secret": secret,
+            "secret_kind": "password",
+            "credential_label": "principale",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["sent_to_ai"] is False
+    assert secret not in created.text
+    credential_id = created.json()["id"]
+
+    duplicate = await client.post(
+        "/vault/credentials",
+        headers=auth(token),
+        json={
+            "client_name": client_name,
+            "portal": "webdesk",
+            "username": "altro@example.it",
+            "secret": "Altro-Segreto-123",
+            "secret_kind": "password",
+            "credential_label": "principale",
+        },
+    )
+    assert duplicate.status_code == 409
+
+    replacement = "Fort-Knox-Nuovo-Segreto-456"
+    updated = await client.put(
+        f"/vault/credentials/{credential_id}",
+        headers=auth(token),
+        json={
+            "client_name": client_name,
+            "portal": "webdesk",
+            "username": "fortknox-nuovo@example.it",
+            "secret": replacement,
+            "secret_kind": "password",
+            "credential_label": "principale",
+        },
+    )
+    assert updated.status_code == 200
+    assert replacement not in updated.text
+
+    listing = await client.get("/vault/credentials", headers=auth(token))
+    item = next(row for row in listing.json()["credentials"] if row["id"] == credential_id)
+    assert item["username_masked"] != "fortknox-nuovo@example.it"
+    assert replacement not in listing.text
+    async with SessionLocal() as session:
+        stored = (
+            await session.execute(
+                select(ClientCredential).where(ClientCredential.id == credential_id)
+            )
+        ).scalar_one()
+        assert replacement not in stored.secret_ciphertext
+        assert decrypt_credential(stored) == ("fortknox-nuovo@example.it", replacement)
+
+    other_owner = await login(client, "altro@studio.demo")
+    other_listing = await client.get("/vault/credentials", headers=auth(other_owner))
+    assert credential_id not in other_listing.text
+
+    viewer = await login(client, "viewer@studio.demo")
+    denied = await client.post(
+        "/vault/credentials",
+        headers=auth(viewer),
+        json={
+            "client_name": "Cliente vietato",
+            "portal": "webdesk",
+            "username": "viewer",
+            "secret": "Segreto-Viewer-123",
+        },
+    )
+    assert denied.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_fort_knox_api_refuses_spid_cns_cie_and_otp(client: AsyncClient):
+    token = await login(client)
+    for portal in ("spid", "cns", "cie", "smart-card", "otp"):
+        denied = await client.post(
+            "/vault/credentials",
+            headers=auth(token),
+            json={
+                "client_name": f"Cliente {portal}",
+                "portal": portal,
+                "username": "utente",
+                "secret": "Segreto-Non-Salvabile",
+            },
+        )
+        assert denied.status_code == 400
+        assert "manuali" in denied.text
 
 
 @pytest.mark.asyncio

@@ -111,6 +111,15 @@ export type VaultCredential = {
   updated_at: string | null;
 };
 
+export type VaultCredentialInput = {
+  client_name: string;
+  portal: string;
+  username: string;
+  secret: string;
+  secret_kind: "password" | "api_token" | "client_secret";
+  credential_label: string;
+};
+
 export type VaultPreview = {
   recognized: number;
   rows: Array<{
@@ -216,6 +225,16 @@ export const api = {
   aiProviders: () => request<{ selected: string; providers: AIProviderOption[] }>("/ai/providers"),
   vaultCredentials: () =>
     request<{ credentials: VaultCredential[]; count: number }>("/vault/credentials"),
+  createVaultCredential: (credential: VaultCredentialInput) =>
+    request<{ ok: boolean; id: string; state: string; username_masked: string; sent_to_ai: false }>(
+      "/vault/credentials",
+      { method: "POST", body: JSON.stringify(credential) },
+    ),
+  updateVaultCredential: (id: string, credential: VaultCredentialInput) =>
+    request<{ ok: boolean; id: string; state: string; username_masked: string; sent_to_ai: false }>(
+      `/vault/credentials/${id}`,
+      { method: "PUT", body: JSON.stringify(credential) },
+    ),
   previewVaultCsv: (file: File) => upload<VaultPreview>("/vault/import/preview", file),
   importVaultCsv: (file: File) =>
     upload<{

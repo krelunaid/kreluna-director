@@ -58,12 +58,13 @@ Esempi che capisce già:
 - `Cosa sai fare?`
 - `Ferma tutto`
 
-## Cassaforte clienti e portali
+## Kreluna Fort Knox
 
-Da **Cassaforte** il titolare può importare un CSV con cliente, portale,
-username e password/token. Il Director riconosce le colonne localmente, cifra
-ogni accesso e mostra soltanto valori mascherati. Grok/OpenAI/Ollama non ricevono
-il CSV né le credenziali.
+Da **Fort Knox** il titolare può inserire un cliente direttamente oppure importare
+un CSV con cliente, portale, username e password/token. Il Director valida i dati,
+deriva una chiave distinta per lo studio, cifra ogni accesso e mostra soltanto
+valori mascherati. Grok/OpenAI/Ollama non ricevono moduli, CSV o credenziali.
+Configurazione e requisiti del servizio centrale: [`docs/FORT-KNOX.md`](docs/FORT-KNOX.md).
 
 `portal_open` guida il browser del Mac: apre il portale, aspetta il login umano,
 controlla che la pagina davanti sia davvero quella del portale, scrive nel campo
