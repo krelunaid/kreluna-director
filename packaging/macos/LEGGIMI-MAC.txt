@@ -11,3 +11,4 @@ Solo Mac con chip Apple (M1, M2, M3, M4). Niente Intel.
 
 Login: andrea@studio.demo / demo
 Non serve Python.
+Kreluna si apre in una finestra propria: Google Chrome e Safari non servono.

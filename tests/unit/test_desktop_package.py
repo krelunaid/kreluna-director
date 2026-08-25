@@ -30,6 +30,7 @@ def test_mac_launcher_exposes_the_whole_app_bundle_to_updater() -> None:
 
     assert 'APP_BUNDLE="$(cd "$APP_DIR/.." && pwd)"' in launcher
     assert 'export KRELUNA_APP_BUNDLE="$APP_BUNDLE"' in launcher
+    assert 'export KRELUNA_NATIVE_WINDOW="$APP_DIR/MacOS/KrelunaWindow"' in launcher
     assert 'export PYTHONDONTWRITEBYTECODE="1"' in launcher
     api_main = (ROOT / "apps" / "director-api" / "app" / "main.py").read_text()
     assert 'Path(ROOT / "data").mkdir' not in api_main
@@ -49,6 +50,25 @@ def test_embedded_director_runtimes_include_password_hasher() -> None:
     assert "fastapi" in packages
     assert "sqlalchemy" in packages
     assert "greenlet" in packages
+    windows_spec = module.PLATFORMS["windows-x64"]
+    windows = " ".join(windows_spec["extra"]).lower()
+    assert "pywebview" in " ".join(windows_spec["no_deps"]).lower()
+    assert "pythonnet" in windows
+    assert "proxy_tools" in " ".join(windows_spec["vendor"]).lower()
+
+
+def test_packaged_apps_open_a_native_window_instead_of_a_browser() -> None:
+    desktop = (ROOT / "apps" / "director-desktop" / "kreluna_desktop.py").read_text()
+    native = (ROOT / "apps" / "director-desktop" / "native_window.py").read_text()
+    mac_build = (ROOT / "scripts" / "macos" / "build-mac-app.sh").read_text()
+    windows_launcher = (ROOT / "packaging" / "windows" / "Avvia.bat").read_text()
+
+    assert 'os.environ.get("KRELUNA_DESKTOP_APP", "") == "1"' in desktop
+    assert "run_native_window" in desktop
+    assert "KrelunaWindow.swift" in mac_build
+    assert "KrelunaWindow" in mac_build
+    assert "edgechromium" in native
+    assert 'set "KRELUNA_DESKTOP_APP=1"' in windows_launcher
 
 
 def test_release_publishes_director_and_agents_for_mac_and_windows() -> None:

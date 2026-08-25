@@ -10,6 +10,7 @@ KRELUNA DIRECTOR PER WINDOWS
    password: demo
 
 Non serve installare Python. È già dentro Kreluna.
+Kreluna si apre in una finestra propria: il browser non serve per la dashboard.
 
 Questa è la demo: fattura finta, non F24 veri, non Fatture in Cloud reale.
 

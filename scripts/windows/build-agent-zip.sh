@@ -4,19 +4,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/dist-agents"
 APP="$OUT/Kreluna Agent"
+BUILD_PYTHON="python3"
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  BUILD_PYTHON="$ROOT/.venv/bin/python"
+fi
 
 rm -rf "$OUT"
 mkdir -p "$APP"
 bash "$ROOT/scripts/lib/copy-agent-tree.sh" "$APP"
 
 echo "Includo Python nell'Agent Windows…"
-python3 "$ROOT/scripts/lib/bundle_python.py" windows-x64 "$APP/runtime"
+"$BUILD_PYTHON" "$ROOT/scripts/lib/bundle_python.py" windows-x64 "$APP/runtime"
 
 cp "$ROOT/packaging/windows-agent/Installa-Agent.ps1" "$OUT/Installa-Agent.ps1"
 cp "$ROOT/packaging/windows-agent/LEGGIMI-AGENTI.txt" "$OUT/LEGGIMI-AGENTI.txt"
 cp "$ROOT/packaging/windows-agent/director.url" "$OUT/director.url"
 
-python3 - "$OUT" <<'PY'
+"$BUILD_PYTHON" - "$OUT" <<'PY'
 from pathlib import Path
 import sys
 
@@ -61,7 +65,7 @@ PY
     Installa*.bat
 )
 
-python3 - "$OUT/Kreluna-Agenti-Windows.zip" <<'PY'
+"$BUILD_PYTHON" - "$OUT/Kreluna-Agenti-Windows.zip" <<'PY'
 import hashlib, sys
 from pathlib import Path
 path = Path(sys.argv[1])

@@ -323,7 +323,7 @@ export default function App() {
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
-        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.13"}</p>
+        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.14"}</p>
           <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => goTo("ai-settings")}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : " · da configurare"}</button>
         </div>
       </div>

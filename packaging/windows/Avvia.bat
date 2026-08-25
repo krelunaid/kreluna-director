@@ -26,6 +26,7 @@ set "PYTHONPATH=%ROOT%packages\kreluna-shared\src;%ROOT%apps\director-api;%ROOT%
 set "DIRECTOR_DATABASE_URL=sqlite+aiosqlite:///%INSTALL%\data\kreluna.db"
 set "DIRECTOR_EVIDENCE_DIR=%INSTALL%\data\evidence"
 set "KRELUNA_DIRECTOR_URL=http://127.0.0.1:8080"
+set "KRELUNA_DESKTOP_APP=1"
 
 cd /d "%ROOT%"
 "%PY%" "%ROOT%apps\director-desktop\kreluna_desktop.py"

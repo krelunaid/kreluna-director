@@ -70,7 +70,17 @@ PLATFORMS = {
     "windows-x64": {
         "archive": f"cpython-{PY_VER}+{RELEASE}-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
         "pip_platforms": ["win_amd64"],
-        "extra": ["pywinauto==0.6.9", "colorama==0.4.6"],
+        "extra": [
+            "pywinauto==0.6.9",
+            "colorama==0.4.6",
+            "pythonnet==3.1.0",
+            "bottle==0.13.4",
+        ],
+        # pywebview metadata follows the build host's sys_platform even when
+        # pip targets Windows. Install its Windows dependencies explicitly and
+        # then install this pure-Python wheel without re-evaluating Mac markers.
+        "no_deps": ["pywebview==6.2.1"],
+        "vendor": ["scripts/lib/vendor/proxy_tools"],
     },
 }
 
@@ -229,6 +239,7 @@ def vendor_wheels(
     pip_platforms: list[str],
     extra: list[str],
     packages: list[str] | None = None,
+    no_deps: list[str] | None = None,
 ) -> None:
     target = site_packages(python_home)
     pkgs = list(packages if packages is not None else COMMON_PKGS) + extra
@@ -259,6 +270,8 @@ def vendor_wheels(
         print("Installo dipendenze per", pip_platform)
         try:
             subprocess.check_call(cmd)
+            if no_deps:
+                subprocess.check_call([*cmd[:-len(pkgs)], "--no-deps", *no_deps])
             return
         except subprocess.CalledProcessError as exc:
             last_error = exc
@@ -270,7 +283,17 @@ def bundle(root: Path, key: str, dest: Path) -> Path:
     spec = PLATFORMS[key]
     archive = fetch_archive(root, spec["archive"])
     extract_python(archive, dest)
-    vendor_wheels(dest, spec["pip_platforms"], spec["extra"], spec.get("packages"))
+    vendor_wheels(
+        dest,
+        spec["pip_platforms"],
+        spec["extra"],
+        spec.get("packages"),
+        spec.get("no_deps"),
+    )
+    target = site_packages(dest)
+    for relative in spec.get("vendor", []):
+        source = root / relative
+        shutil.copytree(source, target / source.name, dirs_exist_ok=True)
     strip_universal2(dest)
     assert_no_intel_artifacts(dest, key)
     marker = dest / "KRELUNA_RUNTIME.txt"
