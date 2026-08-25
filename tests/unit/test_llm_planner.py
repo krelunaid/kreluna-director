@@ -33,6 +33,28 @@ async def ask(reply: str, message: str = "senti, fai la fattura a Andrea Gadducc
         )
 
 
+@pytest.mark.asyncio
+async def test_grok_46_uses_low_reasoning_for_fast_operational_chat():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        reply = json.dumps({"understood": False, "question": "Per quale cliente?"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": reply}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await plan_with_llm(
+            "prepara una fattura",
+            base_url="https://api.x.ai/v1",
+            api_key="chiave-finta",
+            model="grok-4.6",
+            client=client,
+        )
+
+    assert seen["reasoning_effort"] == "low"
+    assert seen["max_tokens"] == 260
+
+
 def test_prompt_lists_studio_programs_and_forbids_invented_amounts():
     prompt = build_system_prompt()
     assert "PC-FATTURE" in prompt
@@ -148,6 +170,68 @@ async def test_question_when_the_model_is_unsure():
     assert not plan.denied
     assert plan.summary == "Per quale cliente?"
     assert plan.source == "llm-ask"
+
+
+@pytest.mark.asyncio
+async def test_informational_answer_is_returned_without_creating_a_task():
+    plan = await ask(
+        json.dumps(
+            {
+                "understood": False,
+                "answer": (
+                    "Per adempimento intendo una pratica o una scadenza dello studio, "
+                    "per esempio una dichiarazione o un versamento."
+                ),
+            }
+        ),
+        message="che vuol dire adempimento?",
+    )
+    assert plan is not None and plan.ok
+    assert plan.source == "llm-answer"
+    assert plan.tasks == []
+    assert "pratica" in plan.summary
+
+
+@pytest.mark.asyncio
+async def test_recipes_and_movies_are_kept_out_of_the_professional_assistant():
+    for message in ("Dammi la ricetta della carbonara", "Cercami un film da vedere stasera"):
+        plan = await ask(
+            json.dumps({"understood": False, "answer": "Ecco una risposta generica che non deve passare."}),
+            message=message,
+        )
+        assert plan is not None and plan.ok
+        assert plan.source == "llm-domain"
+        assert "solo con contabilità" in plan.summary
+        assert "carbonara" not in plan.summary
+        assert "stasera" not in plan.summary
+
+
+@pytest.mark.asyncio
+async def test_recent_conversation_is_sent_to_the_model():
+    def contextual(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["messages"][-3:] == [
+            {"role": "user", "content": "Mi fai una dichiarazione dei redditi?"},
+            {"role": "assistant", "content": "Quale adempimento ti serve?"},
+            {"role": "user", "content": "Che vuol dire?"},
+        ]
+        reply = {"understood": False, "answer": "Per adempimento intendo il lavoro fiscale da preparare."}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(reply)}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(contextual)) as client:
+        plan = await plan_with_llm(
+            "Che vuol dire?",
+            base_url="https://modello.esempio/v1",
+            api_key="chiave-finta",
+            model="modello-test",
+            client=client,
+            history=[
+                {"role": "user", "content": "Mi fai una dichiarazione dei redditi?"},
+                {"role": "assistant", "content": "Quale adempimento ti serve?"},
+            ],
+        )
+    assert plan is not None and plan.source == "llm-answer"
+    assert "lavoro fiscale" in plan.summary
 
 
 @pytest.mark.asyncio

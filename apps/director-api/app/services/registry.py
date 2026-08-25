@@ -20,8 +20,17 @@ class ConnectionHub:
     async def register_agent(self, device_id: str, ws: WebSocket) -> None:
         self.agents[device_id] = ws
 
-    def drop_agent(self, device_id: str) -> None:
-        self.agents.pop(device_id, None)
+    def drop_agent(self, device_id: str, ws: WebSocket | None = None) -> None:
+        """Rimuove solo la connessione che si è davvero chiusa.
+
+        Durante una riconnessione la nuova WebSocket può essere registrata prima
+        che il ``finally`` della precedente finisca. In quel caso la vecchia
+        connessione non deve cancellare quella nuova dalla dashboard.
+        """
+
+        current = self.agents.get(device_id)
+        if ws is None or current is ws:
+            self.agents.pop(device_id, None)
 
     async def send_agent(self, device_id: str, payload: dict) -> bool:
         ws = self.agents.get(device_id)

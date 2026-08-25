@@ -177,10 +177,12 @@ class InvoiceDraft(Base):
     __tablename__ = "invoice_drafts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    account_name: Mapped[str] = mapped_column(String(200), default="")
     client_name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(String(500))
     net_cents: Mapped[int] = mapped_column(Integer)
     vat_cents: Mapped[int] = mapped_column(Integer)
+    vat_note: Mapped[str] = mapped_column(String(300), default="")
     total_cents: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(40), default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

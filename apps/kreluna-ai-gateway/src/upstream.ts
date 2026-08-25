@@ -7,6 +7,7 @@ type SafeChatRequest = {
   messages: TextMessage[];
   temperature: number;
   max_tokens: number;
+  reasoning_effort: "low";
   response_format?: { type: "json_object" };
 };
 
@@ -108,6 +109,7 @@ export async function safeChatRequest(request: Request, env: Env): Promise<SafeC
     messages: parseMessages(raw),
     temperature: 0,
     max_tokens: Math.min(requestedMax, maxAllowed),
+    reasoning_effort: "low",
   };
   if (responseFormat?.type === "json_object") safe.response_format = { type: "json_object" };
   return safe;

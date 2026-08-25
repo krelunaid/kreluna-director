@@ -55,10 +55,13 @@ def _field(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], label: str
 
 def render_invoice_window(
     *,
+    account_name: str,
     client: str,
     description: str,
     net_label: str,
     vat_label: str,
+    vat_caption: str,
+    vat_note: str,
     total_label: str,
     status: str,
     typed_client: str,
@@ -80,17 +83,21 @@ def render_invoice_window(
     draw.text((64, 148), subtitle, fill=(90, 96, 108), font=_font(14))
 
     fields = {
-        "client": (64, 210, 620, 258),
-        "desc": (64, 310, 1030, 358),
-        "net": (64, 410, 360, 458),
-        "iva": (390, 410, 620, 458),
-        "total": (650, 410, 1030, 458),
+        "account": (64, 198, 510, 246),
+        "client": (540, 198, 1030, 246),
+        "desc": (64, 298, 1030, 346),
+        "net": (64, 398, 360, 446),
+        "iva": (390, 398, 620, 446),
+        "total": (650, 398, 1030, 446),
     }
-    _field(draw, fields["client"], "Cliente", typed_client, focus == "client")
+    _field(draw, fields["account"], "Azienda emittente", account_name, focus == "account")
+    _field(draw, fields["client"], "Cliente destinatario", typed_client, focus == "client")
     _field(draw, fields["desc"], "Prestazione", typed_desc, focus == "desc")
     _field(draw, fields["net"], "Imponibile", typed_net, focus == "net")
-    _field(draw, fields["iva"], "IVA 22%", vat_label if typed_net else "", focus == "iva")
+    _field(draw, fields["iva"], vat_caption, vat_label if typed_net else "", focus == "iva")
     _field(draw, fields["total"], "Totale", total_label if typed_net else "", focus == "total")
+    if vat_note and typed_net:
+        draw.text((64, 470), vat_note, fill=(120, 80, 20), font=_font(13, bold=True))
 
     save = (64, 520, 280, 572)
     emit = (300, 520, 560, 572)
@@ -110,6 +117,9 @@ def show_invoice_on_this_mac(
     client_name: str,
     description: str,
     net_eur: float,
+    account_name: str = "",
+    vat_rate: float = 0.22,
+    vat_note: str = "",
 ) -> bool:
     if sys.platform != "darwin":
         return False
@@ -117,7 +127,14 @@ def show_invoice_on_this_mac(
     if not script.exists():
         return False
     payload = json.dumps(
-        {"client_name": client_name, "description": description, "net_eur": net_eur},
+        {
+            "account_name": account_name,
+            "client_name": client_name,
+            "description": description,
+            "net_eur": net_eur,
+            "vat_rate": vat_rate,
+            "vat_note": vat_note,
+        },
         ensure_ascii=False,
     )
     try:
@@ -134,21 +151,27 @@ def show_invoice_on_this_mac(
 
 def fill_invoice_on_pc(
     *,
+    account_name: str = "",
     client_name: str,
     description: str,
     net_eur: float,
     vat_rate: float = 0.22,
+    vat_note: str = "",
     status: str = "draft",
 ) -> list[dict]:
     vat = round(net_eur * vat_rate, 2)
     total = round(net_eur + vat, 2)
     net_label = f"€ {net_eur:,.2f}"
     vat_label = f"€ {vat:,.2f}"
+    vat_caption = f"IVA {vat_rate * 100:g}%"
     total_label = f"€ {total:,.2f}"
     opened = show_invoice_on_this_mac(
+        account_name=account_name,
         client_name=client_name,
         description=description,
         net_eur=net_eur,
+        vat_rate=vat_rate,
+        vat_note=vat_note,
     )
     frames = [
         {
@@ -198,10 +221,13 @@ def fill_invoice_on_pc(
     evidence = []
     for index, frame in enumerate(frames, start=1):
         png = render_invoice_window(
+            account_name=account_name,
             client=client_name,
             description=description,
             net_label=net_label,
             vat_label=vat_label,
+            vat_caption=vat_caption,
+            vat_note=vat_note,
             total_label=total_label,
             status=status if index == len(frames) else "draft",
             **frame,

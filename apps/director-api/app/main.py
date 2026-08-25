@@ -4,6 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -11,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from kreluna_shared.update import APP_VERSION
 
 from app.config import ROOT, settings
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, engine, migrate_compatible_schema
 from app.routers.agent_io import router as agent_io_router
 from app.routers.billing import router as billing_router
 from app.routers.core import router as core_router
@@ -33,6 +34,7 @@ async def lifespan(_app: FastAPI):
     settings.evidence_path.mkdir(parents=True, exist_ok=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(migrate_compatible_schema)
     async with SessionLocal() as session:
         await seed_if_empty(session)
         await purge_old_evidence(session)
@@ -40,6 +42,12 @@ async def lifespan(_app: FastAPI):
         await translate_old_errors(session)
         await close_expired_approvals(session)
         await session.commit()
+    # Una sola connessione riutilizzabile verso l'IA evita un nuovo handshake
+    # HTTPS a ogni messaggio della chat.
+    _app.state.ai_client = httpx.AsyncClient(
+        limits=httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=90),
+        timeout=httpx.Timeout(45.0, connect=10.0),
+    )
     keeper = asyncio.create_task(housekeeping_loop(SessionLocal))
     try:
         yield
@@ -47,6 +55,7 @@ async def lifespan(_app: FastAPI):
         keeper.cancel()
         with suppress(asyncio.CancelledError):
             await keeper
+        await _app.state.ai_client.aclose()
 
 
 app = FastAPI(title="Kreluna Director", version=APP_VERSION, lifespan=lifespan)

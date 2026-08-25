@@ -20,6 +20,10 @@ from agent.safety import SafetyState
 ROOT = Path(__file__).resolve().parents[3]
 
 
+class EnrollmentRejectedError(ConnectionError):
+    pass
+
+
 def env(name: str, default: str = "") -> str:
     return os.getenv(name, default)
 
@@ -73,6 +77,17 @@ class AgentApp:
         while True:
             try:
                 await self.session()
+            except EnrollmentRejectedError:
+                print("[kreluna-agent] identità scaduta: nuova registrazione", flush=True)
+                self.identity.clear_enrollment()
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await self.ensure_enrolled(client)
+                        health = (await client.get(f"{self.director}/health")).json()
+                        self.server_pubkey = b64d(health["server_pubkey"])
+                except Exception as exc:
+                    print(f"[kreluna-agent] registrazione tra 2s: {exc}", flush=True)
+                    await asyncio.sleep(2)
             except Exception as exc:
                 print(f"[kreluna-agent] reconnect in 2s: {exc}", flush=True)
                 await asyncio.sleep(2)
@@ -131,6 +146,8 @@ class AgentApp:
                 print("[kreluna-agent] RESUMED", flush=True)
             elif msg_type == "task":
                 asyncio.create_task(self.run_task(message))
+            elif msg_type == "error" and message.get("error") == "DEVICE_REVOKED_OR_UNKNOWN":
+                raise EnrollmentRejectedError("Il Director non riconosce più questo Agent")
 
     async def run_task(self, message: dict) -> None:
         task_id = message["task_id"]

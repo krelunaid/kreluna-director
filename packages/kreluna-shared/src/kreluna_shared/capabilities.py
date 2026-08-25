@@ -10,14 +10,18 @@ class NotepadWriteArgs(BaseModel):
 
 
 class InvoicePrepareArgs(BaseModel):
+    account_name: str | None = Field(default=None, min_length=2, max_length=200)
     client_name: str = Field(min_length=2, max_length=200)
     description: str = Field(min_length=2, max_length=500)
     net_eur: float = Field(gt=0, le=1_000_000)
     vat_rate: float = Field(default=0.22, ge=0, le=1)
+    vat_note: str = Field(default="", max_length=300)
 
-    @field_validator("client_name", "description")
+    @field_validator("account_name", "client_name", "description", "vat_note")
     @classmethod
-    def strip_text(cls, value: str) -> str:
+    def strip_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return " ".join(value.split())
 
 

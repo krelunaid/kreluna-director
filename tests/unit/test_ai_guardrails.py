@@ -87,6 +87,22 @@ async def test_client_without_an_amount_field_is_still_checked():
     assert invented is not None and not invented.ok
 
 
+@pytest.mark.asyncio
+async def test_explicit_tax_exemption_cannot_be_replaced_with_vat_22():
+    payload = invoice("Otil Srl", 50000)
+    payload["tasks"][0]["args"].update(
+        {"account_name": "Andrea Gadducci", "description": "Manodopera", "vat_rate": 0.22}
+    )
+    plan = await ask(
+        payload,
+        "fattura per Gadduci di mandoperda 50000 euro a Otil Srl "
+        "senza IVA con dichiarazione d intento",
+    )
+    assert plan is not None and plan.ok
+    assert plan.tasks[0].args["vat_rate"] == 0
+    assert plan.tasks[0].args["vat_note"] == "Dichiarazione d'intento"
+
+
 def test_a_question_gets_the_list_of_what_it_can_do():
     for question in ("puoi fare fatture?", "cosa sai fare?", "aiuto", "come funziona?"):
         plan = plan_deterministic(question)

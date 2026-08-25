@@ -2,7 +2,8 @@
 param(
   [Parameter(Mandatory = $true)][string]$Role,
   [string]$DisplayName = "",
-  [string]$EnrollCode = ""
+  [string]$EnrollCode = "",
+  [string]$FattureTarget = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +37,30 @@ $DirectorUrl = $DirectorUrl.TrimEnd("/")
 if (-not $DisplayName) { $DisplayName = $Role.ToUpper() }
 if (-not $EnrollCode) { $EnrollCode = "KRELUNA-" + $Role.ToUpper().Replace("_", "-") }
 
+if ($Role -eq "pc-fatture" -and -not $FattureTarget) {
+  $FattureTarget = (Read-Host "Percorso del programma fatture (.exe) o indirizzo HTTPS del portale; Invio per prova locale").Trim()
+}
+if ($FattureTarget) {
+  if ($FattureTarget -match '^https?://') {
+    $TargetUri = $null
+    if (-not [Uri]::TryCreate($FattureTarget, [UriKind]::Absolute, [ref]$TargetUri)) {
+      throw "L'indirizzo fatture non e' valido."
+    }
+    $LocalTarget = $TargetUri.Host -in @("127.0.0.1", "localhost", "::1")
+    if ($TargetUri.Scheme -ne "https" -and -not ($TargetUri.Scheme -eq "http" -and $LocalTarget)) {
+      throw "Il portale fatture deve usare HTTPS."
+    }
+    if (-not [string]::IsNullOrEmpty($TargetUri.UserInfo)) {
+      throw "L'indirizzo fatture non deve contenere credenziali."
+    }
+  } else {
+    $FattureTarget = [IO.Path]::GetFullPath($FattureTarget)
+    if (-not (Test-Path -LiteralPath $FattureTarget) -or [IO.Path]::GetExtension($FattureTarget) -ne ".exe") {
+      throw "Scegli un programma fatture Windows esistente con estensione .exe."
+    }
+  }
+}
+
 $Ws = $DirectorUrl.Replace("http://", "ws://").Replace("https://", "wss://").TrimEnd("/") + "/ws/agent"
 $Install = Join-Path $env:LOCALAPPDATA "KrelunaAgent-$Role"
 $App = Join-Path $Install "app"
@@ -44,6 +69,8 @@ if (Test-Path $App) { Remove-Item -Recurse -Force $App }
 New-Item -ItemType Directory -Force -Path $App | Out-Null
 Copy-Item -Path (Join-Path $Source "*") -Destination $App -Recurse -Force
 Copy-Item -Path $UrlFile -Destination (Join-Path $Install "director.url") -Force
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[IO.File]::WriteAllText((Join-Path $Install "fatture.target"), $FattureTarget, $Utf8NoBom)
 
 $Py = Join-Path $App "runtime\python.exe"
 if (-not (Test-Path $Py)) {
@@ -66,6 +93,7 @@ set KRELUNA_ENROLLMENT_CODE=$EnrollCode
 set KRELUNA_AGENT_ID=$Role
 set KRELUNA_AGENT_DISPLAY_NAME=$DisplayName
 set KRELUNA_AGENT_DATA_DIR=%INSTALL%\data
+set KRELUNA_FATTURE_TARGET_FILE=%INSTALL%\fatture.target
 set PYTHONHOME=%ROOT%runtime
 set PYTHONPATH=%ROOT%packages\kreluna-shared\src;%ROOT%apps\kreluna-agent
 cd /d "%ROOT%"
@@ -83,4 +111,5 @@ $link.Save()
 
 Write-Host "Agent $DisplayName installato. Non e' il Director: questo PC esegue solo il suo lavoro."
 Write-Host "Director: $DirectorUrl"
+if ($Role -eq "pc-fatture" -and $FattureTarget) { Write-Host "Programma fatture: configurato" }
 Start-Process -FilePath (Join-Path $Install "Avvia-Agent.bat")

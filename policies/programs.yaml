@@ -40,12 +40,16 @@ portals:
   fatture-webdesk:
     role: pc-fatture
     name: Fatture — Webdesk
-    # DA COMPLETARE: l'indirizzo di Webdesk dello studio.
-    # Apri Webdesk nel browser, copia la riga dell'indirizzo e mettila qui.
+    # L'Agent permette di impostare il percorso/indirizzo senza modificare il codice.
+    # Finché manca, usa la prova locale visibile e non finge di lavorare sul sito vero.
+    configured: false
     url: https://www.agenziaentrate.gov.it
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
     username_field: "input[type=email], input[name*=user], input[name*=login]"
     password_field: "input[type=password]"
+    # Dopo aver aperto la pagina vera, questi selettori vengono mappati senza
+    # includere mai il bottone finale di invio.
+    invoice_fields: {}
     login_note: Utenza cliente con smart card o SPID. Lo fai tu a mano.
 
 settings:
