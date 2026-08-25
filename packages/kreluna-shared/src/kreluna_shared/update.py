@@ -6,7 +6,7 @@ import sys
 from typing import Any
 from urllib.parse import urlparse
 
-APP_VERSION = "0.5.11"
+APP_VERSION = "0.5.12"
 STAMP_NAME = "installed_version"
 DEFAULT_UPDATE_API = "https://api.github.com/repos/krelunaid/kreluna-director/releases/latest"
 DEFAULT_RELEASE_PAGE = "https://github.com/krelunaid/kreluna-director/releases/latest"
@@ -14,7 +14,12 @@ RELEASE_FILENAMES = {
     "macos": "Kreluna-Director-Mac.zip",
     "windows": "Kreluna-Director-Windows.zip",
 }
-TRUSTED_RELEASE_HOSTS = {"github.com", "api.github.com", "objects.githubusercontent.com"}
+TRUSTED_RELEASE_HOSTS = {
+    "github.com",
+    "api.github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+}
 
 
 def version_tuple(value: str) -> tuple[int, ...]:

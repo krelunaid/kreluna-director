@@ -10,6 +10,7 @@ tar -C "$ROOT" -cf - \
   --exclude 'node_modules' \
   --exclude 'data' \
   --exclude '.cache' \
+  --exclude '.ruff_cache' \
   --exclude 'dist-macos' \
   --exclude 'dist-windows' \
   --exclude 'apps/kreluna-agent' \

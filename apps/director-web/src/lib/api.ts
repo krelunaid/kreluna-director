@@ -124,6 +124,10 @@ export const api = {
   updateStatus: () => request<UpdateStatus>("/update/status"),
   updateManifest: () =>
     request<{ manifest: { version: string; notes: string }; signature: string }>("/update/manifest"),
+  installUpdate: () =>
+    request<{ ok: boolean; state: "restarting"; version: string }>("/update/install", {
+      method: "POST",
+    }),
   me: () => request<{ name: string; email: string; role: string; license_state: string }>("/me"),
   overview: () => request<Overview>("/overview"),
   aiProviders: () => request<{ selected: string; providers: AIProviderOption[] }>("/ai/providers"),

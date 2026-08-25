@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -519,6 +520,8 @@ async def test_ready_viewer_and_billing(client: AsyncClient, monkeypatch):
     assert update.status_code == 200
     assert update.json()["latest_version"] == "9.0.0"
     viewer = await login(client, "viewer@studio.demo")
+    forbidden_update = await client.post("/update/install", headers=auth(viewer))
+    assert forbidden_update.status_code == 403
     denied = await client.post("/chat", headers=auth(viewer), json={"message": "ciao"})
     assert denied.status_code == 403
     body = json.dumps({"id": "evt-1", "type": "invoice.paid", "tenant_id": DEMO_TENANT_ID}).encode()
@@ -535,6 +538,53 @@ async def test_ready_viewer_and_billing(client: AsyncClient, monkeypatch):
     owner = await login(client)
     sus = await client.post("/billing/simulate/suspended", headers=auth(owner))
     assert sus.json()["state"] == "suspended"
-    blocked = await client.post("/chat", headers=auth(owner), json={"message": "Apri Blocco Note e scrivi CIAO"})
+    blocked = await client.post(
+        "/chat", headers=auth(owner), json={"message": "Apri Blocco Note e scrivi CIAO"}
+    )
     assert blocked.json()["denied"] is True
     await client.post("/billing/simulate/active", headers=auth(owner))
+
+
+@pytest.mark.asyncio
+async def test_owner_can_start_verified_mac_update(client: AsyncClient, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.routers import core
+    from kreluna_shared import macos_update
+
+    owner = await login(client)
+    seen = {}
+
+    async def fake_update_status(*, force: bool = False):
+        assert force is True
+        return {
+            "available": True,
+            "latest_version": "9.0.0",
+            "platform": "macos",
+            "download_url": "https://github.com/example.zip",
+            "checksum_url": "https://github.com/example.zip.sha256",
+        }
+
+    def fake_stage(status, *, current_app, support_dir):
+        seen.update(status=status, current_app=current_app, support_dir=support_dir)
+        return SimpleNamespace(version="9.0.0")
+
+    monkeypatch.setattr(core.sys, "platform", "darwin")
+    monkeypatch.setenv("KRELUNA_DESKTOP_APP", "1")
+    monkeypatch.setenv("KRELUNA_APP_BUNDLE", "/Applications/Kreluna Director.app")
+    monkeypatch.setenv("KRELUNA_SUPPORT_DIR", "/tmp/KrelunaDirector-test")
+    monkeypatch.setattr(core, "latest_update_status", fake_update_status)
+    monkeypatch.setattr(core, "_schedule_process_exit", lambda: seen.update(exit_scheduled=True))
+    monkeypatch.setattr(macos_update, "stage_macos_update", fake_stage)
+    monkeypatch.setattr(
+        macos_update,
+        "launch_macos_update",
+        lambda staged, parent_pid: seen.update(parent_pid=parent_pid) or 1234,
+    )
+
+    response = await client.post("/update/install", headers=auth(owner))
+    assert response.status_code == 200
+    assert response.json()["version"] == "9.0.0"
+    assert response.json()["state"] == "restarting"
+    assert seen["current_app"] == Path("/Applications/Kreluna Director.app")
+    assert seen["exit_scheduled"] is True

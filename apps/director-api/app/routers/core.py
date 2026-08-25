@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import os
+import sys
+import threading
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -70,6 +75,75 @@ async def update_manifest() -> dict:
 @router.get("/update/status")
 async def update_status() -> dict:
     return await latest_update_status()
+
+
+def _schedule_process_exit(delay: float = 1.5) -> None:
+    def stop() -> None:
+        os._exit(0)
+
+    timer = threading.Timer(delay, stop)
+    timer.daemon = True
+    timer.start()
+
+
+@router.post("/update/install")
+async def install_update(
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può installare aggiornamenti")
+    if sys.platform != "darwin" or os.environ.get("KRELUNA_DESKTOP_APP") != "1":
+        raise HTTPException(
+            status_code=409,
+            detail="L'installazione automatica è disponibile nell'app Kreluna per Mac.",
+        )
+
+    from kreluna_shared.macos_update import MacUpdateError, launch_macos_update, stage_macos_update
+
+    status = await latest_update_status(force=True)
+    app_bundle = Path(os.environ.get("KRELUNA_APP_BUNDLE") or "")
+    support_dir = Path(
+        os.environ.get("KRELUNA_SUPPORT_DIR")
+        or (Path.home() / "Library" / "Application Support" / "KrelunaDirector")
+    )
+    try:
+        staged = await asyncio.to_thread(
+            stage_macos_update,
+            status,
+            current_app=app_bundle,
+            support_dir=support_dir,
+        )
+    except MacUpdateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Non riesco a preparare l'aggiornamento. Riprova tra poco.",
+        ) from exc
+
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="software.update.install",
+        result="started",
+        detail=staged.version,
+    )
+    await session.commit()
+    try:
+        launch_macos_update(staged, parent_pid=os.getpid())
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Aggiornamento verificato, ma il riavvio non può ancora partire.",
+        ) from exc
+    _schedule_process_exit()
+    return {
+        "ok": True,
+        "state": "restarting",
+        "version": staged.version,
+    }
 
 
 @router.get("/ready")

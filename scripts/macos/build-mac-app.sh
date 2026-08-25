@@ -3,13 +3,24 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/dist-macos"
-APP="$OUT/Kreluna Director.app"
+TEMP_ROOT="${TMPDIR:-/tmp}"
+BUILD_OUT="$(mktemp -d "$TEMP_ROOT/kreluna-mac-build.XXXXXX")"
+APP="$BUILD_OUT/Kreluna Director.app"
 RES="$APP/Contents/Resources/app"
+export COPYFILE_DISABLE=1
+
+cleanup() {
+  if [[ -n "$BUILD_OUT" && "$BUILD_OUT" == "$TEMP_ROOT"/kreluna-mac-build.* ]]; then
+    rm -rf "$BUILD_OUT"
+  fi
+}
+trap cleanup EXIT
 
 echo "Compilo la dashboard…"
 bash "$ROOT/scripts/lib/build-web.sh"
 
 rm -rf "$OUT"
+mkdir -p "$OUT"
 mkdir -p "$APP/Contents/MacOS" "$RES"
 
 cp "$ROOT/packaging/macos/Info.plist" "$APP/Contents/Info.plist"
@@ -28,15 +39,25 @@ python3 "$ROOT/scripts/lib/make_app_icon.py"
 cp "$ROOT/packaging/macos/AppIcon.png" "$APP/Contents/Resources/AppIcon.png"
 cp "$ROOT/packaging/macos/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
-cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$OUT/LEGGIMI-MAC.txt"
-cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$OUT/1-SE-DICE-CESTINO.txt"
-cp "$ROOT/packaging/macos/Apri-me.html" "$OUT/Apri-me.html"
-ln -sfn /Applications "$OUT/Applicazioni"
+echo "Precompilo Python prima della firma…"
+"$APP/Contents/Resources/python-arm64/bin/python3.12" -m compileall -q \
+  "$APP/Contents/Resources/python-arm64/lib/python3.12" \
+  "$RES/apps/director-api" \
+  "$RES/apps/director-desktop" \
+  "$RES/packages/kreluna-shared/src"
+
+cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$BUILD_OUT/LEGGIMI-MAC.txt"
+cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$BUILD_OUT/1-SE-DICE-CESTINO.txt"
+cp "$ROOT/packaging/macos/Apri-me.html" "$BUILD_OUT/Apri-me.html"
+ln -sfn /Applications "$BUILD_OUT/Applicazioni"
 
 xattr -cr "$APP" >/dev/null 2>&1 || true
+echo "Firmo il pacchetto Mac per il controllo dell'aggiornamento…"
+/usr/bin/codesign --force --deep --sign - --timestamp=none "$APP"
+/usr/bin/codesign --verify --deep "$APP"
 
 (
-  cd "$OUT"
+  cd "$BUILD_OUT"
   zip -qry -y "Kreluna-Director-Mac.zip" \
     "Kreluna Director.app" \
     "Applicazioni" \
@@ -44,6 +65,7 @@ xattr -cr "$APP" >/dev/null 2>&1 || true
     "Apri-me.html" \
     "LEGGIMI-MAC.txt"
 )
+cp "$BUILD_OUT/Kreluna-Director-Mac.zip" "$OUT/Kreluna-Director-Mac.zip"
 
 python3 - "$OUT/Kreluna-Director-Mac.zip" <<'PY'
 import hashlib, sys

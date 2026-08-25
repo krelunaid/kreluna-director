@@ -30,7 +30,6 @@ from app.services.housekeeping import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings.evidence_path.mkdir(parents=True, exist_ok=True)
-    Path(ROOT / "data").mkdir(parents=True, exist_ok=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with SessionLocal() as session:
