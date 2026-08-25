@@ -131,3 +131,12 @@ def test_dashboard_refreshes_do_not_overlap():
     assert "if (refreshInFlight.current) return refreshInFlight.current;" in source
     assert "refreshInFlight.current = request;" in source
     assert "refreshInFlight.current = null;" in source
+
+
+def test_managed_ai_is_white_label_in_the_customer_interface():
+    source = (ROOT / "apps" / "director-web" / "src" / "App.tsx").read_text()
+
+    assert "IA Kreluna" in source
+    assert "Grok è incluso" not in source
+    assert "non vengono inviati a Grok" not in source
+    assert "La chiave xAI" not in source

@@ -31,7 +31,7 @@ def test_packaged_install_uses_revocable_kreluna_license_instead_of_xai_key():
 
     assert grok.managed is True
     assert grok.configurable is False
-    assert grok.label == "Grok incluso"
+    assert grok.label == "IA Kreluna"
     assert grok.api_key == token
     assert grok.base_url == "https://kreluna-ai-gateway.krelunaid.workers.dev/v1"
     assert "api.x.ai" not in grok.base_url

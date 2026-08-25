@@ -257,13 +257,13 @@ def _response_error(response: httpx.Response) -> PlanResult | None:
         "license_invalid": "licenza Kreluna non valida",
         "license_inactive": "licenza Kreluna sospesa o revocata",
         "license_expired": "licenza Kreluna scaduta",
-        "quota_exhausted": "quota Grok della licenza esaurita",
+        "quota_exhausted": "quota IA della licenza esaurita",
         "rate_limit": "troppe richieste ravvicinate",
-        "provider_authentication": "collegamento centrale xAI non autorizzato",
-        "provider_unavailable": "xAI non è temporaneamente disponibile",
-        "provider_rate_limit": "xAI ha raggiunto il proprio limite temporaneo",
-        "provider_model_unavailable": "modello Grok incluso non disponibile",
-        "gateway_misconfigured": "servizio Grok centrale non configurato",
+        "provider_authentication": "servizio IA centrale non autorizzato",
+        "provider_unavailable": "servizio IA temporaneamente non disponibile",
+        "provider_rate_limit": "servizio IA al limite temporaneo",
+        "provider_model_unavailable": "motore IA gestito non disponibile",
+        "gateway_misconfigured": "servizio IA centrale non configurato",
     }
     return _llm_error(code, details[code]) if code in details else None
 
