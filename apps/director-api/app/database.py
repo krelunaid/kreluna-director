@@ -10,6 +10,25 @@ class Base(DeclarativeBase):
     pass
 
 
+def migrate_compatible_schema(connection) -> None:
+    """Aggiunge colonne compatibili senza cancellare le bozze già presenti."""
+
+    from sqlalchemy import inspect
+
+    inspector = inspect(connection)
+    if "invoice_drafts" not in inspector.get_table_names():
+        return
+    columns = {item["name"] for item in inspector.get_columns("invoice_drafts")}
+    if "account_name" not in columns:
+        connection.exec_driver_sql(
+            "ALTER TABLE invoice_drafts ADD COLUMN account_name VARCHAR(200) NOT NULL DEFAULT ''"
+        )
+    if "vat_note" not in columns:
+        connection.exec_driver_sql(
+            "ALTER TABLE invoice_drafts ADD COLUMN vat_note VARCHAR(300) NOT NULL DEFAULT ''"
+        )
+
+
 def _engine_url() -> str:
     url = settings.director_database_url
     if url.startswith("sqlite+aiosqlite:///./"):

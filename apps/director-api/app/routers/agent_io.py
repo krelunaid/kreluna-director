@@ -274,15 +274,19 @@ async def agent_prepare_invoice(payload: dict[str, Any], session: Annotated[Asyn
         payload.get("description", "Consulenza"),
         float(payload["net_eur"]),
         float(payload.get("vat_rate", 0.22)),
+        account_name=str(payload.get("account_name") or ""),
+        vat_note=str(payload.get("vat_note") or ""),
     )
     session.add(draft)
     await session.commit()
     await session.refresh(draft)
     observed = observed_from_draft(draft)
     expected = {
+        "account": draft.account_name,
         "client": draft.client_name,
         "net": draft.net_cents / 100,
         "vat": draft.vat_cents / 100,
+        "vat_note": draft.vat_note,
         "total": draft.total_cents / 100,
         "status": "draft",
     }

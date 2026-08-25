@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from kreluna_shared.update import APP_VERSION
 
 from app.config import ROOT, settings
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, engine, migrate_compatible_schema
 from app.routers.agent_io import router as agent_io_router
 from app.routers.billing import router as billing_router
 from app.routers.core import router as core_router
@@ -33,6 +33,7 @@ async def lifespan(_app: FastAPI):
     settings.evidence_path.mkdir(parents=True, exist_ok=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(migrate_compatible_schema)
     async with SessionLocal() as session:
         await seed_if_empty(session)
         await purge_old_evidence(session)

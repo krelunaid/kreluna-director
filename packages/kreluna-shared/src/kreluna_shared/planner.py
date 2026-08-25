@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from difflib import SequenceMatcher
 from typing import Any
 
 from kreluna_shared.capabilities import CAPABILITIES, DENIED_CAPABILITIES, validate_capability_args
@@ -106,6 +107,48 @@ KNOWN_CLIENTS = (
     ("mario rossi", "Mario Rossi"),
 )
 
+COMPANY_SUFFIXES = {"srl", "spa", "snc", "sas", "ss", "srls"}
+
+
+def _display_name(value: str) -> str:
+    words = [word for word in value.strip(" ,.;:-").split() if word]
+    return " ".join(word.upper() if word.lower() in COMPANY_SUFFIXES else word.title() for word in words)
+
+
+def _canonical_known_name(value: str) -> str:
+    """Corregge soltanto refusi molto vicini a un cliente noto, mai nomi arbitrari."""
+
+    candidate = " ".join(value.lower().split())
+    for needle, name in KNOWN_CLIENTS:
+        if candidate == needle or SequenceMatcher(None, candidate, needle).ratio() >= 0.88:
+            return name
+    return _display_name(value)
+
+
+def _invoice_parties(text: str) -> tuple[str, str]:
+    """Separa azienda emittente e destinatario in frasi come "per X ... a Y"."""
+
+    amount_then_recipient = re.search(
+        r"(?:\d[\d. ,]{0,18}\s*(?:euro|eur|€)|(?:euro|eur|€)\s*\d[\d. ,]{0,18})"
+        r"\s+(?:a|ad|al\s+cliente)\s+"
+        r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'&.-]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'&.-]*){0,3}?)"
+        r"(?=\s+(?:senza|con|iva|non\s+imponibile|esenzion|dichiarazione)|[,.]|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not amount_then_recipient:
+        return "", ""
+    recipient = _canonical_known_name(amount_then_recipient.group(1))
+    before_amount = text[: amount_then_recipient.start()]
+    account_match = re.search(
+        r"\bfattura\s+(?:per|di)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'&.-]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'&.-]*){0,3}?)"
+        r"(?=\s+(?:di|da|per)\s+|\s+\d|[,.]|$)",
+        before_amount,
+        flags=re.IGNORECASE,
+    )
+    account = _canonical_known_name(account_match.group(1)) if account_match else ""
+    return account, recipient
+
 
 def _client_name(text: str) -> str | None:
     lowered = text.lower()
@@ -125,7 +168,7 @@ def _client_name(text: str) -> str | None:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             words = match.group(1).split()
-            name = " ".join(words).title()
+            name = _display_name(" ".join(words))
             if name.lower() in {"demo", "una", "la", "the", "fattura"} | NOT_A_NAME:
                 continue
             if any(word.lower() in NOT_A_NAME for word in words):
@@ -176,7 +219,9 @@ def _email_body(text: str) -> str:
 
 def _description(text: str, default: str = "Consulenza") -> str:
     lowered = text.lower()
-    if "manodopera" in lowered or "manpower" in lowered:
+    words = re.findall(r"[a-zà-ÿ']{5,}", lowered)
+    looks_like_manodopera = any(SequenceMatcher(None, word, "manodopera").ratio() >= 0.72 for word in words)
+    if "manodopera" in lowered or "manpower" in lowered or looks_like_manodopera:
         return "Manodopera"
     if re.search(r"\bconsulenza\b", lowered):
         return "Consulenza"
@@ -188,6 +233,23 @@ def _description(text: str, default: str = "Consulenza") -> str:
         if len(desc) >= 3:
             return desc.strip().capitalize()
     return default
+
+
+def _vat_details(text: str) -> tuple[float, str, bool]:
+    lowered = text.lower().replace("’", "'")
+    declaration = bool(re.search(r"dichiarazione\s+d(?:i|[' ]?)\s*intento", lowered))
+    without_vat = declaration or any(
+        phrase in lowered
+        for phrase in ("senza iva", "iva 0", "iva zero", "non imponibile", "esenzione iva", "esente iva")
+    )
+    if without_vat:
+        note = "Dichiarazione d'intento" if declaration else "Operazione senza IVA"
+        return 0.0, note, True
+    explicit = re.search(r"\biva\s*(\d{1,2}(?:[.,]\d+)?)\s*%?", lowered)
+    if explicit:
+        rate = float(explicit.group(1).replace(",", ".")) / 100
+        return rate, f"IVA {rate * 100:g}%", True
+    return 0.22, "", False
 
 
 def _amount_in_reply(text: str) -> float | None:
@@ -530,9 +592,11 @@ def plan_deterministic(text: str) -> PlanResult:
                 deny_reason="",
                 source="deterministic-ask",
             )
-        client = _client_name(raw) or _client_name(lowered) or ""
+        account, recipient = _invoice_parties(raw)
+        client = recipient or _client_name(raw) or _client_name(lowered) or ""
         net = _money(raw) or _money(lowered)
         description = _description(raw)
+        vat_rate, vat_note, _vat_explicit = _vat_details(raw)
         if client and (description.lower() in client.lower() or client.lower() in description.lower()):
             description = ""
         missing = []
@@ -555,31 +619,21 @@ def plan_deterministic(text: str) -> PlanResult:
                 source="deterministic-ask",
                 pending={
                     "capability": "invoice_prepare_demo",
+                    "account_name": account,
                     "client_name": client,
                     "description": description,
                     "net_eur": net,
+                    "vat_rate": vat_rate,
+                    "vat_note": vat_note,
                 },
             )
-        return PlanResult(
-            ok=True,
-            summary=(
-                f"Mando PC-FATTURE (Webdesk / sito AdE, demo locale): fattura a {client} "
-                f"per {description}, € {net:,.2f} + IVA. Poi ti chiedo conferma prima di emetterla."
-            ),
-            tasks=[
-                PlannedTask(
-                    goal=f"Aprire il gestionale e compilare la fattura a {client} per {description}",
-                    capability="invoice_prepare_demo",
-                    args={
-                        "client_name": client,
-                        "description": description,
-                        "net_eur": net,
-                        "vat_rate": 0.22,
-                    },
-                    risk=Risk.MEDIUM,
-                    needs_approval=False,
-                )
-            ],
+        return invoice_plan(
+            client,
+            description,
+            net,
+            account_name=account,
+            vat_rate=vat_rate,
+            vat_note=vat_note,
         )
 
     if "document" in lowered or "documenti mancanti" in lowered:
@@ -717,22 +771,36 @@ def apply_policy(plan: PlanResult, engine: PolicyEngine, license_state: str) -> 
     return plan.model_copy(update={"tasks": safe_tasks})
 
 
-def invoice_plan(client: str, description: str, net: float) -> PlanResult:
+def invoice_plan(
+    client: str,
+    description: str,
+    net: float,
+    *,
+    account_name: str = "",
+    vat_rate: float = 0.22,
+    vat_note: str = "",
+) -> PlanResult:
+    account = f" per conto di {account_name}" if account_name else ""
+    tax = f"IVA {vat_rate * 100:g}%"
+    if vat_rate == 0:
+        tax = f"senza IVA ({vat_note or 'operazione non imponibile'})"
     return PlanResult(
         ok=True,
         summary=(
-            f"Mando PC-FATTURE (Webdesk / sito AdE, demo locale): fattura a {client} "
-            f"per {description}, € {net:,.2f} + IVA. Poi ti chiedo conferma prima di emetterla."
+            f"Mando PC-FATTURE (Webdesk / sito AdE, demo locale){account}: fattura a {client} "
+            f"per {description}, € {net:,.2f}, {tax}. Poi ti chiedo conferma prima di emetterla."
         ),
         tasks=[
             PlannedTask(
                 goal=f"Aprire il gestionale e compilare la fattura a {client} per {description}",
                 capability="invoice_prepare_demo",
                 args={
+                    "account_name": account_name or None,
                     "client_name": client,
                     "description": description,
                     "net_eur": net,
-                    "vat_rate": 0.22,
+                    "vat_rate": vat_rate,
+                    "vat_note": vat_note,
                 },
                 risk=Risk.MEDIUM,
                 needs_approval=False,
@@ -754,6 +822,7 @@ def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
     if any(phrase in lowered for phrase in DENY_PHRASES) or _asks_what_i_can_do(lowered):
         return None
 
+    account = pending.get("account_name") or ""
     client = pending.get("client_name") or _client_name(raw) or _client_name(lowered) or ""
     net = pending.get("net_eur")
     if net is None:
@@ -763,6 +832,12 @@ def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
         found = _description(raw, default="")
         if found and not (client and (found.lower() in client.lower() or client.lower() in found.lower())):
             description = found
+    pending_rate = pending.get("vat_rate")
+    vat_rate = float(pending_rate) if pending_rate is not None else 0.22
+    vat_note = str(pending.get("vat_note") or "")
+    reply_rate, reply_note, reply_explicit = _vat_details(raw)
+    if reply_explicit:
+        vat_rate, vat_note = reply_rate, reply_note
 
     if not client:
         # Una risposta breve senza verbi è probabilmente il nome del cliente.
@@ -788,12 +863,22 @@ def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
             source="deterministic-ask",
             pending={
                 "capability": "invoice_prepare_demo",
+                "account_name": account,
                 "client_name": client,
                 "description": description,
                 "net_eur": net,
+                "vat_rate": vat_rate,
+                "vat_note": vat_note,
             },
         )
-    return invoice_plan(client, description, float(net))
+    return invoice_plan(
+        client,
+        description,
+        float(net),
+        account_name=account,
+        vat_rate=vat_rate,
+        vat_note=vat_note,
+    )
 
 
 THIS_INVOICE = (

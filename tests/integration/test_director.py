@@ -323,6 +323,32 @@ async def test_chat_policy_and_task_queue(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_spoken_invoice_keeps_issuer_recipient_and_tax_regime(client: AsyncClient):
+    token = await login(client)
+    response = await client.post(
+        "/chat",
+        headers=auth(token),
+        json={
+            "message": (
+                "mi fai una fattura per gadduci di mandoperda i 50000 euro a otil Srl "
+                "senza iva con dichiarazione d intento"
+            )
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    args = response.json()["tasks"][0]["args"]
+    assert args == {
+        "account_name": "Andrea Gadducci",
+        "client_name": "Otil SRL",
+        "description": "Manodopera",
+        "net_eur": 50000.0,
+        "vat_rate": 0.0,
+        "vat_note": "Dichiarazione d'intento",
+    }
+
+
+@pytest.mark.asyncio
 async def test_invoice_demo_and_cross_tenant(client: AsyncClient):
     token = await login(client)
     prepared = await client.post(

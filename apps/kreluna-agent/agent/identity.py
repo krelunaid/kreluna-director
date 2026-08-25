@@ -66,6 +66,13 @@ class AgentIdentity:
             encoding="utf-8",
         )
 
+    def clear_enrollment(self) -> None:
+        """Dimentica un Director che non riconosce più questo Agent, mantenendo la chiave locale."""
+
+        self.device_id = None
+        self.tenant_id = None
+        self.state_path.unlink(missing_ok=True)
+
     def public_key_b64(self) -> str:
         return b64e(self.public_key)
 

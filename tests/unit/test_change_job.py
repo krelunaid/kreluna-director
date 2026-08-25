@@ -150,3 +150,18 @@ def test_each_job_gets_its_own_folder_even_with_a_shared_default(tmp_path, monke
     second = Path(os.environ["KRELUNA_AGENT_DATA_DIR"])
     assert second.name == "pc-fatture"
     assert first != second, "due lavori non possono condividere la stessa identità"
+
+
+def test_an_agent_can_forget_only_a_rejected_enrollment(tmp_path):
+    from agent.identity import AgentIdentity
+
+    identity = AgentIdentity(tmp_path, "pc-fatture", "PC-FATTURE")
+    identity.save_enrollment("vecchio-device", "vecchio-studio")
+    key_before = identity.key_path.read_bytes()
+
+    identity.clear_enrollment()
+
+    assert identity.device_id is None
+    assert identity.tenant_id is None
+    assert not identity.state_path.exists()
+    assert identity.key_path.read_bytes() == key_before
