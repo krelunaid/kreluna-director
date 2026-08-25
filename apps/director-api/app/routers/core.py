@@ -180,6 +180,8 @@ async def ai_providers(
                 "model": config.model,
                 "configured": config.configured,
                 "key_saved": bool(config.api_key),
+                "managed": config.managed,
+                "configurable": config.configurable,
             }
         )
     return {"selected": current, "providers": providers}

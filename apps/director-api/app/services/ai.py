@@ -60,6 +60,8 @@ async def provider_config(
 
     selected = (provider or await selected_provider(session, tenant_id)).strip().lower()
     base = settings.ai_provider_config(selected)
+    if base.managed:
+        return base
     row = await session.get(
         AIProviderCredential,
         {"tenant_id": tenant_id, "provider": selected},
@@ -108,6 +110,8 @@ async def save_provider_configuration(
     if cleaned not in AI_PROVIDERS:
         raise ValueError("Provider IA sconosciuto")
     base = settings.ai_provider_config(cleaned)
+    if base.managed:
+        raise ValueError("Grok incluso è gestito dalla licenza Kreluna e non richiede una chiave API")
     clean_model = _clean_model(model, fallback=base.model)
     row = await session.get(
         AIProviderCredential,
@@ -153,12 +157,14 @@ def _not_configured(config: AIProviderConfig) -> dict[str, Any]:
             "connected": False,
             "status": "credential_error",
             "detail": "La chiave salvata non è leggibile: inseriscila nuovamente",
+            "managed": config.managed,
+            "configurable": config.configurable,
         }
     missing: list[str] = []
     if not config.model:
         missing.append("modello")
     if config.provider != "ollama" and not config.api_key:
-        missing.append("chiave API")
+        missing.append("licenza Kreluna" if config.managed else "chiave API")
     if not config.base_url:
         missing.append("indirizzo")
     return {
@@ -169,6 +175,8 @@ def _not_configured(config: AIProviderConfig) -> dict[str, Any]:
         "connected": False,
         "status": "not_configured",
         "detail": "Configurazione incompleta: " + ", ".join(missing),
+        "managed": config.managed,
+        "configurable": config.configurable,
     }
 
 
@@ -197,6 +205,28 @@ def _cache_key(config: AIProviderConfig) -> str:
     return f"{config.provider}|{config.base_url}|{config.model}|{key_fingerprint}"
 
 
+def _gateway_error(response: httpx.Response) -> tuple[str, str] | None:
+    try:
+        payload = response.json()
+        error = payload.get("error") if isinstance(payload, dict) else None
+        code = str(error.get("code") or "") if isinstance(error, dict) else ""
+    except (TypeError, ValueError):
+        return None
+    details = {
+        "license_missing": "Licenza Kreluna non presente",
+        "license_invalid": "Licenza Kreluna non valida",
+        "license_inactive": "Licenza Kreluna sospesa o revocata",
+        "license_expired": "Licenza Kreluna scaduta",
+        "quota_exhausted": "Quota Grok della licenza esaurita",
+        "rate_limit": "Troppe richieste ravvicinate",
+        "provider_authentication": "Collegamento centrale xAI non autorizzato",
+        "provider_unavailable": "xAI non è temporaneamente disponibile",
+        "provider_model_unavailable": "Il modello Grok incluso non è disponibile",
+        "gateway_misconfigured": "Servizio Grok centrale non configurato",
+    }
+    return (code, details[code]) if code in details else None
+
+
 async def check_ai_health(
     config: AIProviderConfig,
     *,
@@ -216,7 +246,10 @@ async def check_ai_health(
     requester = client or httpx.AsyncClient()
     try:
         response = await requester.get(_health_url(config), headers=headers, timeout=timeout)
-        if response.status_code in {401, 403}:
+        gateway_error = _gateway_error(response) if config.managed else None
+        if gateway_error is not None:
+            status, detail = gateway_error
+        elif response.status_code in {401, 403}:
             status, detail = "authentication", "Chiave API rifiutata"
         elif response.status_code >= 500:
             status, detail = "provider_unavailable", "Il provider non risponde correttamente"
@@ -251,6 +284,8 @@ async def check_ai_health(
         "connected": status == "connected",
         "status": status,
         "detail": detail,
+        "managed": config.managed,
+        "configurable": config.configurable,
     }
     _HEALTH_CACHE[cache_key] = (time.monotonic(), result)
     return result

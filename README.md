@@ -71,15 +71,14 @@ stanno in `policies/programs.yaml`, correggibili senza toccare il codice.
 Se viene richiesto esplicitamente l'accesso salvato, compila username e password
 ma non clicca **Accedi** e non cattura una schermata dopo la compilazione.
 
-## IA opzionale
+## IA inclusa
 
-Grok con modello `grok-4.6` è il provider iniziale. Nell'app apri
-**Impostazioni**, incolla una volta la chiave xAI e premi **Salva e controlla**:
-la chiave viene cifrata per azienda e non viene mai rimandata alla dashboard.
-OpenAI e Ollama restano selezionabili. In un deployment server si possono usare
-anche i campi `.env` dedicati (`KRELUNA_GROK_*`, `KRELUNA_OPENAI_*`,
-`KRELUNA_OLLAMA_*`). La dashboard mostra sempre una diagnostica esplicita.
-Dettagli: `docs/COLLEGA-IA.txt`.
+Grok `grok-4.6` è incluso tramite il gateway Kreluna: il cliente non inserisce
+e non riceve la chiave xAI. Ogni installazione usa una licenza distinta,
+revocabile e soggetta a quota; la chiave principale resta soltanto sul servizio
+centrale. OpenAI e Ollama restano selezionabili come alternative configurabili.
+La dashboard mostra sempre una diagnostica esplicita, senza passare in silenzio
+a un altro provider. Dettagli operativi: `docs/MANAGED-AI-GATEWAY.md`.
 
 Il modello propone, la policy decide. Non può usare capability fuori elenco,
 non può inventare o cambiare un importo o un cliente che non sia nella frase

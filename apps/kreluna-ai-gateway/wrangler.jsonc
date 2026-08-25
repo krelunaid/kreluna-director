@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "kreluna-ai-gateway",
+  "main": "src/index.ts",
+  "workers_dev": true,
+  "preview_urls": false,
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "GROK_MODEL": "grok-4.6",
+    "XAI_BASE_URL": "https://api.x.ai/v1",
+    "MAX_REQUEST_BYTES": "65536",
+    "MAX_RESPONSE_TOKENS": "600",
+    "REQUESTS_PER_MINUTE": "20"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kreluna-ai-gateway",
+      "database_id": "14b1ebae-af77-4641-a2d7-cd8e80a4bff4",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  }
+}

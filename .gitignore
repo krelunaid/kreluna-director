@@ -20,6 +20,7 @@ dist-macos/
 dist-macos-agent/
 dist-agents/
 .cache/
+.wrangler/
 dist-windows/
 
 # Never commit CSV files prepared for the encrypted client vault.

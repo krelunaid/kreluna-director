@@ -16,6 +16,11 @@ class AIProviderConfig:
     api_key: str
     model: str
     credential_error: str = ""
+    managed: bool = False
+
+    @property
+    def configurable(self) -> bool:
+        return not self.managed
 
     @property
     def configured(self) -> bool:
@@ -47,6 +52,9 @@ class Settings(BaseSettings):
     kreluna_grok_base_url: str = "https://api.x.ai/v1"
     kreluna_grok_api_key: str = ""
     kreluna_grok_model: str = "grok-4.6"
+    kreluna_managed_ai_url: str = "https://kreluna-ai-gateway.krelunaid.workers.dev/v1"
+    kreluna_managed_ai_token: str = ""
+    kreluna_managed_ai_model: str = "grok-4.6"
     kreluna_ollama_base_url: str = "http://127.0.0.1:11434/v1"
     kreluna_ollama_model: str = ""
     kreluna_openai_base_url: str = "https://api.openai.com/v1"
@@ -127,11 +135,22 @@ class Settings(BaseSettings):
         legacy_key = self.kreluna_llm_api_key.strip() if legacy_selected else ""
         legacy_model = self.kreluna_llm_model.strip() if legacy_selected else ""
         if selected == "grok":
+            direct_key = self.kreluna_grok_api_key.strip() or legacy_key
+            managed_url = self.kreluna_managed_ai_url.strip()
+            if managed_url and not direct_key:
+                return AIProviderConfig(
+                    provider="grok",
+                    label="Grok incluso",
+                    base_url=managed_url,
+                    api_key=self.kreluna_managed_ai_token.strip(),
+                    model=self.kreluna_managed_ai_model.strip(),
+                    managed=True,
+                )
             return AIProviderConfig(
                 provider="grok",
                 label="Grok",
                 base_url=legacy_url or self.kreluna_grok_base_url.strip(),
-                api_key=self.kreluna_grok_api_key.strip() or legacy_key,
+                api_key=direct_key,
                 model=self.kreluna_grok_model.strip() or legacy_model,
             )
         if selected == "ollama":

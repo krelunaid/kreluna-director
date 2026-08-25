@@ -23,6 +23,20 @@ def test_new_install_defaults_to_grok_46(monkeypatch):
     assert grok.model == "grok-4.6"
 
 
+def test_packaged_install_uses_revocable_kreluna_license_instead_of_xai_key():
+    token = "kreluna_live_" + "A" * 43
+    configured = Settings(_env_file=None, kreluna_managed_ai_token=token)
+
+    grok = configured.ai_provider_config("grok")
+
+    assert grok.managed is True
+    assert grok.configurable is False
+    assert grok.label == "Grok incluso"
+    assert grok.api_key == token
+    assert grok.base_url == "https://kreluna-ai-gateway.krelunaid.workers.dev/v1"
+    assert "api.x.ai" not in grok.base_url
+
+
 def test_provider_configs_keep_credentials_and_models_separate():
     configured = Settings(
         _env_file=None,
@@ -80,6 +94,29 @@ async def test_health_check_reports_a_missing_model():
 
 
 @pytest.mark.asyncio
+async def test_managed_health_reports_an_expired_license_explicitly():
+    config = Settings(
+        _env_file=None,
+        kreluna_managed_ai_token="kreluna_live_" + "A" * 43,
+    ).ai_provider_config("grok")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                403,
+                json={"error": {"code": "license_expired", "message": "expired"}},
+            )
+        )
+    ) as client:
+        result = await check_ai_health(config, client=client, force=True)
+
+    assert result["connected"] is False
+    assert result["status"] == "license_expired"
+    assert result["detail"] == "Licenza Kreluna scaduta"
+    assert result["managed"] is True
+
+
+@pytest.mark.asyncio
 async def test_ollama_health_uses_local_tags_without_an_api_key():
     config = Settings(
         _env_file=None,
@@ -113,3 +150,23 @@ async def test_planner_uses_the_selected_providers_matching_model(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         plan = await plan_message("organizza quella pratica", client=client, provider="grok")
     assert plan.source == "llm-ask"
+
+
+@pytest.mark.asyncio
+async def test_managed_grok_allows_the_gateway_timeout_budget(monkeypatch):
+    from app.services import planning
+
+    seen: dict[str, float] = {}
+
+    async def capture(_message, **kwargs):
+        seen["timeout"] = kwargs["timeout"]
+
+    monkeypatch.setattr(planning, "plan_with_llm", capture)
+    config = Settings(
+        _env_file=None,
+        kreluna_managed_ai_token="kreluna_live_" + "A" * 43,
+    ).ai_provider_config("grok")
+    async with httpx.AsyncClient() as client:
+        await planning._ask("richiesta non deterministica", client, config=config)
+
+    assert seen["timeout"] == 45.0

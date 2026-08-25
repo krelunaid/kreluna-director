@@ -71,6 +71,8 @@ export type AIProviderOption = {
   model: string;
   configured: boolean;
   key_saved: boolean;
+  managed: boolean;
+  configurable: boolean;
 };
 
 export type AIHealth = {
@@ -81,6 +83,8 @@ export type AIHealth = {
   connected: boolean;
   status: string;
   detail: string;
+  managed: boolean;
+  configurable: boolean;
 };
 
 export type UpdateStatus = {

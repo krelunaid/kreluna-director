@@ -245,6 +245,29 @@ def _llm_error(code: str, detail: str) -> PlanResult:
     )
 
 
+def _response_error(response: httpx.Response) -> PlanResult | None:
+    try:
+        payload = response.json()
+        error = payload.get("error") if isinstance(payload, dict) else None
+        code = str(error.get("code") or "") if isinstance(error, dict) else ""
+    except (TypeError, ValueError):
+        return None
+    details = {
+        "license_missing": "licenza Kreluna non presente",
+        "license_invalid": "licenza Kreluna non valida",
+        "license_inactive": "licenza Kreluna sospesa o revocata",
+        "license_expired": "licenza Kreluna scaduta",
+        "quota_exhausted": "quota Grok della licenza esaurita",
+        "rate_limit": "troppe richieste ravvicinate",
+        "provider_authentication": "collegamento centrale xAI non autorizzato",
+        "provider_unavailable": "xAI non è temporaneamente disponibile",
+        "provider_rate_limit": "xAI ha raggiunto il proprio limite temporaneo",
+        "provider_model_unavailable": "modello Grok incluso non disponibile",
+        "gateway_misconfigured": "servizio Grok centrale non configurato",
+    }
+    return _llm_error(code, details[code]) if code in details else None
+
+
 async def plan_with_llm(
     message: str,
     *,
@@ -277,6 +300,9 @@ async def plan_with_llm(
             # Qualche fornitore non accetta response_format: riprovo senza.
             body.pop("response_format")
             response = await client.post(url, json=body, headers=headers, timeout=timeout)
+        explicit = _response_error(response)
+        if explicit is not None:
+            return explicit
         if response.status_code in {401, 403}:
             return _llm_error("authentication", "chiave API rifiutata dal provider")
         if response.status_code == 429:
