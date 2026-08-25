@@ -140,7 +140,7 @@ class Settings(BaseSettings):
             if managed_url and not direct_key:
                 return AIProviderConfig(
                     provider="grok",
-                    label="Grok incluso",
+                    label="IA Kreluna",
                     base_url=managed_url,
                     api_key=self.kreluna_managed_ai_token.strip(),
                     model=self.kreluna_managed_ai_model.strip(),
@@ -148,7 +148,7 @@ class Settings(BaseSettings):
                 )
             return AIProviderConfig(
                 provider="grok",
-                label="Grok",
+                label="Provider esterno",
                 base_url=legacy_url or self.kreluna_grok_base_url.strip(),
                 api_key=direct_key,
                 model=self.kreluna_grok_model.strip() or legacy_model,

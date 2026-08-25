@@ -93,4 +93,4 @@ async def test_managed_gateway_quota_error_is_explicit(monkeypatch):
     assert not plan.ok
     assert plan.source == "llm-error"
     assert plan.diagnostic and plan.diagnostic["code"] == "quota_exhausted"
-    assert "quota Grok" in plan.summary
+    assert "quota IA" in plan.summary

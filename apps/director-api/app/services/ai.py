@@ -111,7 +111,7 @@ async def save_provider_configuration(
         raise ValueError("Provider IA sconosciuto")
     base = settings.ai_provider_config(cleaned)
     if base.managed:
-        raise ValueError("Grok incluso è gestito dalla licenza Kreluna e non richiede una chiave API")
+        raise ValueError("L'IA Kreluna è gestita dalla licenza e non richiede una chiave API")
     clean_model = _clean_model(model, fallback=base.model)
     row = await session.get(
         AIProviderCredential,
@@ -217,12 +217,12 @@ def _gateway_error(response: httpx.Response) -> tuple[str, str] | None:
         "license_invalid": "Licenza Kreluna non valida",
         "license_inactive": "Licenza Kreluna sospesa o revocata",
         "license_expired": "Licenza Kreluna scaduta",
-        "quota_exhausted": "Quota Grok della licenza esaurita",
+        "quota_exhausted": "Quota IA della licenza esaurita",
         "rate_limit": "Troppe richieste ravvicinate",
-        "provider_authentication": "Collegamento centrale xAI non autorizzato",
-        "provider_unavailable": "xAI non è temporaneamente disponibile",
-        "provider_model_unavailable": "Il modello Grok incluso non è disponibile",
-        "gateway_misconfigured": "Servizio Grok centrale non configurato",
+        "provider_authentication": "Servizio IA centrale non autorizzato",
+        "provider_unavailable": "Il servizio IA non è temporaneamente disponibile",
+        "provider_model_unavailable": "Il motore IA gestito non è disponibile",
+        "gateway_misconfigured": "Servizio IA centrale non configurato",
     }
     return (code, details[code]) if code in details else None
 
