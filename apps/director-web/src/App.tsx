@@ -16,6 +16,8 @@ import {
 } from "./lib/api";
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
+type NavSection = "dashboard" | "agents" | "tasks" | "requests" | "errors" | "contracts" | "visure" | "vault" | "documents" | "settings";
+type RequestFilter = "all" | "active" | "errors" | "approvals";
 
 const INITIAL_CHAT: ChatItem[] = [{ role: "director", text: "Ciao Andrea, sono Kreluna, il tuo assistente IA operativo. Posso aiutarti con fatture elettroniche, F24, contabilità, pratiche camerali, contratti, DURC e visure.\n\nPer lavorare su un sito vero aggiungi «vera» o «apri il sito». Importi e nomi non li invento: se mancano, te li chiedo.\n\nNiente invii, niente pagamenti: prima chiedo Approva." }];
 
@@ -31,7 +33,7 @@ const SUGGESTIONS = [
   { short: "F24 IPSOA", full: "Prepara gli F24 in scadenza, ma non inviarli" },
   { short: "Contabilità", full: "Scarica le fatture in IPSOA per Gadducci" },
   { short: "Camerali", full: "Prepara la pratica camerale per Gadducci" },
-  { short: "Contratti", full: "Prepara il contratto sul sito AdE di Samuele per Gadducci" },
+  { short: "Contratti", full: "Prepara una bozza di contratto per il cliente indicato, senza inviarla" },
   { short: "DURC", full: "Prepara la richiesta DURC per Gadducci" },
   { short: "Visure", full: "Prepara la visura per Gadducci" },
   { short: "Visura vera su CGN", full: "Apri il sito CGN e fai la visura vera per Gadducci" },
@@ -119,7 +121,8 @@ export default function App() {
   const [updateInstallError, setUpdateInstallError] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
-  const [activeNav, setActiveNav] = useState("dashboard");
+  const [activeNav, setActiveNav] = useState<NavSection>("dashboard");
+  const [requestFilter, setRequestFilter] = useState<RequestFilter>("all");
   const [deviceAction, setDeviceAction] = useState<string | null>(null);
   const [enrollment, setEnrollment] = useState<{
     agentId: string;
@@ -230,14 +233,21 @@ export default function App() {
     setDraft("");
     setOrb("listen");
     void api.resetChat().catch(() => undefined);
-    goTo("chat");
+    openComposer("");
   }
 
   const pending = useMemo(() => approvals.filter((item) => item.status === "pending"), [approvals]);
   const blocked = useMemo(() => agents.filter((item) => item.killed || item.paused), [agents]);
   const activeErrors = useMemo(() => tasks.filter((task) => task.error_state === "active"), [tasks]);
+  const historicalErrors = useMemo(() => tasks.filter((task) => task.error_state === "historical"), [tasks]);
   const requestCount = useMemo(() => tasks.filter((item) => ["queued", "assigned", "running", "waiting_approval"].includes(item.status)).length, [tasks]);
-  const recentTasks = tasks.slice(0, 12);
+  const recentTasks = useMemo(() => tasks.slice(0, 12), [tasks]);
+  const dashboardTasks = useMemo(() => {
+    if (requestFilter === "active") return tasks.filter((item) => ["queued", "assigned", "running", "waiting_approval"].includes(item.status)).slice(0, 12);
+    if (requestFilter === "errors") return tasks.filter((item) => item.error_state === "active").slice(0, 12);
+    if (requestFilter === "approvals") return [];
+    return recentTasks;
+  }, [requestFilter, recentTasks, tasks]);
 
   async function resumeAll() {
     await Promise.all(blocked.map((item) => api.resume(item.device_id).catch(() => undefined)));
@@ -272,7 +282,7 @@ export default function App() {
   }
 
   async function openVault() {
-    setVaultOpen(true); setVaultError(""); setVaultMessage("");
+    setActiveNav("vault"); setVaultOpen(true); setVaultError(""); setVaultMessage("");
     try { await loadVault(); }
     catch (err) { setVaultError(err instanceof Error ? err.message : "Fort Knox non disponibile"); }
   }
@@ -280,6 +290,7 @@ export default function App() {
   function closeVault() {
     setVaultOpen(false); setVaultFormOpen(false); setVaultEditingId(null);
     setVaultForm({ ...EMPTY_VAULT_FORM }); setVaultFile(null); setVaultPreview(null);
+    setActiveNav("dashboard");
   }
 
   function newVaultCredential() {
@@ -404,9 +415,13 @@ export default function App() {
     } finally { setAISettingsBusy(false); }
   }
 
-  function goTo(section: string, prompt?: string, nav = section) {
-    setActiveNav(nav); if (prompt) setDraft(prompt);
-    window.setTimeout(() => document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 0);
+  function goTo(section: NavSection, prompt?: string) {
+    setActiveNav(section); if (prompt) setDraft(prompt);
+  }
+
+  function openComposer(prompt: string) {
+    setDraft(prompt); setActiveNav("dashboard");
+    window.setTimeout(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus(), 0);
   }
 
   function remindUpdateLater() {
@@ -498,6 +513,49 @@ export default function App() {
     ? `IA Kreluna · ${aiConnected ? "attiva" : aiUnavailable}`
     : `IA: ${providerLabel}${overview?.ai_model ? ` · ${overview.ai_model}` : ""}${aiConnected ? "" : ` · ${aiUnavailable}`}`;
   const updateAvailable = Boolean(updateStatus?.available);
+  const activeTasks = tasks.filter((item) => ["queued", "assigned", "running", "waiting_approval"].includes(item.status));
+  const contractTasks = tasks.filter((item) => item.capability.includes("contratt") || String(item.args.portal || "").toLowerCase().includes("contratt"));
+  const visureTasks = tasks.filter((item) => item.capability.includes("visur") || String(item.args.portal || "").toLowerCase().includes("visur") || String(item.args.portal || "").toLowerCase().includes("cgn"));
+  const documentTasks = tasks.filter((item) => item.capability.includes("document") || item.evidence.length > 0);
+
+  function taskRows(rows: Task[], empty: string) {
+    if (!rows.length) return <div className="workspace-empty"><strong>Nessun elemento</strong><span>{empty}</span></div>;
+    return <div className="workspace-list">{rows.map((task) => <article className={`workspace-row ${task.status}`} key={task.id}>
+      <span className={`workspace-row-icon ${task.status}`}>{task.status === "failed" || task.error_state === "active" ? "△" : "▣"}</span>
+      <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{task.capability.replace(/_/g, " ")} · rischio {task.risk}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
+      <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
+    </article>)}</div>;
+  }
+
+  function workspacePage() {
+    if (activeNav === "agents") return <section className="workspace-page" aria-labelledby="workspace-title">
+      <div className="workspace-heading"><div><span>CONTROLLO LOCALE</span><h2 id="workspace-title">PC &amp; FEATURE</h2><p>Installa, attiva o sospendi gli Agent autorizzati dello studio.</p></div><button onClick={() => void refresh()}>↻ Aggiorna stato</button></div>
+      <div className="workspace-stats"><WorkspaceStat value={agents.filter(agentOnline).length} label="PC collegati" tone="green" /><WorkspaceStat value={agents.filter((item) => item.presence === "waiting_install").length} label="Da installare" tone="gold" /><WorkspaceStat value={blocked.length} label="Sospesi" tone="red" /></div>
+      <div className="agent-workspace-grid">{agents.map((agent) => {
+        const work = currentWork(agent, tasks); const waiting = agent.presence === "waiting_install"; const online = agentOnline(agent); const enabled = !(agent.killed || agent.paused); const offlineEnabled = !waiting && !online && enabled;
+        return <article className={`agent-workspace-card ${online && enabled ? "online" : ""}`} key={agent.device_id}><div><span className={`status-dot ${waiting ? "waiting" : online && enabled ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong><em>{agent.platform || "Mac/PC"}</em></div><h3>{agent.job}</h3><p>{agentState(agent, work)}</p><small>{agent.hostname || "Computer non ancora associato"}</small><button disabled={deviceAction === agent.device_id || offlineEnabled} onClick={() => void toggleAgent(agent)}>{waiting ? "Installa Agent" : offlineEnabled ? "Apri Kreluna Agent sul PC" : enabled ? "Disattiva" : "Attiva"}</button></article>;
+      })}</div>
+    </section>;
+
+    if (activeNav === "tasks") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>CRONOLOGIA OPERATIVA</span><h2 id="workspace-title">TASK</h2><p>Tutti i lavori creati, con stato, capacità usata e prove disponibili.</p></div><button onClick={() => openComposer("")}>＋ Nuovo task</button></div><div className="workspace-stats"><WorkspaceStat value={tasks.length} label="Totali" /><WorkspaceStat value={activeTasks.length} label="Attivi" tone="gold" /><WorkspaceStat value={tasks.filter((item) => item.status === "completed").length} label="Completati" tone="green" /></div>{taskRows(tasks, "I nuovi lavori compariranno qui.")}</section>;
+
+    if (activeNav === "requests") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>CODA DELLO STUDIO</span><h2 id="workspace-title">RICHIESTE</h2><p>Operazioni attive e conferme che richiedono una decisione umana.</p></div><button onClick={() => openComposer("")}>＋ Nuova richiesta</button></div>{pending.length ? <div className="workspace-approvals"><h3>Da approvare</h3>{pending.map((item) => { const observed = (item.preview.observed || {}) as Record<string, string>; return <article className="workspace-row approval-row" key={item.id}><span className="workspace-row-icon waiting_approval">◉</span><div className="workspace-row-copy"><strong>{item.task?.goal || `Approvare ${observed.client || "operazione"}`}</strong><span>{observed.total_label || "Controlla i dati prima di autorizzare"}</span></div><div className="workspace-approval-actions"><button className="approve" onClick={() => api.approve(item.id).then(refresh)}>Approva</button><button onClick={() => api.reject(item.id).then(refresh)}>Rifiuta</button></div></article>; })}</div> : null}{taskRows(activeTasks, "Non ci sono richieste in attesa o in lavorazione.")}</section>;
+
+    if (activeNav === "errors") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>DIAGNOSTICA</span><h2 id="workspace-title">ERRORI</h2><p>I problemi da risolvere sono separati dagli errori già chiusi.</p></div><button onClick={() => void refresh()}>↻ Ricontrolla</button></div><div className="workspace-error-group"><h3><i className="error-active" /> Attivi ({activeErrors.length})</h3>{taskRows(activeErrors, "Nessun errore attivo: tutti i sistemi sono operativi.")}</div><div className="workspace-error-group historical"><h3><i /> Storico ({historicalErrors.length})</h3>{taskRows(historicalErrors, "Non ci sono errori storici.")}</div></section>;
+
+    if (activeNav === "contracts") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>AREA DOCUMENTALE</span><h2 id="workspace-title">CONTRATTI</h2><p>Prepara bozze e raccogli dati. Nessun contratto viene inviato o firmato automaticamente.</p></div><button onClick={() => openComposer("Prepara una bozza di contratto per il cliente ")}>＋ Prepara contratto</button></div><div className="workspace-safety">✓ Bozze soltanto · invio e firma restano sempre alla persona</div>{taskRows(contractTasks, "Non hai ancora preparato contratti con Kreluna.")}</section>;
+
+    if (activeNav === "visure") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>AREA CAMERALI</span><h2 id="workspace-title">VISURE</h2><p>Prepara richieste di visura e consulta le prove prodotte dall’Agent.</p></div><button onClick={() => openComposer("Prepara una visura per il cliente ")}>＋ Nuova visura</button></div><div className="workspace-safety">✓ Accesso umano per SPID, CNS, CIE e OTP · nessun invio automatico</div>{taskRows(visureTasks, "Non ci sono ancora richieste di visura.")}</section>;
+
+    if (activeNav === "documents") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>ARCHIVIO OPERATIVO</span><h2 id="workspace-title">DOCUMENTI</h2><p>Controlli documentali e prove raccolte dai lavori, senza mostrare credenziali.</p></div><button onClick={() => openComposer("Controlla i documenti mancanti per il cliente ")}>＋ Controlla documenti</button></div>{taskRows(documentTasks, "I controlli e le prove dei task compariranno qui.")}</section>;
+
+    return <section className="workspace-page settings-workspace" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>CONTROLLO DEL PROGRAMMA</span><h2 id="workspace-title">IMPOSTAZIONI</h2><p>Connessione IA, aggiornamenti, sessione e protezioni operative.</p></div><button onClick={() => void refresh()}>↻ Aggiorna</button></div><div className="settings-grid">
+      <article><span>INTELLIGENZA ARTIFICIALE</span><h3>{providerLabel}</h3><p>{overview?.ai_detail || (aiConnected ? "Collegata e pronta." : "Servizio non disponibile.")}</p><div className={`settings-state ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "Da controllare"}</div><button onClick={() => openAISettings()}>Configura e verifica</button></article>
+      <article><span>AGGIORNAMENTI</span><h3>Kreluna Director v{version}</h3><p>{updateAvailable ? `È disponibile la versione ${updateStatus?.latest_version}.` : "Il programma è aggiornato."}</p><div className={`settings-state ${updateAvailable ? "warning" : "connected"}`}>● {updateAvailable ? "Aggiornamento disponibile" : "Versione corrente"}</div><button disabled={!updateAvailable} onClick={() => setUpdateOpen(true)}>{updateAvailable ? "Installa aggiornamento" : "Nessun aggiornamento"}</button></article>
+      <article><span>SESSIONE</span><h3>{name}</h3><p>Accesso protetto su questo Mac. La password non viene conservata nell’app.</p><div className="settings-state connected">● Sessione attiva</div><button onClick={() => { setToken(null); setReady(false); }}>Esci dallo studio</button></article>
+      <article><span>BARRIERE DI SICUREZZA</span><h3>Sempre attive</h3><p>Niente shell remota, eval, pagamenti, invii fiscali o login automatici SPID/CNS. Le schermate non vanno all’IA.</p><div className="settings-state connected">● Protezioni operative</div><button onClick={() => void openVault()}>Apri Fort Knox</button></article>
+    </div></section>;
+  }
 
   return <div className="director-cockpit" id="dashboard">
     <header className="cockpit-header">
@@ -515,7 +573,7 @@ export default function App() {
         <Metric icon="?" label="ERRORI" value={overview?.active_errors ?? 0} note="Da risolvere" tone="red" />
       </div>
       <div className="orbit-art" aria-hidden="true"><span className="orbit-line orbit-one" /><span className="orbit-line orbit-two" /><span className="orbit-line orbit-three" /><span className="orbit-planet"><i /></span></div>
-      <div className="header-tools"><button className="approval-shortcut" onClick={() => goTo("approvals")}>Da approvare ({pending.length})</button><button className="notification" aria-label="Notifiche" onClick={() => updateStatus?.available ? setUpdateOpen(true) : goTo("errors")}>♧{activeErrors.length || updateStatus?.available ? <i /> : null}</button><button className="avatar" aria-label="Profilo">AR</button></div>
+      <div className="header-tools"><button className="approval-shortcut" onClick={() => goTo("requests")}>Da approvare ({pending.length})</button><button className="notification" aria-label="Notifiche" onClick={() => updateStatus?.available ? setUpdateOpen(true) : goTo("errors")}>♧{activeErrors.length || updateStatus?.available ? <i /> : null}</button><button className="avatar" aria-label="Profilo e impostazioni" onClick={() => goTo("settings")}>AR</button></div>
     </header>
 
     <div className="cockpit-body">
@@ -523,14 +581,14 @@ export default function App() {
         <nav aria-label="Navigazione principale">
           <NavButton active={activeNav === "dashboard"} icon="⌂" label="Dashboard" onClick={() => goTo("dashboard")} />
           <NavButton active={activeNav === "agents"} icon="▱" label="PC & Feature" onClick={() => goTo("agents")} />
-          <NavButton active={activeNav === "tasks"} icon="⌘" label="Task" count={overview?.tasks_today} onClick={() => goTo("requests", undefined, "tasks")} />
+          <NavButton active={activeNav === "tasks"} icon="⌘" label="Task" count={overview?.tasks_today} onClick={() => goTo("tasks")} />
           <NavButton active={activeNav === "requests"} icon="▱" label="Richieste" count={requestCount} onClick={() => goTo("requests")} />
           <NavButton active={activeNav === "errors"} icon="△" label="Errori" count={overview?.active_errors} onClick={() => goTo("errors")} />
-          <NavButton icon="▤" label="Contratti" onClick={() => goTo("chat", SUGGESTIONS[4].full)} />
-          <NavButton icon="▧" label="Visure" onClick={() => goTo("chat", SUGGESTIONS[6].full)} />
-          <NavButton icon="▦" label="Fort Knox" count={vaultCredentials.length || undefined} onClick={() => void openVault()} />
-          <NavButton icon="▤" label="Documenti" onClick={() => goTo("requests")} />
-          <NavButton icon="⚙" label="Impostazioni" onClick={() => openAISettings()} />
+          <NavButton active={activeNav === "contracts"} icon="▤" label="Contratti" onClick={() => goTo("contracts")} />
+          <NavButton active={activeNav === "visure"} icon="▧" label="Visure" onClick={() => goTo("visure")} />
+          <NavButton active={activeNav === "vault"} icon="▦" label="Fort Knox" count={vaultCredentials.length || undefined} onClick={() => void openVault()} />
+          <NavButton active={activeNav === "documents"} icon="▤" label="Documenti" onClick={() => goTo("documents")} />
+          <NavButton active={activeNav === "settings"} icon="⚙" label="Impostazioni" onClick={() => goTo("settings")} />
           <button
             type="button"
             className={`sidebar-update ${updateAvailable ? "available" : "idle"}`}
@@ -549,7 +607,8 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="dashboard-stage">
+      <main className={`dashboard-stage ${activeNav !== "dashboard" ? "workspace-mode" : ""}`}>
+        {activeNav === "dashboard" ? <>
         <section className="feature-panel" id="agents"><div className="panel-heading"><h2>PC &amp; FEATURE</h2><button className="manage-feature" onClick={() => setActiveNav("agents")}>⌘&nbsp;&nbsp; Gestisci feature</button></div>
           <div className="feature-grid" aria-label="PC dello studio">{agents.map((agent) => {
             const work = currentWork(agent, tasks);
@@ -583,14 +642,16 @@ export default function App() {
             <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(draft); }}><span className="mic">♩</span><textarea value={draft} aria-label="Scrivi una richiesta a Kreluna" placeholder="Scrivi qui la tua richiesta…" onChange={(event) => setDraft(event.target.value)} /><button className="send-button" disabled={busy} aria-label="Invia">➤</button></form>
           </section>
 
-          <aside className="requests-panel" id="requests"><div className="requests-heading"><h2>RICHIESTE</h2><select aria-label="Filtra richieste"><option>Tutte</option><option>In corso</option><option>Errori</option></select></div>
+          <aside className="requests-panel" id="requests"><div className="requests-heading"><h2>RICHIESTE</h2><select aria-label="Filtra richieste" value={requestFilter} onChange={(event) => setRequestFilter(event.target.value as RequestFilter)}><option value="all">Tutte</option><option value="active">In corso</option><option value="errors">Errori</option><option value="approvals">Da approvare</option></select></div>
             <div className="request-list">
-              {pending.map((item) => { const observed = ((item.preview.observed as Record<string, string>) || {}) as Record<string, string>; return <article className="request-row approval-row" id="approvals" key={item.id}><span className="request-icon">◉</span><div className="request-copy"><strong>Approvare {observed.client || "fattura"}</strong><span>{observed.total_label || "Operazione in attesa"}</span></div><div className="request-actions"><button onClick={() => api.approve(item.id).then(refresh)}>Approva</button><button onClick={() => api.reject(item.id).then(refresh)}>No</button></div></article>; })}
-              {recentTasks.map((task) => <article className={`request-row ${task.status}`} id={task.error_state === "active" ? "errors" : undefined} key={task.id}><span className={`request-icon ${task.status}`}>{task.status === "failed" ? "△" : "▣"}</span><div className="request-copy"><strong title={task.goal}>{task.goal}</strong><EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} />{task.error ? <span className="request-error">{task.error}</span> : null}</div><div className="request-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</time> : null}{task.status === "queued" || task.status === "assigned" ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div></article>)}
-              {!recentTasks.length && !pending.length ? STARTER_REQUESTS.map((item, index) => <button className="request-row starter-row" key={item.title} onClick={() => { setDraft(item.prompt); goTo("chat"); }}><span className={`request-icon starter-${index}`}>{item.icon}</span><span className="request-copy"><strong>{item.title}</strong><span className="preview-strip"><i /><i /><i /><i /></span></span><span className="request-meta"><span className="request-status starter">Avvia</span><time>pronto</time></span></button>) : null}
+              {requestFilter !== "active" && requestFilter !== "errors" ? pending.map((item) => { const observed = ((item.preview.observed as Record<string, string>) || {}) as Record<string, string>; return <article className="request-row approval-row" id="approvals" key={item.id}><span className="request-icon">◉</span><div className="request-copy"><strong>Approvare {observed.client || "fattura"}</strong><span>{observed.total_label || "Operazione in attesa"}</span></div><div className="request-actions"><button onClick={() => api.approve(item.id).then(refresh)}>Approva</button><button onClick={() => api.reject(item.id).then(refresh)}>No</button></div></article>; }) : null}
+              {dashboardTasks.map((task) => <article className={`request-row ${task.status}`} id={task.error_state === "active" ? "errors" : undefined} key={task.id}><span className={`request-icon ${task.status}`}>{task.status === "failed" ? "△" : "▣"}</span><div className="request-copy"><strong title={task.goal}>{task.goal}</strong><EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} />{task.error ? <span className="request-error">{task.error}</span> : null}</div><div className="request-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</time> : null}{task.status === "queued" || task.status === "assigned" ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div></article>)}
+              {!dashboardTasks.length && !pending.length && requestFilter === "all" ? STARTER_REQUESTS.map((item, index) => <button className="request-row starter-row" key={item.title} onClick={() => openComposer(item.prompt)}><span className={`request-icon starter-${index}`}>{item.icon}</span><span className="request-copy"><strong>{item.title}</strong><span className="preview-strip"><i /><i /><i /><i /></span></span><span className="request-meta"><span className="request-status starter">Avvia</span><time>pronto</time></span></button>) : null}
+              {!dashboardTasks.length && requestFilter !== "all" && (requestFilter !== "approvals" || !pending.length) ? <div className="request-filter-empty">Nessuna richiesta per questo filtro.</div> : null}
             </div><button className="show-all" onClick={() => setActiveNav("requests")}>Mostra tutte le richieste <span>→</span></button>
           </aside>
         </div>
+        </> : workspacePage()}
       </main>
     </div>
 
@@ -655,6 +716,10 @@ export default function App() {
     </div></div> : null}
     {lightbox ? <button className="lightbox" onClick={() => setLightbox(null)}><img src={lightbox} alt="Schermata del PC" /></button> : null}
   </div>;
+}
+
+function WorkspaceStat({ value, label: statLabel, tone = "blue" }: { value: number; label: string; tone?: string }) {
+  return <div className={`workspace-stat ${tone}`}><strong>{value}</strong><span>{statLabel}</span></div>;
 }
 
 function NavButton({ active = false, icon, label, count, onClick }: { active?: boolean; icon: string; label: string; count?: number; onClick: () => void }) {
