@@ -74,12 +74,16 @@ function currentWork(agent: Agent, tasks: Task[]): Task | undefined {
   return tasks.find((item) => item.assigned_device_id === agent.device_id && ["queued", "assigned", "running", "waiting_approval"].includes(item.status));
 }
 
+function agentOnline(agent: Agent): boolean {
+  return agent.connected && ["online", "busy"].includes(agent.presence);
+}
+
 function agentState(agent: Agent, work?: Task): string {
   if (agent.killed || agent.paused) return "Fermo";
-  if (work) return work.goal;
   if (agent.presence === "waiting_install") return "Da installare";
-  if (agent.connected || agent.presence === "online") return agent.agent_id === "pc-visure" ? "Pronto" : "In ascolto";
-  return "Spento";
+  if (!agentOnline(agent)) return "Spento — apri Kreluna Agent";
+  if (work) return work.goal;
+  return agent.agent_id === "pc-visure" ? "Pronto" : "In ascolto";
 }
 
 export default function App() {
@@ -491,10 +495,21 @@ export default function App() {
       <main className="dashboard-stage">
         <section className="feature-panel" id="agents"><div className="panel-heading"><h2>PC &amp; FEATURE</h2><button className="manage-feature" onClick={() => setActiveNav("agents")}>⌘&nbsp;&nbsp; Gestisci feature</button></div>
           <div className="feature-grid" aria-label="PC dello studio">{agents.map((agent) => {
-            const work = currentWork(agent, tasks); const enabled = !(agent.killed || agent.paused); const active = enabled && agent.presence !== "waiting_install";
-            return <article className={`feature-card ${work ? "working" : ""} ${enabled ? "enabled" : "disabled"}`} key={agent.device_id}>
-              <div className="feature-name"><span className={`status-dot ${agent.presence === "waiting_install" ? "waiting" : enabled ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong>
-                <button className={`mini-switch ${active ? "on" : "off"}`} disabled={deviceAction === agent.device_id} onClick={() => void toggleAgent(agent)} title={agent.presence === "waiting_install" ? "Genera il codice per installare l’Agent" : enabled ? "Disattiva Agent" : "Attiva Agent"} aria-label={`${agent.presence === "waiting_install" ? "Installa" : enabled ? "Disattiva" : "Attiva"} ${agent.display_name || agent.agent_id}`} aria-pressed={active}><i /></button>
+            const work = currentWork(agent, tasks);
+            const waiting = agent.presence === "waiting_install";
+            const online = agentOnline(agent);
+            const enabled = !(agent.killed || agent.paused);
+            const active = online && enabled;
+            const offlineEnabled = !waiting && !online && enabled;
+            const controlTitle = waiting
+              ? "Genera il codice per installare l’Agent"
+              : offlineEnabled
+                ? "Agent spento: apri Kreluna Agent su questo computer"
+                : enabled ? "Disattiva Agent" : "Attiva Agent";
+            const controlAction = waiting ? "Installa" : enabled ? "Disattiva" : "Attiva";
+            return <article className={`feature-card ${work && online ? "working" : ""} ${active ? "enabled" : "disabled"}`} key={agent.device_id}>
+              <div className="feature-name"><span className={`status-dot ${waiting ? "waiting" : active ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong>
+                <button className={`mini-switch ${active ? "on" : "off"}`} disabled={deviceAction === agent.device_id || offlineEnabled} onClick={() => void toggleAgent(agent)} title={controlTitle} aria-label={`${controlAction} ${agent.display_name || agent.agent_id}`} aria-pressed={active}><i /></button>
               </div><p>{agent.job}</p><span title="Disponibile per Mac e Windows">{agentState(agent, work)} · Mac/PC</span>
             </article>;
           })}</div>

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import plistlib
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,3 +59,50 @@ def test_desktop_creates_stable_distinct_installation_secrets_and_owner(tmp_path
     assert len(first["DIRECTOR_BOOTSTRAP_PASSWORD"]) >= 20
     for filename in ("signing.seed", "session.key", "evidence.key", "credential.key", "owner-access.json"):
         assert (tmp_path / filename).stat().st_mode & 0o777 == 0o600
+
+
+def test_packaged_director_starts_only_a_verified_configured_local_agent(tmp_path, monkeypatch):
+    desktop = _desktop_module()
+    app = tmp_path / "Kreluna Agent.app"
+    executable = app / "Contents" / "MacOS" / "Kreluna"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("agent", encoding="utf-8")
+    with (app / "Contents" / "Info.plist").open("wb") as fh:
+        plistlib.dump(
+            {
+                "CFBundleIdentifier": "studio.kreluna.agent",
+                "CFBundleExecutable": "Kreluna",
+            },
+            fh,
+        )
+    support = tmp_path / "support"
+    support.mkdir()
+    (support / "config.json").write_text(
+        '{"role":"pc-fatture","display_name":"PC-FATTURE",'
+        '"director_url":"http://127.0.0.1:8080"}',
+        encoding="utf-8",
+    )
+    calls: list[tuple[list[str], dict]] = []
+
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1 if command[0].endswith("pgrep") else 0)
+
+    class FakeProcess:
+        pass
+
+    monkeypatch.setattr(desktop.sys, "platform", "darwin")
+    monkeypatch.setenv("KRELUNA_INSTALLED_AGENT_APP", str(app))
+    monkeypatch.setenv("KRELUNA_AGENT_SUPPORT_DIR", str(support))
+    monkeypatch.setattr(desktop.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        desktop.subprocess,
+        "Popen",
+        lambda command, **kwargs: calls.append((command, kwargs)) or FakeProcess(),
+    )
+
+    process = desktop.start_installed_mac_agent()
+
+    assert isinstance(process, FakeProcess)
+    assert calls[0][0] == [str(executable)]
+    assert calls[0][1]["env"]["KRELUNA_AGENT_ID"] == "pc-fatture"
+    assert calls[0][1]["env"]["KRELUNA_SKIP_SETUP"] == "1"

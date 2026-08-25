@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import secrets
 import socket
 import subprocess
@@ -13,6 +14,7 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -90,6 +92,84 @@ def _initial_owner() -> dict[str, str]:
     except OSError:
         pass
     return {"email": email, "password": password}
+
+
+def agent_support_dir() -> Path:
+    configured = os.environ.get("KRELUNA_AGENT_SUPPORT_DIR", "").strip()
+    if configured:
+        return Path(configured)
+    return Path.home() / "Library" / "Application Support" / "KrelunaAgent"
+
+
+def installed_mac_agent_app() -> Path:
+    configured = os.environ.get("KRELUNA_INSTALLED_AGENT_APP", "").strip()
+    return Path(configured) if configured else Path("/Applications/Kreluna Agent.app")
+
+
+def start_installed_mac_agent() -> subprocess.Popen | None:
+    """Avvia soltanto l'Agent Mac installato e firmato, con una configurazione locale valida."""
+
+    if sys.platform != "darwin":
+        return None
+    app = installed_mac_agent_app()
+    info_path = app / "Contents" / "Info.plist"
+    try:
+        with info_path.open("rb") as fh:
+            info = plistlib.load(fh)
+    except (FileNotFoundError, OSError, plistlib.InvalidFileException):
+        return None
+    if info.get("CFBundleIdentifier") != "studio.kreluna.agent":
+        return None
+    executable_name = str(info.get("CFBundleExecutable") or "")
+    if executable_name != "Kreluna":
+        return None
+    executable = app / "Contents" / "MacOS" / executable_name
+    if not executable.is_file():
+        return None
+    verified = subprocess.run(
+        ["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)],
+        capture_output=True,
+        check=False,
+    )
+    if verified.returncode != 0:
+        return None
+    running = subprocess.run(
+        ["/usr/bin/pgrep", "-f", str(executable)],
+        capture_output=True,
+        check=False,
+    )
+    if running.returncode == 0:
+        return None
+    config_path = agent_support_dir() / "config.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    role = str(data.get("role") or "").strip().lower()
+    director_url = str(data.get("director_url") or "").strip().rstrip("/")
+    if not role.startswith("pc-") or not 3 <= len(role) <= 80:
+        return None
+    parsed = urlparse(director_url)
+    if (
+        parsed.scheme != "http"
+        or (parsed.hostname or "").lower() not in {"127.0.0.1", "localhost", "::1"}
+        or parsed.port != 8080
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    env = os.environ.copy()
+    env["KRELUNA_SKIP_SETUP"] = "1"
+    env["KRELUNA_AGENT_ID"] = role
+    env["KRELUNA_AGENT_DISPLAY_NAME"] = str(data.get("display_name") or role.upper())
+    env["AGENT_DIRECTOR_URL"] = director_url
+    target = str(data.get("fatture_target") or "").strip()
+    if target:
+        env["KRELUNA_FATTURE_TARGET"] = target
+    return subprocess.Popen([str(executable)], env=env)
 
 
 def prepare_env() -> None:
@@ -344,6 +424,8 @@ def main() -> int:
                 cwd=str(ROOT),
                 env=env,
             )
+        elif os.environ.get("KRELUNA_DESKTOP_APP", "") == "1" and sys.platform == "darwin":
+            agent_proc = start_installed_mac_agent()
         show_initial_access_once()
         notify("Kreluna è aperta. Usa le credenziali personali della tua installazione.")
         print("Kreluna Director:", url)
