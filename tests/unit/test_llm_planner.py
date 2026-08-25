@@ -171,6 +171,20 @@ async def test_informational_answer_is_returned_without_creating_a_task():
 
 
 @pytest.mark.asyncio
+async def test_recipes_and_movies_are_kept_out_of_the_professional_assistant():
+    for message in ("Dammi la ricetta della carbonara", "Cercami un film da vedere stasera"):
+        plan = await ask(
+            json.dumps({"understood": False, "answer": "Ecco una risposta generica che non deve passare."}),
+            message=message,
+        )
+        assert plan is not None and plan.ok
+        assert plan.source == "llm-domain"
+        assert "solo con contabilità" in plan.summary
+        assert "carbonara" not in plan.summary
+        assert "stasera" not in plan.summary
+
+
+@pytest.mark.asyncio
 async def test_recent_conversation_is_sent_to_the_model():
     def contextual(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)

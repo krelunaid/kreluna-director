@@ -1,4 +1,4 @@
-"""Chi pianifica: sicurezza e frasi certe alle regole, linguaggio incerto al modello IA."""
+"""Chi pianifica: ogni richiesta normale va all'IA; la policy locale resta l'autorità."""
 
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ async def plan_message(
 ) -> PlanResult:
     plan = plan_deterministic(message)
     resolved = config or settings.ai_provider_config(provider)
-    # Le regole restano definitive per sicurezza e comandi completi. Quando hanno
-    # ancora domande, invece, il modello può capire refusi e italiano parlato.
-    if plan.source not in {"deterministic-unknown", "deterministic-ask"}:
+    # Solo i blocchi di sicurezza e il fermo d'emergenza non raggiungono il modello.
+    # Tutto il resto passa dall'IA e viene poi ricontrollato dalla policy locale.
+    if plan.denied or plan.source == "deterministic-kill":
         return plan
     if not resolved.configured:
         return PlanResult(
@@ -39,7 +39,12 @@ async def plan_message(
     else:
         async with httpx.AsyncClient() as owned:
             from_model = await _ask(message, owned, config=resolved, history=history)
-    return from_model or plan
+    return from_model or PlanResult(
+        ok=False,
+        summary="IA non disponibile: configurazione incompleta. Nessun lavoro è stato creato.",
+        source="llm-error",
+        diagnostic={"code": "not_configured", "provider": resolved.provider},
+    )
 
 
 async def _ask(
