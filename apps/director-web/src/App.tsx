@@ -113,10 +113,19 @@ export default function App() {
   const vaultInput = useRef<HTMLInputElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<number>(0);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
-  async function refresh() {
-    const [over, ag, ts, ap, ai] = await Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals(), api.aiProviders()]);
-    setOverview(over); setAIProviders(ai.providers); setAgents(ag.agents); setTasks(ts.tasks); setApprovals(ap.approvals);
+  function refresh(): Promise<void> {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const request = Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals(), api.aiProviders()])
+      .then(([over, ag, ts, ap, ai]) => {
+        setOverview(over); setAIProviders(ai.providers); setAgents(ag.agents); setTasks(ts.tasks); setApprovals(ap.approvals);
+      })
+      .finally(() => {
+        refreshInFlight.current = null;
+      });
+    refreshInFlight.current = request;
+    return request;
   }
 
   useEffect(() => {
@@ -378,7 +387,7 @@ export default function App() {
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
-        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.17"}</p>
+        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.18"}</p>
           <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => openAISettings()}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : ` · ${aiUnavailable}`}</button>
         </div>
       </div>

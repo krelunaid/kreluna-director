@@ -122,3 +122,12 @@ def test_sidebar_update_indicator_has_idle_and_available_states():
     assert '"Installa ora"' in source
     assert "api.installUpdate()" in source
     assert "15 * 60 * 1000" in source
+
+
+def test_dashboard_refreshes_do_not_overlap():
+    source = (ROOT / "apps" / "director-web" / "src" / "App.tsx").read_text()
+
+    assert "const refreshInFlight = useRef<Promise<void> | null>(null);" in source
+    assert "if (refreshInFlight.current) return refreshInFlight.current;" in source
+    assert "refreshInFlight.current = request;" in source
+    assert "refreshInFlight.current = null;" in source
