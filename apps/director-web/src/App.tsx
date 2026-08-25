@@ -185,12 +185,13 @@ export default function App() {
 
   const providerLabel = overview?.ai_provider_label || "IA";
   const aiConnected = overview?.ai_status === "connected";
+  const updateAvailable = Boolean(updateStatus?.available);
 
   return <div className="director-cockpit" id="dashboard">
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
-        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.10"}</p>
+        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.11"}</p>
           <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => goTo("ai-settings")}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : " · da configurare"}</button>
         </div>
       </div>
@@ -217,6 +218,16 @@ export default function App() {
           <NavButton icon="▧" label="Visure" onClick={() => goTo("chat", SUGGESTIONS[6].full)} />
           <NavButton icon="▤" label="Documenti" onClick={() => goTo("requests")} />
           <NavButton icon="⚙" label="Impostazioni" onClick={() => goTo("ai-settings")} />
+          <button
+            type="button"
+            className={`sidebar-update ${updateAvailable ? "available" : "idle"}`}
+            aria-label={updateAvailable ? "Aggiornamento disponibile" : "Nessun aggiornamento disponibile"}
+            disabled={!updateAvailable}
+            onClick={() => setUpdateOpen(true)}
+          >
+            <span className="sidebar-update-dot" aria-hidden="true" />
+            {updateAvailable ? <strong>Aggiornamento</strong> : null}
+          </button>
         </nav>
         <div className="sidebar-bottom"><div className="assistant-card"><div className={`orb sidebar-orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /></div><div><strong>Kreluna</strong><span>{busy ? "Sta pensando" : "Ti ascolta"}</span></div></div>
           {blocked.length ? <button className="resume-all" onClick={() => void resumeAll()}>Riprendi {blocked.length} agent</button> : null}

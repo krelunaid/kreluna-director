@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from kreluna_shared.crypto import server_public_bytes
 from kreluna_shared.update import (
     APP_VERSION,
@@ -16,6 +18,7 @@ from kreluna_shared.update import (
 )
 
 SEED = "kreluna-dev-signing-seed-change-in-production"
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_is_newer():
@@ -103,3 +106,15 @@ def test_runtime_stamp(tmp_path):
     assert runtime_needs_refresh(tmp_path) is False
     write_installed_version(tmp_path, "0.0.1")
     assert runtime_needs_refresh(tmp_path) is True
+
+
+def test_sidebar_update_indicator_has_idle_and_available_states():
+    source = (ROOT / "apps" / "director-web" / "src" / "App.tsx").read_text()
+    styles = (ROOT / "apps" / "director-web" / "src" / "styles.css").read_text()
+
+    assert '"Nessun aggiornamento disponibile"' in source
+    assert '"Aggiornamento disponibile"' in source
+    assert "disabled={!updateAvailable}" in source
+    assert "updateAvailable ? <strong>Aggiornamento</strong> : null" in source
+    assert ".sidebar-update.available > .sidebar-update-dot" in styles
+    assert "background: var(--red)" in styles
