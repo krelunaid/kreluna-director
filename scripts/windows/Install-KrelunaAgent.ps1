@@ -4,7 +4,8 @@
 param(
   [string]$Role = "pc-fatture",
   [string]$DirectorUrl = "http://127.0.0.1:8080",
-  [string]$EnrollCode = "KRELUNA-PC-FATTURE"
+  [string]$EnrollCode = "KRELUNA-PC-FATTURE",
+  [string]$FattureTarget = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,8 @@ $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Install = Join-Path $env:LOCALAPPDATA "KrelunaAgent-$Role"
 $App = Join-Path $Install "app"
 New-Item -ItemType Directory -Force -Path $Install | Out-Null
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[IO.File]::WriteAllText((Join-Path $Install "fatture.target"), $FattureTarget, $Utf8NoBom)
 
 $Source = $null
 foreach ($candidate in @(
@@ -48,6 +51,7 @@ set KRELUNA_ENROLLMENT_CODE=$EnrollCode
 set KRELUNA_AGENT_ID=$Role
 set KRELUNA_AGENT_DISPLAY_NAME=$Role
 set KRELUNA_AGENT_DATA_DIR=%INSTALL%\data
+set KRELUNA_FATTURE_TARGET_FILE=%INSTALL%\fatture.target
 set PYTHONHOME=%ROOT%runtime
 set PYTHONPATH=%ROOT%packages\kreluna-shared\src;%ROOT%apps\kreluna-agent
 cd /d "%ROOT%"

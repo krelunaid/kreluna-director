@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import sys
 
+from agent.tools.screen_pointer import move_and_click
+
 
 def run(payload: dict) -> None:
     import tkinter as tk
@@ -76,7 +78,27 @@ def run(payload: dict) -> None:
     emit = tk.Label(buttons, text="  Emetti (bloccato)  ", bg="#d2d2d2", fg=ink, font=("Helvetica", 14, "bold"), padx=12, pady=8)
     emit.pack(side="left")
 
+    def point_to(widget, *, click: bool = True) -> None:
+        root.update_idletasks()
+        x = widget.winfo_rootx() + max(1, widget.winfo_width() // 2)
+        y = widget.winfo_rooty() + max(1, widget.winfo_height() // 2)
+        move_and_click(
+            x,
+            y,
+            screen_width=root.winfo_screenwidth(),
+            screen_height=root.winfo_screenheight(),
+            start_x=root.winfo_pointerx(),
+            start_y=root.winfo_pointery(),
+            click=click,
+        )
+        try:
+            widget.focus_force()
+        except tk.TclError:
+            pass
+
     def type_into(entry: tk.Entry, text: str, done) -> None:
+        point_to(entry)
+
         def step(index: int = 0) -> None:
             entry.delete(0, tk.END)
             entry.insert(0, text[:index])
@@ -95,14 +117,16 @@ def run(payload: dict) -> None:
 
     def after_desc() -> None:
         status.configure(text="Compilo importi. Nessun invio all'Agenzia.")
+        point_to(net_entry)
         net_entry.insert(0, net_label)
         vat_entry.insert(0, vat_label)
         total_entry.insert(0, total_label)
         save.configure(bg=gold)
-        status.configure(text="Bozza pronta sul tuo Mac. In dashboard clicca Approva.")
+        root.after(250, lambda: point_to(save, click=False))
+        status.configure(text="Bozza pronta sul tuo Mac. Mi fermo prima di emettere.")
 
-    status.configure(text="Scrivo il cliente con la tastiera…")
-    type_into(client_entry, client, after_client)
+    status.configure(text="Sposto il mouse sul cliente e compilo…")
+    root.after(350, lambda: type_into(client_entry, client, after_client))
     root.mainloop()
 
 

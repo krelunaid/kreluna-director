@@ -12,9 +12,12 @@ import json
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
+
+from agent.tools.screen_pointer import move_and_click
 
 JS_MISSING = "NON_TROVATO"
 CHROME_FAMILY = ("Google Chrome", "Brave Browser", "Microsoft Edge", "Chromium", "Vivaldi")
@@ -207,6 +210,21 @@ def fill_field_script(browser: str, selector: str, text: str) -> str:
     )
 
 
+def field_center_script(browser: str, selector: str) -> str:
+    """Centro del campo sullo schermo, ricavato dalla pagina e non dal modello."""
+
+    css = selector.replace("'", "\\'")
+    return _js(
+        browser,
+        f"(function(){{var e=document.querySelector('{css}');if(!e)return '{JS_MISSING}';"
+        "var r=e.getBoundingClientRect();var chrome=Math.max(0,window.outerHeight-window.innerHeight);"
+        "var border=Math.max(0,(window.outerWidth-window.innerWidth)/2);"
+        "return JSON.stringify({x:Math.round(window.screenX+border+r.left+r.width/2),"
+        "y:Math.round(window.screenY+chrome+r.top+r.height/2),"
+        "screen_width:window.screen.width,screen_height:window.screen.height});})()",
+    )
+
+
 def open_url(runner: Runner, browser: str, url: str) -> None:
     runner.osascript(open_url_script(browser, url))
 
@@ -242,6 +260,44 @@ def fill_field(runner: Runner, browser: str, selector: str, text: str) -> bool:
     except MacControlError as exc:
         raise _translate(exc) from exc
     return "SCRITTO" in answer
+
+
+def field_center(runner: Runner, browser: str, selector: str) -> dict[str, int] | None:
+    try:
+        answer = runner.osascript(field_center_script(browser, selector))
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+    start, end = answer.find("{"), answer.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        data = json.loads(answer[start : end + 1])
+        return {key: int(data[key]) for key in ("x", "y", "screen_width", "screen_height")}
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def fill_field_visible(
+    runner: Runner,
+    browser: str,
+    selector: str,
+    text: str,
+    *,
+    mover: Callable[..., bool] = move_and_click,
+) -> tuple[bool, bool]:
+    """Mostra il mouse sul campo e poi scrive, senza premere Invio."""
+
+    center = field_center(runner, browser, selector)
+    moved = False
+    if center:
+        moved = mover(
+            center["x"],
+            center["y"],
+            screen_width=center["screen_width"],
+            screen_height=center["screen_height"],
+            click=True,
+        )
+    return fill_field(runner, browser, selector, text), moved
 
 
 def screenshot(runner: Runner) -> bytes:

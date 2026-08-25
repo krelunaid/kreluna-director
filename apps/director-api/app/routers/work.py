@@ -4,7 +4,7 @@ import json
 from datetime import timedelta
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from kreluna_shared.agents import preferred_role
 from kreluna_shared.crypto import decrypt_bytes
@@ -114,6 +114,7 @@ def _task_out(task: Task, evidence: list[Evidence] | None = None) -> dict[str, A
 @router.post("/chat")
 async def chat(
     body: ChatBody,
+    request: Request,
     actor: Annotated[Actor, Depends(get_actor)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
@@ -126,7 +127,18 @@ async def chat(
         answered = continue_open_invoice(opened, body.message) if opened else None
     ai_config = await provider_config(session, actor.tenant_id)
     history = [turn.model_dump() for turn in body.history]
-    plan = answered if answered is not None else await plan_message(body.message, config=ai_config, history=history)
+    plan = (
+        answered
+        if answered is not None
+        else await plan_message(
+            body.message,
+            # I test ASGI senza lifespan non hanno il pool; in esecuzione reale
+            # viene sempre usato il client persistente creato all'avvio.
+            client=getattr(request.app.state, "ai_client", None),
+            config=ai_config,
+            history=history,
+        )
+    )
     plan = apply_policy(plan, get_policy(), actor.license_state)
     if plan.pending:
         followups.remember(actor.user_id, plan.pending)

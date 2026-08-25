@@ -4,6 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -41,6 +42,12 @@ async def lifespan(_app: FastAPI):
         await translate_old_errors(session)
         await close_expired_approvals(session)
         await session.commit()
+    # Una sola connessione riutilizzabile verso l'IA evita un nuovo handshake
+    # HTTPS a ogni messaggio della chat.
+    _app.state.ai_client = httpx.AsyncClient(
+        limits=httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=90),
+        timeout=httpx.Timeout(45.0, connect=10.0),
+    )
     keeper = asyncio.create_task(housekeeping_loop(SessionLocal))
     try:
         yield
@@ -48,6 +55,7 @@ async def lifespan(_app: FastAPI):
         keeper.cancel()
         with suppress(asyncio.CancelledError):
             await keeper
+        await _app.state.ai_client.aclose()
 
 
 app = FastAPI(title="Kreluna Director", version=APP_VERSION, lifespan=lifespan)

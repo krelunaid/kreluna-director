@@ -3,6 +3,7 @@ from agent.capabilities.notepad import write_notepad
 from agent.capabilities.studio import durc, visure
 from agent.tools import gestionale
 from agent.tools.gestionale import fill_invoice_on_pc, show_invoice_on_this_mac
+from agent.tools.screen_pointer import move_and_click
 from kreluna_shared.crypto import sha256_hex
 
 
@@ -38,6 +39,11 @@ def test_invoice_gestionale_types_client_and_shows_mouse():
 def test_live_mac_window_skipped_on_linux(monkeypatch):
     monkeypatch.setattr(gestionale.sys, "platform", "linux")
     assert show_invoice_on_this_mac(client_name="Andrea Gadducci", description="Manodopera", net_eur=37500) is False
+
+
+def test_visible_mouse_refuses_coordinates_outside_the_screen():
+    assert move_and_click(-1, 10, screen_width=1920, screen_height=1080) is False
+    assert move_and_click(10, 1080, screen_width=1920, screen_height=1080) is False
 
 
 def test_durc_and_visure_are_demo_only():
