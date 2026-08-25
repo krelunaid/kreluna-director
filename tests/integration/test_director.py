@@ -21,6 +21,7 @@ from app.models import (
     utcnow,
 )
 from app.routers.agent_io import purge_expired_evidence
+from app.security import read_session
 from app.seed import DEMO_TENANT_ID, OTHER_TENANT_ID, seed_if_empty
 from httpx import ASGITransport, AsyncClient
 from kreluna_shared.crypto import (
@@ -51,6 +52,33 @@ async def login(client: AsyncClient, email: str = "andrea@studio.demo") -> str:
     response = await client.post("/auth/login", json={"email": email, "password": "demo"})
     assert response.status_code == 200
     return response.json()["token"]
+
+
+@pytest.mark.asyncio
+async def test_login_remembers_device_without_returning_password(client: AsyncClient):
+    started = int(time.time())
+    response = await client.post(
+        "/auth/login",
+        json={
+            "email": "andrea@studio.demo",
+            "password": "demo",
+            "remember_device": True,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "password" not in body
+    claims = read_session(settings.director_session_secret, body["token"])
+    assert claims["persistent"] is True
+    assert claims["exp"] - started >= settings.director_remember_session_ttl_seconds - 2
+
+    refreshed = await client.post(
+        "/auth/refresh",
+        headers=auth(body["token"]),
+        json={"remember_device": True},
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json()["expires_in"] == settings.director_remember_session_ttl_seconds
 
 
 def auth(token: str) -> dict:

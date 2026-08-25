@@ -65,6 +65,8 @@ button:disabled { cursor: not-allowed; opacity: .52; }
 .login input {
   width: 100%; padding: 11px 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 10px; background: #080f20;
 }
+.login .remember-device { grid-template-columns: 18px 1fr; align-items: center; gap: 9px; color: #cbd0df; cursor: pointer; }
+.login .remember-device input { width: 16px; height: 16px; padding: 0; accent-color: #725dff; }
 .btn { padding: 10px 15px; border: 0; border-radius: 10px; color: #fff; background: linear-gradient(180deg, #725dff, #4c3acb); font-weight: 700; }
 .error { padding: 8px 10px; color: #ffc1bb; border: 1px solid rgba(255, 101, 95, .35); border-radius: 9px; background: rgba(255, 101, 95, .1); }
 .hint { margin-bottom: 0; font-size: 11px !important; }

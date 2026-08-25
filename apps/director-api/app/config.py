@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     director_bootstrap_name: str = "Titolare studio"
     director_bootstrap_tenant_name: str = "Studio"
     director_bootstrap_tenant_slug: str = "studio"
+    director_session_ttl_seconds: int = 60 * 60 * 12
+    director_remember_session_ttl_seconds: int = 60 * 60 * 24 * 90
     heartbeat_timeout_seconds: int = 20
     grant_ttl_seconds: int = 120
     evidence_retention_hours: int = 72

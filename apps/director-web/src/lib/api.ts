@@ -130,12 +130,18 @@ export type VaultPreview = {
 const TOKEN_KEY = "kreluna.token";
 
 export function token(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
 }
 
-export function setToken(value: string | null) {
-  if (value) localStorage.setItem(TOKEN_KEY, value);
-  else localStorage.removeItem(TOKEN_KEY);
+export function tokenIsPersistent(): boolean {
+  return Boolean(localStorage.getItem(TOKEN_KEY));
+}
+
+export function setToken(value: string | null, persistent = true) {
+  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  if (!value) return;
+  (persistent ? localStorage : sessionStorage).setItem(TOKEN_KEY, value);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -187,10 +193,15 @@ async function authenticatedBlob(path: string): Promise<Blob> {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
-    request<{ token: string; user: { name: string; email: string; role: string } }>("/auth/login", {
+  login: (email: string, password: string, rememberDevice = true) =>
+    request<{ token: string; expires_in: number; user: { name: string; email: string; role: string } }>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, remember_device: rememberDevice }),
+    }),
+  refreshSession: (rememberDevice = true) =>
+    request<{ token: string; expires_in: number }>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ remember_device: rememberDevice }),
     }),
   health: () => request<{ ok: boolean; version: string }>("/health"),
   updateStatus: () => request<UpdateStatus>("/update/status"),

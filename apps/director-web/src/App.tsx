@@ -8,6 +8,7 @@ import {
   setToken,
   Task,
   token,
+  tokenIsPersistent,
   UpdateStatus,
   VaultCredential,
   VaultPreview,
@@ -85,6 +86,7 @@ export default function App() {
   const [ready, setReady] = useState(Boolean(token()));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(true);
   const [name, setName] = useState("Studio");
   const [error, setError] = useState("");
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -168,7 +170,13 @@ export default function App() {
 
   useEffect(() => {
     if (!ready) return;
-    api.me().then((me) => { setName(me.name); return refresh().catch(() => undefined); }).catch(() => { setToken(null); setReady(false); });
+    const persistent = tokenIsPersistent();
+    api.me().then(async (me) => {
+      setName(me.name);
+      const renewed = await api.refreshSession(persistent).catch(() => null);
+      if (renewed) setToken(renewed.token, persistent);
+      return refresh().catch(() => undefined);
+    }).catch(() => { setToken(null); setReady(false); });
     const timer = window.setInterval(() => refresh().catch(() => undefined), 2500);
     return () => window.clearInterval(timer);
   }, [ready]);
@@ -178,8 +186,8 @@ export default function App() {
   async function onLogin(event: FormEvent) {
     event.preventDefault(); setError("");
     try {
-      const result = await api.login(email, password);
-      setToken(result.token); setName(result.user.name); setReady(true);
+      const result = await api.login(email, password, rememberDevice);
+      setToken(result.token, rememberDevice); setName(result.user.name); setReady(true);
     } catch (err) { setError(err instanceof Error ? err.message : "Login fallito"); }
   }
 
@@ -412,8 +420,9 @@ export default function App() {
       <form onSubmit={onLogin}>
         <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        <label className="remember-device"><input type="checkbox" checked={rememberDevice} onChange={(event) => setRememberDevice(event.target.checked)} /><span>Resta collegato su questo computer</span></label>
         {error ? <div className="error">{error}</div> : null}<button className="btn" type="submit">Entra nello studio</button>
-      </form><p className="hint">Usa le credenziali personali della tua installazione{version ? ` · v${version}` : ""}</p>
+      </form><p className="hint">La password non viene salvata{version ? ` · v${version}` : ""}</p>
     </div></div>;
   }
 

@@ -44,6 +44,11 @@ router = APIRouter()
 class LoginBody(BaseModel):
     email: str
     password: str
+    remember_device: bool = True
+
+
+class SessionRefreshBody(BaseModel):
+    remember_device: bool = True
 
 
 class EnrollBody(BaseModel):
@@ -280,14 +285,51 @@ async def login(body: LoginBody, session: Annotated[AsyncSession, Depends(get_se
     if password_needs_rehash(user.password_hash):
         user.password_hash = hash_password(body.password)
         await session.commit()
+    ttl = (
+        settings.director_remember_session_ttl_seconds
+        if body.remember_device
+        else settings.director_session_ttl_seconds
+    )
     token = issue_session(
         settings.director_session_secret,
-        {"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role},
+        {
+            "user_id": user.id,
+            "tenant_id": user.tenant_id,
+            "role": user.role,
+            "persistent": body.remember_device,
+        },
+        ttl=ttl,
     )
     return {
         "token": token,
+        "expires_in": ttl,
         "user": {"id": user.id, "name": user.name, "email": user.email, "role": user.role, "tenant_id": user.tenant_id},
     }
+
+
+@router.post("/auth/refresh")
+async def refresh_session(
+    body: SessionRefreshBody,
+    actor: Annotated[Actor, Depends(get_actor)],
+) -> dict:
+    """Rinnova una sessione valida senza conservare o richiedere la password."""
+
+    ttl = (
+        settings.director_remember_session_ttl_seconds
+        if body.remember_device
+        else settings.director_session_ttl_seconds
+    )
+    token = issue_session(
+        settings.director_session_secret,
+        {
+            "user_id": actor.user_id,
+            "tenant_id": actor.tenant_id,
+            "role": actor.role,
+            "persistent": body.remember_device,
+        },
+        ttl=ttl,
+    )
+    return {"token": token, "expires_in": ttl}
 
 
 @router.get("/me")
