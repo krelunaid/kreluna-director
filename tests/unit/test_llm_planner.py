@@ -33,6 +33,28 @@ async def ask(reply: str, message: str = "senti, fai la fattura a Andrea Gadducc
         )
 
 
+@pytest.mark.asyncio
+async def test_grok_46_uses_low_reasoning_for_fast_operational_chat():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        reply = json.dumps({"understood": False, "question": "Per quale cliente?"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": reply}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await plan_with_llm(
+            "prepara una fattura",
+            base_url="https://api.x.ai/v1",
+            api_key="chiave-finta",
+            model="grok-4.6",
+            client=client,
+        )
+
+    assert seen["reasoning_effort"] == "low"
+    assert seen["max_tokens"] == 260
+
+
 def test_prompt_lists_studio_programs_and_forbids_invented_amounts():
     prompt = build_system_prompt()
     assert "PC-FATTURE" in prompt

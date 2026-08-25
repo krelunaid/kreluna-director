@@ -420,7 +420,7 @@ async def plan_with_llm(
     body: dict[str, Any] = {
         "model": model,
         "temperature": 0,
-        "max_tokens": 400,
+        "max_tokens": 260,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": build_system_prompt()},
@@ -428,6 +428,11 @@ async def plan_with_llm(
             {"role": "user", "content": message[:4000]},
         ],
     }
+    # Grok 4.6 usa "high" se non specificato. La chat del Director produce
+    # piani JSON brevi: "low" riduce nettamente l'attesa senza eliminare il
+    # ragionamento e senza riattivare risposte automatiche locali.
+    if model.strip().lower().startswith("grok-4.6"):
+        body["reasoning_effort"] = "low"
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         response = await client.post(url, json=body, headers=headers, timeout=timeout)

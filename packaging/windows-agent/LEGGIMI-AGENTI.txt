@@ -22,6 +22,10 @@ Ogni altro PC dello studio ha UN Agent, diverso.
 Sul desktop compare "Kreluna Agent …". Lascialo acceso.
 In dashboard Kreluna quel PC diventa online.
 
+PC-FATTURE chiede anche il percorso del programma .exe o l'indirizzo HTTPS
+del portale. Puoi lasciarlo vuoto per la prova locale. Non inserire password
+nell'indirizzo: le credenziali restano nella Cassaforte e il login SPID/CNS è manuale.
+
 Non installare il Director su questi PC.
 Non installare due Agent sullo stesso PC.
 In demo l'Agent NON usa SPID, smart card, Telematico o INPS veri:

@@ -145,6 +145,7 @@ describe("Kreluna managed AI gateway", () => {
     }));
     expect(response.status).toBe(200);
     expect(forwarded).toMatchObject({ model: "grok-4.6", temperature: 0, max_tokens: 600 });
+    expect(forwarded).toHaveProperty("reasoning_effort", "low");
     expect(forwarded).not.toHaveProperty("tools");
 
     const usage = await env.DB.prepare(

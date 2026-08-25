@@ -1,10 +1,10 @@
 import pytest
-from agent.capabilities.portal import open_portal
+from agent.capabilities.portal import open_portal, prepare_invoice_portal
 from agent.tools import mac_browser
 from kreluna_shared.agents import preferred_role
 from kreluna_shared.capabilities import validate_capability_args
 from kreluna_shared.planner import plan_deterministic
-from kreluna_shared.programs import load_portals, load_settings, portal_for_key
+from kreluna_shared.programs import Portal, load_portals, load_settings, portal_for_key
 from pydantic import ValidationError
 
 
@@ -65,6 +65,24 @@ def test_portals_and_settings_load():
     assert cgn is not None and cgn.role == "pc-visure"
     assert "cgn" in cgn.url
     assert load_settings().mac_browser
+
+
+def test_invoice_target_can_be_overridden_without_editing_code(monkeypatch):
+    monkeypatch.setenv("KRELUNA_FATTURE_TARGET", "https://fatture.example.it/nuova")
+    target = portal_for_key("fatture-webdesk")
+    assert target is not None
+    assert target.configured is True
+    assert target.url == "https://fatture.example.it/nuova"
+
+
+def test_invoice_target_can_be_read_from_the_windows_installer_file(monkeypatch, tmp_path):
+    target_file = tmp_path / "fatture.target"
+    target_file.write_text("https://fatture.example.it/nuova", encoding="utf-8")
+    monkeypatch.delenv("KRELUNA_FATTURE_TARGET", raising=False)
+    monkeypatch.setenv("KRELUNA_FATTURE_TARGET_FILE", str(target_file))
+    target = portal_for_key("fatture-webdesk")
+    assert target is not None and target.configured is True
+    assert target.url == "https://fatture.example.it/nuova"
 
 
 def test_the_right_pc_gets_the_portal():
@@ -136,6 +154,11 @@ def test_windows_agent_opens_the_portal_without_submitting(monkeypatch):
 def test_unknown_portal_is_refused():
     with pytest.raises(ValueError):
         open_portal(portal="portale-finto", supported=lambda: True)
+
+
+def test_unconfigured_invoice_placeholder_is_never_opened():
+    with pytest.raises(RuntimeError, match="percorso non configurato"):
+        open_portal(portal="fatture-webdesk", supported=lambda: True)
 
 
 def test_it_refuses_to_type_on_the_wrong_site():
@@ -238,6 +261,66 @@ def test_secret_text_is_embedded_as_json_not_javascript_quote() -> None:
 
     assert "e.value='" not in script
     assert "alert(1)" in script
+
+
+def test_invoice_form_moves_mouse_fills_known_fields_and_never_submits(monkeypatch):
+    spec = Portal(
+        key="fatture-webdesk",
+        role="pc-fatture",
+        name="Fatture prova",
+        url="https://fatture.example.it/nuova",
+        field="#cliente",
+        login_note="Login manuale",
+        configured=True,
+        invoice_fields={
+            "client_name": "#cliente",
+            "description": "#prestazione",
+            "net_eur": "#imponibile",
+        },
+    )
+    monkeypatch.setattr("agent.capabilities.portal.portal_for_key", lambda _key: spec)
+
+    class InvoiceMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            if script.strip().startswith("id of application"):
+                return "com.google.chrome"
+            if "return URL of" in script:
+                return "https://fatture.example.it/nuova"
+            if "screen_width" in script:
+                return '{"x":500,"y":400,"screen_width":1920,"screen_height":1080}'
+            if "value=" in script:
+                return "SCRITTO"
+            if "querySelector" in script:
+                return "TROVATO"
+            return "APERTO"
+
+    fake = InvoiceMac(page_url=spec.url)
+    moves: list[tuple[int, int]] = []
+
+    def move(x, y, **_kwargs):
+        moves.append((x, y))
+        return True
+
+    result = prepare_invoice_portal(
+        client_name="Andrea Gadducci",
+        description="Manodopera",
+        net_eur=5000,
+        runner=fake,
+        supported=lambda: True,
+        sleep=lambda _seconds: None,
+        mover=move,
+    )
+
+    assert result["filled"] is True
+    assert result["sent"] is False
+    assert result["mouse_visible"] is True
+    assert len(moves) == 3
+    joined = " ".join(fake.scripts).lower()
+    assert "andrea gadducci" in joined
+    assert "manodopera" in joined
+    assert "submit()" not in joined
+    assert "form.submit" not in joined
 
 
 def test_planner_uses_vault_only_when_explicitly_requested() -> None:

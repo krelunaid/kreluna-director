@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import time
 import webbrowser
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -13,6 +16,170 @@ from kreluna_shared.crypto import sha256_hex
 from kreluna_shared.programs import load_settings, portal_for_key
 
 from agent.tools import mac_browser
+
+
+def _open_local_app(path_value: str) -> None:
+    path = Path(path_value).expanduser()
+    if not path.is_absolute() or not path.exists():
+        raise RuntimeError("Il percorso del programma fatture non esiste più.")
+    if sys.platform == "darwin":
+        if path.suffix.lower() != ".app":
+            raise RuntimeError("Il percorso fatture non indica un'app Mac valida.")
+        subprocess.Popen(
+            ["/usr/bin/open", str(path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return
+    if sys.platform == "win32":
+        if path.suffix.lower() != ".exe":
+            raise RuntimeError("Il percorso fatture non indica un programma Windows valido.")
+        startfile = getattr(os, "startfile", None)
+        if startfile is None:
+            raise RuntimeError("Windows non riesce ad aprire il programma fatture.")
+        startfile(str(path))
+        return
+    raise RuntimeError("Il programma fatture locale è supportato su Mac e Windows.")
+
+
+def prepare_invoice_portal(
+    *,
+    account_name: str = "",
+    client_name: str,
+    description: str,
+    net_eur: float,
+    vat_rate: float = 0.22,
+    vat_note: str = "",
+    runner: mac_browser.Runner | None = None,
+    supported: Callable[[], bool] = mac_browser.is_supported,
+    sleep: Callable[[float], None] = time.sleep,
+    mover: Callable[..., bool] | None = None,
+) -> dict[str, Any]:
+    """Compila la bozza sul portale configurato e si ferma prima dell'invio."""
+
+    spec = portal_for_key("fatture-webdesk")
+    if spec is None or not spec.configured:
+        return {
+            "configured": False,
+            "filled": False,
+            "sent": False,
+            "message": "Percorso PC-FATTURE non ancora configurato: uso la prova locale.",
+            "evidence": [],
+        }
+    if spec.app_path:
+        _open_local_app(spec.app_path)
+        return {
+            "configured": True,
+            "filled": False,
+            "sent": False,
+            "program": spec.app_path,
+            "message": (
+                "Ho aperto il programma fatture configurato. Per compilare i campi reali "
+                "serve la mappa della sua schermata; intanto mostro la bozza locale."
+            ),
+            "evidence": [],
+        }
+    if not supported() and sys.platform == "win32":
+        webbrowser.open(spec.url)
+        return {
+            "configured": True,
+            "filled": False,
+            "sent": False,
+            "program": spec.url,
+            "message": "Ho aperto il portale fatture su Windows; la mappa dei campi va completata.",
+            "evidence": [],
+        }
+    if not supported():
+        raise RuntimeError("Il portale fatture configurato richiede un Agent Mac o Windows.")
+
+    settings = load_settings()
+    run = runner or mac_browser.Runner()
+    browser = mac_browser.pick_browser(run, settings.mac_browser)
+    mac_browser.open_url(run, browser, spec.url)
+    evidence = [_evidence(mac_browser.screenshot(run), "fatture-aperto", spec.key)]
+    required = {"client_name", "description", "net_eur"}
+    if not required.issubset(spec.invoice_fields):
+        return {
+            "configured": True,
+            "filled": False,
+            "sent": False,
+            "program": spec.url,
+            "message": (
+                "Ho aperto il percorso fatture. Ora va mostrata all'Agent la pagina Nuova fattura "
+                "per associare cliente, prestazione e imponibile."
+            ),
+            "evidence": evidence,
+        }
+
+    first = spec.invoice_fields["client_name"]
+    waited = 0
+    while not mac_browser.field_is_there(run, browser, first) and waited < settings.wait_for_login_seconds:
+        sleep(settings.poll_seconds)
+        waited += settings.poll_seconds
+    if not mac_browser.field_is_there(run, browser, first):
+        return {
+            "configured": True,
+            "filled": False,
+            "sent": False,
+            "program": spec.url,
+            "message": f"{spec.name}: completa il login a mano, poi riprova.",
+            "evidence": evidence,
+        }
+    where = mac_browser.current_url(run, browser)
+    if not mac_browser.same_site(spec.url, where):
+        return {
+            "configured": True,
+            "filled": False,
+            "sent": False,
+            "program": spec.url,
+            "message": "La pagina davanti non è il portale fatture configurato: non scrivo niente.",
+            "evidence": evidence,
+        }
+
+    values = {
+        "account_name": account_name,
+        "client_name": client_name,
+        "description": description,
+        "net_eur": f"{net_eur:.2f}",
+        "vat_rate": f"{vat_rate * 100:g}",
+        "vat_note": vat_note,
+    }
+    moved = False
+    for name, selector in spec.invoice_fields.items():
+        value = values.get(name, "")
+        if not selector or not value:
+            continue
+        if mover is None:
+            written, visible = mac_browser.fill_field_visible(run, browser, selector, value)
+        else:
+            written, visible = mac_browser.fill_field_visible(
+                run,
+                browser,
+                selector,
+                value,
+                mover=mover,
+            )
+        if not written:
+            return {
+                "configured": True,
+                "filled": False,
+                "sent": False,
+                "program": spec.url,
+                "message": f"Il campo {name} è cambiato: mi fermo senza inviare.",
+                "evidence": evidence,
+            }
+        moved = moved or visible
+    evidence.append(_evidence(mac_browser.screenshot(run), "fattura-compilata", spec.key))
+    return {
+        "configured": True,
+        "filled": True,
+        "sent": False,
+        "mouse_visible": moved,
+        "program": spec.url,
+        "message": "Bozza compilata. Mi sono fermato prima di Salva/Emetti/Invia.",
+        "evidence": evidence,
+    }
 
 
 def _evidence(png: bytes, step: str, portal_key: str) -> dict[str, Any]:
@@ -86,6 +253,26 @@ def open_portal(
     spec = portal_for_key(portal)
     if spec is None:
         raise ValueError(f"PORTALE_SCONOSCIUTO:{portal}")
+    if not spec.configured:
+        raise RuntimeError(
+            f"{spec.name}: percorso non configurato. Apri Kreluna Agent e scegli Percorso fatture."
+        )
+    if spec.app_path:
+        _open_local_app(spec.app_path)
+        return {
+            "ok": True,
+            "live": True,
+            "sent": False,
+            "filled": False,
+            "browser": "programma locale",
+            "portal": spec.name,
+            "url": "",
+            "query": query,
+            "message": (
+                f"Ho aperto {spec.name}. Il login resta manuale e non ho premuto Salva o Invia."
+            ),
+            "evidence": [],
+        }
     if not supported() and sys.platform == "win32":
         webbrowser.open(spec.url)
         return {
