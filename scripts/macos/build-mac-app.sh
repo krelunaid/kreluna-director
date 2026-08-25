@@ -35,7 +35,7 @@ python3 "$ROOT/scripts/lib/bundle_python.py" macos-arm64 "$APP/Contents/Resource
 rm -rf "$APP/Contents/Resources/python-x64"
 
 echo "Creo l'icona visibile in Finder…"
-python3 "$ROOT/scripts/lib/make_app_icon.py"
+"$APP/Contents/Resources/python-arm64/bin/python3.12" "$ROOT/scripts/lib/make_app_icon.py"
 cp "$ROOT/packaging/macos/AppIcon.png" "$APP/Contents/Resources/AppIcon.png"
 cp "$ROOT/packaging/macos/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 

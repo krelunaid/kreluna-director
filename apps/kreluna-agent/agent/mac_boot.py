@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from kreluna_shared.agents import default_agents_path, load_live_agent_roles
 
@@ -40,6 +41,23 @@ def default_director_url() -> str:
     return os.environ.get("AGENT_DIRECTOR_URL", "http://127.0.0.1:8080")
 
 
+def validated_director_url(value: str) -> str:
+    url = value.strip().rstrip("/")
+    try:
+        parsed = urlparse(url)
+    except ValueError as exc:
+        raise ValueError("Indirizzo Director non valido") from exc
+    host = (parsed.hostname or "").lower()
+    local = host in {"127.0.0.1", "localhost", "::1"}
+    if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in {"", "/"}:
+        raise ValueError("Indirizzo Director non valido")
+    if parsed.scheme != "https" and not (parsed.scheme == "http" and local):
+        raise ValueError("Fuori da questo Mac il Director deve usare un indirizzo HTTPS")
+    if not host:
+        raise ValueError("Indirizzo Director non valido")
+    return url
+
+
 def load_config() -> dict[str, str]:
     path = config_path()
     if not path.exists():
@@ -58,7 +76,7 @@ def save_config(data: dict[str, str]) -> None:
 
 def apply_config(data: dict[str, str]) -> None:
     role = data["role"]
-    url = data["director_url"].rstrip("/")
+    url = validated_director_url(data["director_url"])
     os.environ["KRELUNA_AGENT_ID"] = role
     os.environ["KRELUNA_AGENT_DISPLAY_NAME"] = data.get("display_name") or role.upper()
     os.environ["KRELUNA_ENROLLMENT_CODE"] = enroll_code_for_role(role)
@@ -96,6 +114,16 @@ return text returned of answer
     typed = subprocess.run(["osascript", "-e", url_script], capture_output=True, text=True, check=False)
     url = typed.stdout.strip()
     if typed.returncode != 0 or url in {"", "CANCEL"}:
+        return None
+    try:
+        url = validated_director_url(url)
+    except ValueError as exc:
+        subprocess.run(
+            ["osascript", "-e", f'display dialog "{exc}" buttons {{"OK"}} default button "OK"'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         return None
     return {"role": found.role, "display_name": found.display_name, "director_url": url}
 

@@ -12,6 +12,7 @@ class AgentRole(BaseModel):
     job: str
     program: str = "da definire"
     capabilities: list[str] = Field(default_factory=list)
+    platforms: list[str] = Field(default_factory=lambda: ["macos", "windows"])
     retired: bool = False
 
 
@@ -49,6 +50,14 @@ def capabilities_for_role(role: str, path: str | Path | None = None) -> list[str
     for item in roles:
         if item.role == role:
             return list(item.capabilities)
+    return []
+
+
+def platforms_for_role(role: str, path: str | Path | None = None) -> list[str]:
+    roles = load_agent_roles(path or default_agents_path())
+    for item in roles:
+        if item.role == role:
+            return list(item.platforms)
     return []
 
 

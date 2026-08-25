@@ -120,6 +120,19 @@ def test_not_a_mac_says_so_instead_of_pretending():
     assert "Mac" in str(err.value)
 
 
+def test_windows_agent_opens_the_portal_without_submitting(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr("agent.capabilities.portal.sys.platform", "win32")
+    monkeypatch.setattr("agent.capabilities.portal.webbrowser.open", opened.append)
+
+    result = open_portal(portal="visure-cgn", query="Bianchi", supported=lambda: False)
+
+    assert opened == ["https://www.cgn.it"]
+    assert result["browser"] == "predefinito Windows"
+    assert result["filled"] is False
+    assert result["sent"] is False
+
+
 def test_unknown_portal_is_refused():
     with pytest.raises(ValueError):
         open_portal(portal="portale-finto", supported=lambda: True)
@@ -187,3 +200,51 @@ def test_portal_args_are_validated():
     assert clean["query"] == "Rossi Mario"
     with pytest.raises(ValidationError):
         validate_capability_args("portal_open", {"portal": "../../etc/passwd"})
+
+
+def test_saved_access_is_filled_once_without_login_click_or_final_screenshot(monkeypatch):
+    class Response:
+        is_success = True
+
+        @staticmethod
+        def json():
+            return {"username": "cliente@example.it", "secret": "Sicura'123", "secret_kind": "password"}
+
+    monkeypatch.setattr("agent.capabilities.portal.httpx.post", lambda *args, **kwargs: Response())
+    fake = FakeMac(page_url="https://www.cgn.it/login")
+    result, _ = run(
+        fake,
+        portal="visure-cgn",
+        query="Andrea Gadducci",
+        use_saved_access=True,
+        director_url="https://director.example.it",
+        device_id="device-1",
+        task_id="task-1",
+        signature="firma",
+    )
+
+    assert result["filled"] is True
+    assert "clicca tu" in result["message"].lower()
+    joined = " ".join(fake.scripts)
+    assert "cliente@example.it" in joined
+    assert "Sicura'123" in joined
+    assert "submit" not in joined.lower()
+    assert "click" not in joined.lower()
+    assert fake.shots == 1, "dopo aver compilato l'accesso non crea una schermata"
+
+
+def test_secret_text_is_embedded_as_json_not_javascript_quote() -> None:
+    script = mac_browser.fill_field_script("Google Chrome", "input[type=password]", "a';alert(1)//")
+
+    assert "e.value='" not in script
+    assert "alert(1)" in script
+
+
+def test_planner_uses_vault_only_when_explicitly_requested() -> None:
+    ordinary = plan_deterministic("Apri il sito CGN e fai la visura vera per Gadducci")
+    assert ordinary.tasks[0].args["use_saved_access"] is False
+    vault = plan_deterministic(
+        "Apri il sito CGN e fai la visura vera per Gadducci usando l'accesso salvato"
+    )
+    assert vault.tasks[0].args["use_saved_access"] is True
+    assert "prima del login" in vault.summary

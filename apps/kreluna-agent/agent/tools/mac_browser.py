@@ -196,11 +196,11 @@ def find_field_script(browser: str, selector: str) -> str:
 
 def fill_field_script(browser: str, selector: str, text: str) -> str:
     css = selector.replace("'", "\\'")
-    value = json.dumps(text)[1:-1]
+    value = json.dumps(text)
     return _js(
         browser,
         f"(function(){{var e=document.querySelector('{css}');if(!e)return '{JS_MISSING}';"
-        f"e.focus();e.value='{value}';"
+        f"e.focus();e.value={value};"
         "e.dispatchEvent(new Event('input',{bubbles:true}));"
         "e.dispatchEvent(new Event('change',{bubbles:true}));"
         "return 'SCRITTO';})()",

@@ -129,12 +129,24 @@ def test_each_job_gets_its_own_folder_even_with_a_shared_default(tmp_path, monke
 
     monkeypatch.setattr(mac_boot, "support_dir", lambda: tmp_path)
     monkeypatch.setenv("KRELUNA_AGENT_DATA_DIR", str(tmp_path / "data"))
-    mac_boot.apply_config({"role": "pc-visure", "display_name": "PC-VISURE", "director_url": "http://x"})
+    mac_boot.apply_config(
+        {
+            "role": "pc-visure",
+            "display_name": "PC-VISURE",
+            "director_url": "http://127.0.0.1:8080",
+        }
+    )
     first = Path(os.environ["KRELUNA_AGENT_DATA_DIR"])
     assert first.name == "pc-visure"
 
     monkeypatch.setenv("KRELUNA_AGENT_DATA_DIR", str(tmp_path / "data"))
-    mac_boot.apply_config({"role": "pc-fatture", "display_name": "PC-FATTURE", "director_url": "http://x"})
+    mac_boot.apply_config(
+        {
+            "role": "pc-fatture",
+            "display_name": "PC-FATTURE",
+            "director_url": "http://127.0.0.1:8080",
+        }
+    )
     second = Path(os.environ["KRELUNA_AGENT_DATA_DIR"])
     assert second.name == "pc-fatture"
     assert first != second, "due lavori non possono condividere la stessa identità"

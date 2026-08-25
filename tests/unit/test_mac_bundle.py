@@ -111,6 +111,8 @@ def test_mac_agent_build_script_skips_intel_python():
     plist = (ROOT / "packaging" / "macos-agent" / "Info.plist").read_text()
     assert "LSRequiresNativeExecution" in plist
     assert "<string>arm64</string>" in plist
+    assert "codesign --force --deep" in script
+    assert "Kreluna-Agent-Mac.zip" in script
 
 
 def test_mac_director_build_script_skips_intel_python():

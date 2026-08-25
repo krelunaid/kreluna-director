@@ -358,18 +358,31 @@ def plan_deterministic(text: str) -> PlanResult:
     if live is not None:
         portal, portal_name = live
         client = _client_name(raw) or _client_name(lowered) or ""
+        use_saved_access = any(
+            phrase in lowered
+            for phrase in ("accesso salvato", "credenziali salvate", "password salvata", "usa la cassaforte")
+        )
         return PlanResult(
             ok=True,
             summary=(
                 f"Lavoro vero su {portal_name}: apro il sito nel browser del PC"
                 + (f" e cerco {client}" if client else "")
-                + ". Il login lo fai tu. Non premo invio e non scarico niente."
+                + (
+                    ". Compilo l'accesso dalla Cassaforte e mi fermo prima del login."
+                    if use_saved_access
+                    else ". Il login lo fai tu."
+                )
+                + " Non premo invio e non scarico niente."
             ),
             tasks=[
                 PlannedTask(
                     goal=f"Aprire {portal_name} sul PC" + (f" e cercare {client}" if client else ""),
                     capability="portal_open",
-                    args={"portal": portal, "query": client},
+                    args={
+                        "portal": portal,
+                        "query": client,
+                        "use_saved_access": use_saved_access,
+                    },
                     risk=Risk.MEDIUM,
                     needs_approval=False,
                 )

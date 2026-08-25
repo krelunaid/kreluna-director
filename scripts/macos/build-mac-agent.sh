@@ -3,10 +3,21 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/dist-macos-agent"
-APP="$OUT/Kreluna Agent.app"
+TEMP_ROOT="${TMPDIR:-/tmp}"
+BUILD_OUT="$(mktemp -d "$TEMP_ROOT/kreluna-mac-agent-build.XXXXXX")"
+APP="$BUILD_OUT/Kreluna Agent.app"
 RES="$APP/Contents/Resources/app"
+export COPYFILE_DISABLE=1
+
+cleanup() {
+  if [[ -n "$BUILD_OUT" && "$BUILD_OUT" == "$TEMP_ROOT"/kreluna-mac-agent-build.* ]]; then
+    rm -rf "$BUILD_OUT"
+  fi
+}
+trap cleanup EXIT
 
 rm -rf "$OUT"
+mkdir -p "$OUT"
 mkdir -p "$APP/Contents/MacOS" "$RES"
 
 cp "$ROOT/packaging/macos-agent/Info.plist" "$APP/Contents/Info.plist"
@@ -22,24 +33,34 @@ echo "Includo Python Apple Silicon (niente Intel)…"
 python3 "$ROOT/scripts/lib/bundle_python.py" macos-arm64-agent "$APP/Contents/Resources/python-arm64"
 rm -rf "$APP/Contents/Resources/python-x64"
 
-python3 "$ROOT/scripts/lib/make_app_icon.py"
+"$APP/Contents/Resources/python-arm64/bin/python3.12" "$ROOT/scripts/lib/make_app_icon.py"
 cp "$ROOT/packaging/macos/AppIcon.png" "$APP/Contents/Resources/AppIcon.png"
 cp "$ROOT/packaging/macos/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
-cp "$ROOT/packaging/macos-agent/LEGGIMI-AGENT-MAC.txt" "$OUT/LEGGIMI-AGENT-MAC.txt"
-cp "$ROOT/packaging/macos-agent/Apri-me.html" "$OUT/Apri-me.html"
-ln -sfn /Applications "$OUT/Applicazioni"
+echo "Precompilo Python prima della firma…"
+"$APP/Contents/Resources/python-arm64/bin/python3.12" -m compileall -q \
+  "$APP/Contents/Resources/python-arm64/lib/python3.12" \
+  "$RES/apps/kreluna-agent" \
+  "$RES/packages/kreluna-shared/src"
+
+cp "$ROOT/packaging/macos-agent/LEGGIMI-AGENT-MAC.txt" "$BUILD_OUT/LEGGIMI-AGENT-MAC.txt"
+cp "$ROOT/packaging/macos-agent/Apri-me.html" "$BUILD_OUT/Apri-me.html"
+ln -sfn /Applications "$BUILD_OUT/Applicazioni"
 
 xattr -cr "$APP" >/dev/null 2>&1 || true
+echo "Firmo Kreluna Agent…"
+/usr/bin/codesign --force --deep --sign - --timestamp=none "$APP"
+/usr/bin/codesign --verify --deep "$APP"
 
 (
-  cd "$OUT"
+  cd "$BUILD_OUT"
   zip -qry -y "Kreluna-Agent-Mac.zip" \
     "Kreluna Agent.app" \
     "Applicazioni" \
     "Apri-me.html" \
     "LEGGIMI-AGENT-MAC.txt"
 )
+cp "$BUILD_OUT/Kreluna-Agent-Mac.zip" "$OUT/Kreluna-Agent-Mac.zip"
 
 python3 - "$OUT/Kreluna-Agent-Mac.zip" <<'PY'
 import hashlib, sys

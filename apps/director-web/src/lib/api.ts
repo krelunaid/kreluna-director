@@ -18,6 +18,7 @@ export type Agent = {
   enrollment_code?: string;
   retired?: boolean;
   needs_update?: boolean;
+  supported_platforms?: Array<"macos" | "windows">;
 };
 
 export type Task = {
@@ -84,6 +85,33 @@ export type UpdateStatus = {
   published_at: string;
 };
 
+export type VaultCredential = {
+  id: string;
+  client_name: string;
+  portal: string;
+  credential_label: string;
+  secret_kind: string;
+  username_masked: string;
+  status: "ready" | "error";
+  updated_at: string | null;
+};
+
+export type VaultPreview = {
+  recognized: number;
+  rows: Array<{
+    row_number: number;
+    client_name: string;
+    portal: string;
+    username_masked: string;
+    secret_kind: string;
+    credential_label: string;
+  }>;
+  warnings: Array<{ row_number: number; message: string }>;
+  truncated: boolean;
+  processed_locally: boolean;
+  sent_to_ai: boolean;
+};
+
 const TOKEN_KEY = "kreluna.token";
 
 export function token(): string | null {
@@ -114,6 +142,35 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function upload<T>(path: string, file: File): Promise<T> {
+  const headers = new Headers();
+  const current = token();
+  if (current) headers.set("Authorization", `Bearer ${current}`);
+  const body = new FormData();
+  body.set("file", file, file.name);
+  const response = await fetch(path, { method: "POST", headers, body });
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const payload = await response.json();
+      detail = payload.detail || JSON.stringify(payload);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function authenticatedBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  const current = token();
+  if (current) headers.set("Authorization", `Bearer ${current}`);
+  const response = await fetch(path, { headers });
+  if (!response.ok) throw new Error("Download non riuscito");
+  return response.blob();
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<{ token: string; user: { name: string; email: string; role: string } }>("/auth/login", {
@@ -131,6 +188,26 @@ export const api = {
   me: () => request<{ name: string; email: string; role: string; license_state: string }>("/me"),
   overview: () => request<Overview>("/overview"),
   aiProviders: () => request<{ selected: string; providers: AIProviderOption[] }>("/ai/providers"),
+  vaultCredentials: () =>
+    request<{ credentials: VaultCredential[]; count: number }>("/vault/credentials"),
+  previewVaultCsv: (file: File) => upload<VaultPreview>("/vault/import/preview", file),
+  importVaultCsv: (file: File) =>
+    upload<{
+      ok: boolean;
+      created: number;
+      updated: number;
+      rejected: number;
+      warnings: Array<{ row_number: number; message: string }>;
+      source_file_retained: boolean;
+      sent_to_ai: boolean;
+    }>("/vault/import", file),
+  checkVaultCredential: (id: string) =>
+    request<{ ok: boolean; state: string; detail: string }>(`/vault/credentials/${id}/check`, {
+      method: "POST",
+    }),
+  revokeVaultCredential: (id: string) =>
+    request<{ ok: boolean; state: string }>(`/vault/credentials/${id}`, { method: "DELETE" }),
+  vaultTemplate: () => authenticatedBlob("/vault/template.csv"),
   chooseAIProvider: (provider: string) =>
     request<{ connected: boolean; detail: string }>("/ai/provider", {
       method: "POST",

@@ -15,6 +15,7 @@ from app.database import Base, SessionLocal, engine
 from app.routers.agent_io import router as agent_io_router
 from app.routers.billing import router as billing_router
 from app.routers.core import router as core_router
+from app.routers.vault import router as vault_router
 from app.routers.work import router as work_router
 from app.routers.ws import router as ws_router
 from app.seed import seed_if_empty
@@ -61,6 +62,7 @@ app.include_router(work_router)
 app.include_router(agent_io_router)
 app.include_router(billing_router)
 app.include_router(ws_router)
+app.include_router(vault_router)
 
 def _web_dist() -> Path:
     return ROOT / "apps" / "director-web" / "dist"
@@ -106,6 +108,7 @@ async def spa_fallback(full_path: str):
         "redoc",
         "openapi.json",
         "assets",
+        "vault",
     }
     head = full_path.split("/", 1)[0]
     if head in reserved:

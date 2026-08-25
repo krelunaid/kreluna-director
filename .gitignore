@@ -21,3 +21,8 @@ dist-macos-agent/
 dist-agents/
 .cache/
 dist-windows/
+
+# Never commit CSV files prepared for the encrypted client vault.
+*.credentials.csv
+accessi-clienti*.csv
+cassaforte-*.csv

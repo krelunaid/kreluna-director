@@ -1,5 +1,17 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Agent, AIProviderOption, api, Approval, Overview, setToken, Task, token, UpdateStatus } from "./lib/api";
+import {
+  Agent,
+  AIProviderOption,
+  api,
+  Approval,
+  Overview,
+  setToken,
+  Task,
+  token,
+  UpdateStatus,
+  VaultCredential,
+  VaultPreview,
+} from "./lib/api";
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
 
@@ -84,6 +96,14 @@ export default function App() {
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
   const [activeNav, setActiveNav] = useState("dashboard");
   const [deviceAction, setDeviceAction] = useState<string | null>(null);
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultCredentials, setVaultCredentials] = useState<VaultCredential[]>([]);
+  const [vaultFile, setVaultFile] = useState<File | null>(null);
+  const [vaultPreview, setVaultPreview] = useState<VaultPreview | null>(null);
+  const [vaultBusy, setVaultBusy] = useState(false);
+  const [vaultMessage, setVaultMessage] = useState("");
+  const [vaultError, setVaultError] = useState("");
+  const vaultInput = useRef<HTMLInputElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<number>(0);
 
@@ -160,6 +180,57 @@ export default function App() {
     setDeviceAction(agent.device_id);
     try { if (agent.killed || agent.paused) await api.resume(agent.device_id); else await api.pause(agent.device_id); await refresh(); }
     finally { setDeviceAction(null); }
+  }
+
+  async function loadVault() {
+    const result = await api.vaultCredentials();
+    setVaultCredentials(result.credentials);
+  }
+
+  async function openVault() {
+    setVaultOpen(true); setVaultError(""); setVaultMessage("");
+    try { await loadVault(); }
+    catch (err) { setVaultError(err instanceof Error ? err.message : "Cassaforte non disponibile"); }
+  }
+
+  async function previewVaultFile(file: File | null) {
+    if (!file) return;
+    setVaultBusy(true); setVaultError(""); setVaultMessage(""); setVaultPreview(null); setVaultFile(file);
+    try { setVaultPreview(await api.previewVaultCsv(file)); }
+    catch (err) { setVaultFile(null); setVaultError(err instanceof Error ? err.message : "CSV non riconosciuto"); }
+    finally { setVaultBusy(false); }
+  }
+
+  async function importVaultFile() {
+    if (!vaultFile || !vaultPreview) return;
+    setVaultBusy(true); setVaultError("");
+    try {
+      const result = await api.importVaultCsv(vaultFile);
+      setVaultMessage(`${result.created} accessi aggiunti, ${result.updated} aggiornati${result.rejected ? `, ${result.rejected} esclusi` : ""}.`);
+      setVaultFile(null); setVaultPreview(null); await loadVault();
+      if (vaultInput.current) vaultInput.current.value = "";
+    } catch (err) { setVaultError(err instanceof Error ? err.message : "Importazione non riuscita"); }
+    finally { setVaultBusy(false); }
+  }
+
+  async function downloadVaultTemplate() {
+    try {
+      const blob = await api.vaultTemplate(); const url = URL.createObjectURL(blob); const link = document.createElement("a");
+      link.href = url; link.download = "kreluna-cassaforte-modello.csv"; link.click(); URL.revokeObjectURL(url);
+    } catch (err) { setVaultError(err instanceof Error ? err.message : "Download non riuscito"); }
+  }
+
+  async function checkVaultCredential(id: string) {
+    setVaultError("");
+    try { const result = await api.checkVaultCredential(id); setVaultMessage(result.detail); await loadVault(); }
+    catch (err) { setVaultError(err instanceof Error ? err.message : "Controllo non riuscito"); }
+  }
+
+  async function revokeVaultCredential(id: string) {
+    if (!window.confirm("Rimuovere questo accesso dalla Cassaforte?")) return;
+    setVaultError("");
+    try { await api.revokeVaultCredential(id); setVaultMessage("Accesso rimosso."); await loadVault(); }
+    catch (err) { setVaultError(err instanceof Error ? err.message : "Rimozione non riuscita"); }
   }
 
   function goTo(section: string, prompt?: string, nav = section) {
@@ -252,7 +323,7 @@ export default function App() {
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
-        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.12"}</p>
+        <div className="identity-copy"><h1>KRELUNA DIRECTOR</h1><p>{name} <span>•</span> active <span>•</span> v{version || "0.5.13"}</p>
           <button className={`identity-ai ${aiConnected ? "connected" : "warning"}`} onClick={() => goTo("ai-settings")}>IA: {providerLabel}{overview?.ai_model ? ` · ${overview.ai_model}` : ""}{aiConnected ? "" : " · da configurare"}</button>
         </div>
       </div>
@@ -277,6 +348,7 @@ export default function App() {
           <NavButton active={activeNav === "errors"} icon="△" label="Errori" count={overview?.active_errors} onClick={() => goTo("errors")} />
           <NavButton icon="▤" label="Contratti" onClick={() => goTo("chat", SUGGESTIONS[4].full)} />
           <NavButton icon="▧" label="Visure" onClick={() => goTo("chat", SUGGESTIONS[6].full)} />
+          <NavButton icon="▦" label="Cassaforte" count={vaultCredentials.length || undefined} onClick={() => void openVault()} />
           <NavButton icon="▤" label="Documenti" onClick={() => goTo("requests")} />
           <NavButton icon="⚙" label="Impostazioni" onClick={() => goTo("ai-settings")} />
           <button
@@ -304,7 +376,7 @@ export default function App() {
             return <article className={`feature-card ${work ? "working" : ""} ${enabled ? "enabled" : "disabled"}`} key={agent.device_id}>
               <div className="feature-name"><span className={`status-dot ${agent.presence === "waiting_install" ? "waiting" : enabled ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong>
                 <button className={`mini-switch ${active ? "on" : "off"}`} disabled={agent.presence === "waiting_install" || deviceAction === agent.device_id} onClick={() => void toggleAgent(agent)} title={agent.presence === "waiting_install" ? "Installa prima l’Agent" : enabled ? "Disattiva Agent" : "Attiva Agent"} aria-label={`${agent.presence === "waiting_install" ? "Installa prima" : enabled ? "Disattiva" : "Attiva"} ${agent.display_name || agent.agent_id}`} aria-pressed={active}><i /></button>
-              </div><p>{agent.job}</p><span>{agentState(agent, work)}</span>
+              </div><p>{agent.job}</p><span title="Disponibile per Mac e Windows">{agentState(agent, work)} · Mac/PC</span>
             </article>;
           })}</div>
         </section>
@@ -333,6 +405,14 @@ export default function App() {
 
     <footer className="cockpit-footer"><span>◉&nbsp; Sistema: macOS</span><span>▣&nbsp; Host: questo Mac</span><span>♙&nbsp; Utente: {name}</span><span>◷&nbsp; Sessione attiva</span><span className={aiConnected ? "healthy" : "warning"}>●&nbsp; {aiConnected ? "Tutti i sistemi operativi" : `${providerLabel} da configurare`}</span></footer>
     {confirmKill ? <div className="kill-confirm" role="dialog" aria-modal="true" aria-label="Conferma stop"><div><h2>Fermare tutti gli Agent?</h2><p>I lavori in corso torneranno in attesa.</p><button onClick={() => setConfirmKill(false)}>Annulla</button><button className="danger" onClick={async () => { await api.kill(); setConfirmKill(false); await refresh(); }}>Conferma stop</button></div></div> : null}
+    {vaultOpen ? <div className="vault-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-title"><div className="vault-card">
+      <div className="vault-heading"><div><span className="vault-eyebrow">CASSAFORTE CLIENTI</span><h2 id="vault-title">Accessi protetti per cliente</h2><p>Il CSV viene riconosciuto nel Director. Password e token sono cifrati e non vengono inviati a Grok.</p></div><button className="vault-close" aria-label="Chiudi Cassaforte" onClick={() => setVaultOpen(false)}>×</button></div>
+      <div className="vault-toolbar"><input ref={vaultInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void previewVaultFile(event.target.files?.[0] || null)} /><button className="primary" disabled={vaultBusy} onClick={() => vaultInput.current?.click()}>{vaultBusy ? "Riconosco il CSV…" : "Importa CSV"}</button><button disabled={vaultBusy} onClick={() => void downloadVaultTemplate()}>Scarica modello</button><span>🔒 Nessun segreto mostrato</span></div>
+      {vaultError ? <div className="vault-alert error" role="alert">{vaultError}</div> : null}{vaultMessage ? <div className="vault-alert success">{vaultMessage}</div> : null}
+      {vaultPreview ? <section className="vault-preview"><div><strong>{vaultPreview.recognized} accessi riconosciuti</strong><span>{vaultPreview.warnings.length ? ` · ${vaultPreview.warnings.length} righe da correggere` : " · CSV pronto"}</span></div><div className="vault-preview-list">{vaultPreview.rows.slice(0, 8).map((row) => <span key={`${row.row_number}-${row.client_name}-${row.portal}`}><b>{row.client_name}</b><i>{row.portal}</i><em>{row.username_masked}</em></span>)}</div><div className="vault-preview-actions"><button onClick={() => { setVaultFile(null); setVaultPreview(null); }}>Annulla</button><button className="primary" disabled={vaultBusy} onClick={() => void importVaultFile()}>Cifra e importa</button></div></section> : null}
+      <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}</span></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Usa il modello CSV: cliente, portale, username e password/token.</span></div> : null}</div>
+      <div className="vault-safety"><strong>Barriere sempre attive</strong><span>Niente SPID/CNS automatico · niente invio fatture, F24, PEC o pagamenti · OTP inserito dalla persona.</span></div>
+    </div></div> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>
     {updateStatus?.available && !updateOpen ? <button className="update-note" onClick={() => setUpdateOpen(true)}>↑ Kreluna {updateStatus.latest_version} disponibile</button> : null}
     {updateOpen && updateStatus ? <div className="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><div className="update-card">

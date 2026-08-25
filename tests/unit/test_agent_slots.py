@@ -22,6 +22,7 @@ def test_delta_studio_agents_exist():
     ]
     assert names[-3:] == ["pc-pagamenti", "pc-documenti", "pc-email"]
     fatture = next(role for role in live if role.role == "pc-fatture")
+    assert fatture.platforms == ["macos", "windows"]
     assert "Webdesk" in fatture.program
     f24 = next(role for role in live if role.role == "pc-f24")
     assert "IPSOA" in f24.program

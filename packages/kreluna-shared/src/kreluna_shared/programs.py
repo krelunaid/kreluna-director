@@ -14,6 +14,8 @@ class Portal(BaseModel):
     name: str
     url: str
     field: str = ""
+    username_field: str = ""
+    password_field: str = ""
     login_note: str = ""
 
 

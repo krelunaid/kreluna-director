@@ -76,6 +76,32 @@ def decrypt_bytes(secret: str, blob: bytes) -> bytes:
     return AESGCM(key).decrypt(nonce, cipher, None)
 
 
+def encrypt_secret_text(secret: str, plaintext: str, *, context: str) -> str:
+    """Encrypt a recoverable secret and bind it to its tenant/record context."""
+
+    nonce = os.urandom(12)
+    cipher = AESGCM(derive_aes_key(secret)).encrypt(
+        nonce,
+        plaintext.encode("utf-8"),
+        context.encode("utf-8"),
+    )
+    return "v1." + b64e(nonce + cipher)
+
+
+def decrypt_secret_text(secret: str, token: str, *, context: str) -> str:
+    if not token.startswith("v1."):
+        raise ValueError("CREDENTIAL_FORMAT_INVALID")
+    blob = b64d(token[3:])
+    if len(blob) < 29:
+        raise ValueError("CREDENTIAL_FORMAT_INVALID")
+    nonce, cipher = blob[:12], blob[12:]
+    return AESGCM(derive_aes_key(secret)).decrypt(
+        nonce,
+        cipher,
+        context.encode("utf-8"),
+    ).decode("utf-8")
+
+
 def server_private_from_seed(seed: str) -> Ed25519PrivateKey:
     return Ed25519PrivateKey.from_private_bytes(hashlib.sha256(seed.encode("utf-8")).digest())
 
