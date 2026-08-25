@@ -58,6 +58,22 @@ def test_the_client_can_arrive_last():
     assert done.tasks[0].args["net_eur"] == 5000.0
 
 
+def test_spoken_invoice_separates_account_recipient_typo_and_tax_exemption():
+    plan = plan_deterministic(
+        "mi fai una fattura per gadduci di mandoperda i 50000 euro a otil Srl "
+        "senza iva con dichiarazione d intento"
+    )
+    assert plan.ok
+    task = plan.tasks[0]
+    assert task.args["account_name"] == "Andrea Gadducci"
+    assert task.args["client_name"] == "Otil SRL"
+    assert task.args["description"] == "Manodopera"
+    assert task.args["net_eur"] == 50000.0
+    assert task.args["vat_rate"] == 0
+    assert task.args["vat_note"] == "Dichiarazione d'intento"
+    assert "senza IVA" in plan.summary
+
+
 def test_a_new_order_is_not_treated_as_an_answer():
     first = plan_deterministic("mi crei una fattura per gadducci")
     assert complete_pending(first.pending, "cosa sai fare?") is None

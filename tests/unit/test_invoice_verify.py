@@ -7,3 +7,20 @@ def test_amount_mismatch_blocks():
     result = verify_invoice(expected, observed)
     assert result["ok"] is False
     assert result["checks"]["net"] is False
+
+
+def test_tax_note_and_account_mismatch_block():
+    expected = {
+        "account": "Andrea Gadducci",
+        "client": "Otil SRL",
+        "net": 50000.0,
+        "vat": 0.0,
+        "vat_note": "Dichiarazione d'intento",
+        "total": 50000.0,
+        "status": "draft",
+    }
+    observed = {**expected, "vat_note": "", "account": ""}
+    result = verify_invoice(expected, observed)
+    assert result["ok"] is False
+    assert result["checks"]["account"] is False
+    assert result["checks"]["vat_note"] is False

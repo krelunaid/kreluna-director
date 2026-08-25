@@ -14,16 +14,20 @@ async def prepare(
     device_id: str,
     task_id: str,
     signature: str,
+    account_name: str | None = None,
     client_name: str,
     description: str,
     net_eur: float,
     vat_rate: float = 0.22,
+    vat_note: str = "",
 ) -> dict[str, Any]:
     evidence = fill_invoice_on_pc(
+        account_name=account_name or "",
         client_name=client_name,
         description=description,
         net_eur=net_eur,
         vat_rate=vat_rate,
+        vat_note=vat_note,
         status="draft",
     )
     response = await client.post(
@@ -32,10 +36,12 @@ async def prepare(
             "device_id": device_id,
             "task_id": task_id,
             "signature": signature,
+            "account_name": account_name or "",
             "client_name": client_name,
             "description": description,
             "net_eur": net_eur,
             "vat_rate": vat_rate,
+            "vat_note": vat_note,
         },
         timeout=15,
     )
