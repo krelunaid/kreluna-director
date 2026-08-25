@@ -9,9 +9,9 @@
   <key>CFBundleIdentifier</key>
   <string>studio.kreluna.director</string>
   <key>CFBundleVersion</key>
-  <string>0.5.13</string>
+  <string>0.5.14</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.5.13</string>
+  <string>0.5.14</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleSignature</key>
@@ -34,6 +34,11 @@
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.business</string>
 </dict>

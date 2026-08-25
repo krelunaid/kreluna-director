@@ -114,6 +114,12 @@ def notify(text: str, *, dialog: bool = False) -> None:
 
 
 def open_window(url: str) -> None:
+    packaged = os.environ.get("KRELUNA_DESKTOP_APP", "") == "1"
+    if packaged and sys.platform in {"darwin", "win32"}:
+        from native_window import run_native_window
+
+        run_native_window(url, storage_path=SUPPORT / "webview")
+        return
     if sys.platform == "darwin":
         chrome = Path("/Applications/Google Chrome.app")
         if chrome.exists():
@@ -196,14 +202,21 @@ def main() -> int:
     prepare_env()
     url = API_URL
     agent_proc: subprocess.Popen | None = None
+    server = None
+    server_thread = None
     try:
         if port_open(8080):
             health = health_info()
             if health is None or health.get("service") != "director-api":
                 notify("La porta 8080 è già usata da un altro programma. Chiudilo e riapri Kreluna.", dialog=True)
                 return 1
-            open_window(url)
             notify("Kreluna Director è già aperto.")
+            try:
+                open_window(url)
+            except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+                _write_log(f"Finestra Kreluna non disponibile: {exc}")
+                notify(str(exc), dialog=True)
+                return 1
             return 0
         else:
             import threading
@@ -217,8 +230,8 @@ def main() -> int:
                 log_level="info",
             )
             server = uvicorn.Server(config)
-            thread = threading.Thread(target=server.run, daemon=True)
-            thread.start()
+            server_thread = threading.Thread(target=server.run, daemon=True)
+            server_thread.start()
         if not wait_health():
             notify("Kreluna non è partita. Reinstalla lo zip nuovo.", dialog=True)
             print("Kreluna: /health non risponde", file=sys.stderr)
@@ -244,11 +257,21 @@ def main() -> int:
                 cwd=str(ROOT),
                 env=env,
             )
-        open_window(url)
         notify("Kreluna è aperta. Entra con andrea@studio.demo / demo")
         print("Kreluna Director:", url)
         print("Login: andrea@studio.demo / demo")
         check_updates()
+        try:
+            open_window(url)
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+            _write_log(f"Finestra Kreluna non disponibile: {exc}")
+            notify(str(exc), dialog=True)
+            return 1
+        if os.environ.get("KRELUNA_DESKTOP_APP", "") == "1" and sys.platform in {
+            "darwin",
+            "win32",
+        }:
+            return 0
         while True:
             if agent_proc is not None and agent_proc.poll() is not None:
                 agent_proc = subprocess.Popen(
@@ -262,6 +285,10 @@ def main() -> int:
     finally:
         if agent_proc and agent_proc.poll() is None:
             agent_proc.terminate()
+        if server is not None:
+            server.should_exit = True
+        if server_thread is not None and server_thread.is_alive():
+            server_thread.join(timeout=5)
     return 0
 
 

@@ -13,6 +13,11 @@ Istruzioni: `docs/INSTALL.md`
 
 **Non serve installare Python.** È già dentro il programma.
 
+Il Director usa una finestra nativa propria: Chrome, Safari o Edge non servono
+per aprire Kreluna. Il motore locale e l'indirizzo `127.0.0.1` restano interni
+all'app; un browser viene aperto soltanto quando un Agent deve lavorare su un
+portale esterno.
+
 Il Director è autonomo: gli Agent sono opzionali e si installano separatamente
 quando vuoi collegare i PC operativi.
 
@@ -111,4 +116,6 @@ make test
 
 Vedi `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/THREAT_MODEL.md`, `docs/IMPROVEMENTS.md`.
 
-Stack: FastAPI + SQLite + React. L’Agent Windows usa `pywinauto` se c’è; altrimenti un notepad virtuale con screenshot PNG, stesso contratto.
+Stack: FastAPI + SQLite + React, finestra nativa WKWebView su Mac e WebView2 su
+Windows. L’Agent Windows usa `pywinauto` se c’è; altrimenti un notepad virtuale
+con screenshot PNG, stesso contratto.

@@ -2,6 +2,10 @@
 
 App per **Mac** e **Windows**. Non è un sito da telefono. **Non serve Python.**
 
+Il Director si apre in una finestra propria con l'icona K: non usa Chrome,
+Safari o Edge per mostrare la dashboard. I browser restano separati e vengono
+aperti soltanto dagli Agent quando un lavoro richiede un portale esterno.
+
 Il **Director funziona anche senza Agent installati**: mostra i sette ruoli come
 "Da installare" e permette di usare dashboard, richieste, regole e configurazione IA.
 Gli Agent sono programmi separati e si aggiungono in seguito, uno per computer.
@@ -50,7 +54,7 @@ L'Agent inserisce i campi e si ferma: il click su **Accedi**, l'OTP e ogni invio
 
 ## Accesso
 
-- Si apre da sola la finestra su `http://127.0.0.1:8080`
+- Si apre da sola la finestra **Kreluna Director**; l'indirizzo locale resta interno
 - Email: `andrea@studio.demo`
 - Password: `demo`
 

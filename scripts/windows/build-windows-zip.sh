@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/dist-windows"
 APP="$OUT/Kreluna Director"
+BUILD_PYTHON="python3"
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  BUILD_PYTHON="$ROOT/.venv/bin/python"
+fi
 
 echo "Compilo la dashboard…"
 bash "$ROOT/scripts/lib/build-web.sh"
@@ -13,7 +17,7 @@ mkdir -p "$APP"
 bash "$ROOT/scripts/lib/copy-app-tree.sh" "$APP"
 
 echo "Includo Python nel programma Windows (non serve installarlo)…"
-python3 "$ROOT/scripts/lib/bundle_python.py" windows-x64 "$APP/runtime"
+"$BUILD_PYTHON" "$ROOT/scripts/lib/bundle_python.py" windows-x64 "$APP/runtime"
 
 cp "$ROOT/packaging/windows/Avvia.bat" "$APP/Avvia.bat"
 cp "$ROOT/packaging/windows/Avvia.vbs" "$APP/Avvia.vbs"
@@ -52,7 +56,7 @@ PY
     "LEGGIMI-WINDOWS.txt"
 )
 
-python3 - "$OUT/Kreluna-Director-Windows.zip" <<'PY'
+"$BUILD_PYTHON" - "$OUT/Kreluna-Director-Windows.zip" <<'PY'
 import hashlib, sys
 from pathlib import Path
 path = Path(sys.argv[1])

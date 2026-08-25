@@ -28,6 +28,16 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 cp "$ROOT/packaging/macos/Kreluna" "$APP/Contents/MacOS/Kreluna"
 chmod +x "$APP/Contents/MacOS/Kreluna"
 
+echo "Compilo la finestra nativa Kreluna…"
+xcrun swiftc \
+  -O \
+  -target arm64-apple-macos12.0 \
+  -framework AppKit \
+  -framework WebKit \
+  "$ROOT/packaging/macos/KrelunaWindow.swift" \
+  -o "$APP/Contents/MacOS/KrelunaWindow"
+chmod +x "$APP/Contents/MacOS/KrelunaWindow"
+
 bash "$ROOT/scripts/lib/copy-app-tree.sh" "$RES"
 
 echo "Includo Python Apple Silicon (niente Intel)…"
@@ -45,6 +55,8 @@ echo "Precompilo Python prima della firma…"
   "$RES/apps/director-api" \
   "$RES/apps/director-desktop" \
   "$RES/packages/kreluna-shared/src"
+
+file "$APP/Contents/MacOS/KrelunaWindow" | grep -q 'arm64'
 
 cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$BUILD_OUT/LEGGIMI-MAC.txt"
 cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$BUILD_OUT/1-SE-DICE-CESTINO.txt"
