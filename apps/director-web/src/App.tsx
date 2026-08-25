@@ -15,6 +15,8 @@ import {
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
 
+const INITIAL_CHAT: ChatItem[] = [{ role: "director", text: "Ciao Andrea, sono Kreluna, il tuo assistente IA operativo. Posso aiutarti con fatture elettroniche, F24, contabilità, pratiche camerali, contratti, DURC e visure.\n\nPer lavorare su un sito vero aggiungi «vera» o «apri il sito». Importi e nomi non li invento: se mancano, te li chiedo.\n\nNiente invii, niente pagamenti: prima chiedo Approva." }];
+
 const SUGGESTIONS = [
   { short: "Fattura Gadducci", full: "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera" },
   { short: "F24 IPSOA", full: "Prepara gli F24 in scadenza, ma non inviarli" },
@@ -83,7 +85,7 @@ export default function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [chat, setChat] = useState<ChatItem[]>([{ role: "director", text: "Ciao Andrea, sono Kreluna, il tuo assistente IA operativo. Posso aiutarti con fatture elettroniche, F24, contabilità, pratiche camerali, contratti, DURC e visure.\n\nPer lavorare su un sito vero aggiungi «vera» o «apri il sito». Importi e nomi non li invento: se mancano, te li chiedo.\n\nNiente invii, niente pagamenti: prima chiedo Approva." }]);
+  const [chat, setChat] = useState<ChatItem[]>(INITIAL_CHAT);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
@@ -170,14 +172,26 @@ export default function App() {
   async function send(text: string) {
     const message = text.trim();
     if (!message) return;
+    const history = chat.slice(-8).map((item) => ({
+      role: item.role === "user" ? "user" as const : "assistant" as const,
+      content: item.text,
+    }));
     setDraft(""); setBusy(true); setOrb("think"); setChat((items) => [...items, { role: "user", text: message }]);
     try {
-      const result = await api.chat(message);
+      const result = await api.chat(message, history);
       setChat((items) => [...items, { role: "director", text: result.summary + (result.deny_reason ? `\n${result.deny_reason}` : ""), deny: result.denied, source: result.source }]);
       setOrb("talk"); window.clearTimeout(talkTimer.current); talkTimer.current = window.setTimeout(() => setOrb("listen"), 4200); await refresh();
     } catch (err) {
       setChat((items) => [...items, { role: "director", text: err instanceof Error ? err.message : "Errore Director", deny: true }]); setOrb("listen");
     } finally { setBusy(false); }
+  }
+
+  function newRequest() {
+    setChat(INITIAL_CHAT);
+    setDraft("");
+    setOrb("listen");
+    void api.resetChat().catch(() => undefined);
+    goTo("chat");
   }
 
   const pending = useMemo(() => approvals.filter((item) => item.status === "pending"), [approvals]);
@@ -431,7 +445,7 @@ export default function App() {
         </nav>
         <div className="sidebar-bottom"><div className="assistant-card"><div className={`orb sidebar-orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /></div><div><strong>Kreluna</strong><span>{busy ? "Sta pensando" : "Ti ascolta"}</span></div></div>
           {blocked.length ? <button className="resume-all" onClick={() => void resumeAll()}>Riprendi {blocked.length} agent</button> : null}
-          <button className="new-request" onClick={() => goTo("chat")}>Nuova richiesta <b>＋</b></button>
+          <button className="new-request" onClick={newRequest}>Nuova richiesta <b>＋</b></button>
           <button className="side-logout" onClick={() => { setToken(null); setReady(false); }}>↪ <span>Chiudi sessione</span></button>
         </div>
       </aside>

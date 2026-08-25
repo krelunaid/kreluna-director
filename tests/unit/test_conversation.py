@@ -111,3 +111,15 @@ def test_a_note_on_the_open_invoice_does_not_start_over():
 
     other = continue_open_invoice(opened, "prepara la visura per Gadducci")
     assert other is None
+
+
+def test_new_request_clears_every_pending_context():
+    from app.services.followup import FollowUps
+
+    memory = FollowUps()
+    memory.remember("utente", {"capability": "invoice_prepare_demo"})
+    memory.remember_invoice("utente", {"client_name": "Andrea Gadducci"})
+    memory.forget_all("utente")
+
+    assert memory.take("utente") is None
+    assert memory.last_invoice("utente") is None

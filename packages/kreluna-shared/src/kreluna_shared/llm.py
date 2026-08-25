@@ -98,8 +98,9 @@ def portal_catalog() -> str:
 
 
 def build_system_prompt() -> str:
-    return f"""Sei il pianificatore di Kreluna Director, per uno studio di consulenza del lavoro italiano.
-Il titolare scrive in italiano parlato. Tu traduci la richiesta in compiti per i PC dello studio.
+    return f"""Sei Kreluna, l'assistente operativo di Kreluna Director per uno studio di consulenza del lavoro italiano.
+Il titolare scrive in italiano parlato. Conversa in modo naturale e, quando ti dà un ordine
+operativo supportato, traducilo in compiti per i PC dello studio.
 
 PC dello studio e programmi:
 {role_catalog()}
@@ -116,8 +117,8 @@ Regole non negoziabili:
 1. Non inventare MAI importi, date, partite IVA, nomi di clienti o numeri di fattura.
    Ogni cifra e ogni nome devono comparire nel messaggio del titolare.
    Se un dato obbligatorio manca, non creare compiti: chiedilo.
-   Se il titolare fa una domanda invece di dare un ordine, rispondi understood=false
-   e spiega in una riga cosa ti serve.
+   Se il titolare fa una domanda, chiede una spiegazione o si riferisce a una tua risposta
+   precedente, rispondi in modo chiaro usando la cronologia della conversazione.
 2. Non inviare niente per davvero: nessun F24 al Telematico, nessuna PEC, nessun pagamento,
    nessun accesso SPID o smart card. Solo preparazione sul PC.
 3. Non usare capability fuori dall'elenco. Non eseguire comandi, shell o codice.
@@ -138,18 +139,34 @@ Come parla il titolare, e cosa vuol dire:
 - "il certificato dell'impresa", "controllo su un'azienda" = visure_prepare
 - "il contratto di assunzione", "il contratto da registrare" = contratti_prepare
 
-Se devi chiedere: UNA sola domanda, in italiano, massimo 12 parole, sul dato che
-manca. Non elencare le tue possibilità, non spiegare come lavori.
+Se devi chiedere un dato per un compito supportato: UNA sola domanda, in italiano,
+massimo 12 parole, sul dato che manca. Non elencare le tue possibilità.
+
+Se il titolare fa una domanda informativa, chiede "che vuol dire?", oppure chiede un
+lavoro che non compare tra le capability, non fingere di poterlo eseguire e non fare
+domande vaghe. Rispondi in italiano semplice, massimo quattro frasi, dicendo chiaramente
+cosa puoi spiegare o preparare e cosa non è ancora eseguibile dal programma.
 
 Rispondi SOLO con JSON, senza testo intorno:
 {{"understood": true, "summary": "cosa farai, in italiano semplice",
   "tasks": [{{"goal": "cosa fa il PC", "capability": "nome_capability", "args": {{}}}}]}}
 oppure, se manca un dato o non hai capito:
-{{"understood": false, "question": "la domanda breve da fare al titolare in italiano"}}"""
+{{"understood": false, "question": "la domanda breve da fare al titolare in italiano"}}
+oppure, per una risposta informativa senza creare lavori:
+{{"understood": false, "answer": "la risposta utile e contestuale in italiano"}}"""
 
 
 def _as_plan(payload: dict[str, Any], message: str = "") -> PlanResult:
     if not payload.get("understood", False):
+        answer = " ".join(str(payload.get("answer") or "").split())
+        if answer:
+            return PlanResult(
+                ok=True,
+                summary=answer[:1600],
+                denied=False,
+                deny_reason="",
+                source="llm-answer",
+            )
         return PlanResult(
             ok=False,
             summary=_short_question(str(payload.get("question") or payload.get("summary") or "")),
@@ -317,12 +334,19 @@ async def plan_with_llm(
     client: httpx.AsyncClient,
     timeout: float = 15.0,
     allow_anonymous: bool = False,
+    history: list[dict[str, str]] | None = None,
 ) -> PlanResult | None:
     """Chiede il piano al modello e rende esplicito ogni errore del provider."""
 
     if not base_url or not model or (not api_key and not allow_anonymous):
         return None
     url = base_url.rstrip("/") + "/chat/completions"
+    conversation: list[dict[str, str]] = []
+    for turn in (history or [])[-8:]:
+        role = str(turn.get("role") or "").strip().lower()
+        content = str(turn.get("content") or "").strip()
+        if role in {"user", "assistant"} and content:
+            conversation.append({"role": role, "content": content[:2000]})
     body: dict[str, Any] = {
         "model": model,
         "temperature": 0,
@@ -330,6 +354,7 @@ async def plan_with_llm(
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": build_system_prompt()},
+            *conversation,
             {"role": "user", "content": message[:4000]},
         ],
     }
@@ -361,7 +386,10 @@ async def plan_with_llm(
         return _llm_error("invalid_response", "risposta del provider non valida")
     if not isinstance(content, str):
         return _llm_error("invalid_response", "risposta del provider non valida")
-    parsed = parse_llm_payload(content, message)
+    user_evidence = "\n".join(
+        [turn["content"] for turn in conversation if turn["role"] == "user"] + [message]
+    )
+    parsed = parse_llm_payload(content, user_evidence)
     if parsed is None:
         return _llm_error("invalid_response", "risposta del provider priva di un piano JSON valido")
     return parsed

@@ -53,5 +53,9 @@ class FollowUps:
     def forget(self, user_id: str) -> None:
         self._by_user.pop(user_id, None)
 
+    def forget_all(self, user_id: str) -> None:
+        self._by_user.pop(user_id, None)
+        self._invoice.pop(user_id, None)
+
 
 followups = FollowUps()

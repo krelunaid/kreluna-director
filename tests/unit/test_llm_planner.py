@@ -151,6 +151,54 @@ async def test_question_when_the_model_is_unsure():
 
 
 @pytest.mark.asyncio
+async def test_informational_answer_is_returned_without_creating_a_task():
+    plan = await ask(
+        json.dumps(
+            {
+                "understood": False,
+                "answer": (
+                    "Per adempimento intendo una pratica o una scadenza dello studio, "
+                    "per esempio una dichiarazione o un versamento."
+                ),
+            }
+        ),
+        message="che vuol dire adempimento?",
+    )
+    assert plan is not None and plan.ok
+    assert plan.source == "llm-answer"
+    assert plan.tasks == []
+    assert "pratica" in plan.summary
+
+
+@pytest.mark.asyncio
+async def test_recent_conversation_is_sent_to_the_model():
+    def contextual(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["messages"][-3:] == [
+            {"role": "user", "content": "Mi fai una dichiarazione dei redditi?"},
+            {"role": "assistant", "content": "Quale adempimento ti serve?"},
+            {"role": "user", "content": "Che vuol dire?"},
+        ]
+        reply = {"understood": False, "answer": "Per adempimento intendo il lavoro fiscale da preparare."}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(reply)}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(contextual)) as client:
+        plan = await plan_with_llm(
+            "Che vuol dire?",
+            base_url="https://modello.esempio/v1",
+            api_key="chiave-finta",
+            model="modello-test",
+            client=client,
+            history=[
+                {"role": "user", "content": "Mi fai una dichiarazione dei redditi?"},
+                {"role": "assistant", "content": "Quale adempimento ti serve?"},
+            ],
+        )
+    assert plan is not None and plan.source == "llm-answer"
+    assert "lavoro fiscale" in plan.summary
+
+
+@pytest.mark.asyncio
 async def test_broken_or_chatty_answers_do_not_crash():
     fenced = await ask('```json\n{"understood": false, "question": "Quanto?"}\n```')
     assert fenced is not None and fenced.summary == "Quanto?"
