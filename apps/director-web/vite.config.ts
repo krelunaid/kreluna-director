@@ -18,6 +18,7 @@ export default defineConfig({
       "/devices": "http://127.0.0.1:8080",
       "/approvals": "http://127.0.0.1:8080",
       "/evidence": "http://127.0.0.1:8080",
+      "/library": "http://127.0.0.1:8080",
       "/audit": "http://127.0.0.1:8080",
       "/overview": "http://127.0.0.1:8080",
       "/kill-switch": "http://127.0.0.1:8080",

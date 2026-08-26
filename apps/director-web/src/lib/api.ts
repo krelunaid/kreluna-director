@@ -139,6 +139,23 @@ export type VaultPreview = {
   sent_to_ai: boolean;
 };
 
+export type LibraryDocument = {
+  id: string;
+  category: "contract" | "document";
+  title: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  notes: string;
+  editable: boolean;
+  previewable: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type LibraryDocumentText = LibraryDocument & { content: string };
+
 const TOKEN_KEY = "kreluna.token";
 let vaultGrant = "";
 
@@ -212,6 +229,34 @@ async function authenticatedBlob(path: string): Promise<Blob> {
   return response.blob();
 }
 
+async function uploadLibraryDocument(
+  category: "contract" | "document",
+  title: string,
+  notes: string,
+  file: File,
+): Promise<LibraryDocument> {
+  const headers = new Headers();
+  const current = token();
+  if (current) headers.set("Authorization", `Bearer ${current}`);
+  const body = new FormData();
+  body.set("category", category);
+  body.set("title", title);
+  body.set("notes", notes);
+  body.set("file", file, file.name);
+  const response = await fetch("/library/upload", { method: "POST", headers, body });
+  if (!response.ok) {
+    let detail = "Caricamento non riuscito";
+    try {
+      const payload = await response.json();
+      detail = payload.detail || detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<LibraryDocument>;
+}
+
 export const api = {
   login: (email: string, password: string, rememberDevice = true) =>
     request<{ token: string; expires_in: number; user: { name: string; email: string; role: string } }>("/auth/login", {
@@ -276,6 +321,31 @@ export const api = {
   revokeVaultCredential: (id: string) =>
     request<{ ok: boolean; state: string }>(`/vault/credentials/${id}`, { method: "DELETE" }),
   vaultTemplate: () => authenticatedBlob("/vault/template.csv"),
+  libraryDocuments: (category?: "contract" | "document") =>
+    request<{ documents: LibraryDocument[]; count: number }>(
+      `/library${category ? `?category=${category}` : ""}`,
+    ),
+  createLibraryText: (
+    category: "contract" | "document",
+    title: string,
+    content: string,
+    notes = "",
+  ) => request<LibraryDocument>("/library/text", {
+    method: "POST",
+    body: JSON.stringify({ category, title, content, notes }),
+  }),
+  uploadLibraryDocument,
+  libraryDocumentText: (id: string) =>
+    request<LibraryDocumentText>(`/library/${id}/text`),
+  updateLibraryDocument: (id: string, title: string, notes: string, content?: string) =>
+    request<LibraryDocument>(`/library/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ title, notes, ...(content === undefined ? {} : { content }) }),
+    }),
+  libraryDocumentBlob: (id: string, inline = false) =>
+    authenticatedBlob(`/library/${id}/file?disposition=${inline ? "inline" : "attachment"}`),
+  deleteLibraryDocument: (id: string) =>
+    request<{ ok: boolean; deleted: boolean }>(`/library/${id}`, { method: "DELETE" }),
   chooseAIProvider: (provider: string) =>
     request<AIHealth>("/ai/provider", {
       method: "POST",

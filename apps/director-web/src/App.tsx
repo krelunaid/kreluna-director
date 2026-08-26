@@ -4,6 +4,7 @@ import {
   AIProviderOption,
   api,
   Approval,
+  LibraryDocument,
   Overview,
   setVaultGrant,
   setToken,
@@ -19,6 +20,16 @@ import {
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
 type NavSection = "dashboard" | "agents" | "tasks" | "requests" | "errors" | "contracts" | "visure" | "vault" | "documents" | "settings";
 type RequestFilter = "all" | "active" | "errors" | "approvals";
+type LibraryCategory = "contract" | "document";
+type LibraryEditor = {
+  mode: "new" | "edit";
+  id?: string;
+  category: LibraryCategory;
+  title: string;
+  notes: string;
+  content: string;
+  editable: boolean;
+};
 
 const INITIAL_CHAT: ChatItem[] = [{ role: "director", text: "Ciao Andrea, sono Kreluna, il tuo assistente IA operativo. Posso aiutarti con fatture elettroniche, F24, contabilità, pratiche camerali, contratti, DURC e visure.\n\nPer lavorare su un sito vero aggiungi «vera» o «apri il sito». Importi e nomi non li invento: se mancano, te li chiedo.\n\nNiente invii, niente pagamenti: prima chiedo Approva." }];
 
@@ -56,6 +67,25 @@ const TASK_LABEL: Record<string, string> = {
 };
 
 const UPDATE_REMINDER_KEY = "kreluna.update.reminder";
+const CONTRACT_TEMPLATE = `BOZZA DI CONTRATTO
+
+Tra
+[NOME / RAGIONE SOCIALE]
+
+e
+[CLIENTE]
+
+Oggetto
+[DESCRIZIONE DELL'INCARICO]
+
+Compenso e condizioni
+[IMPORTO, SCADENZE E CONDIZIONI]
+
+Durata
+[DATA DI INIZIO E DURATA]
+
+Note
+Questa è una bozza. Controllo, firma e invio restano sempre alla persona.`;
 const EMPTY_VAULT_FORM: VaultCredentialInput = {
   client_name: "",
   portal: "",
@@ -77,6 +107,12 @@ function updateReminderExpired(version: string): boolean {
 
 function label(map: Record<string, string>, value: string): string {
   return map[value] || value.replace(/_/g, " ");
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function currentWork(agent: Agent, tasks: Task[]): Task | undefined {
@@ -155,7 +191,19 @@ export default function App() {
   const [aiSettingsBusy, setAISettingsBusy] = useState(false);
   const [aiSettingsError, setAISettingsError] = useState("");
   const [aiSettingsMessage, setAISettingsMessage] = useState("");
+  const [libraryDocuments, setLibraryDocuments] = useState<LibraryDocument[]>([]);
+  const [libraryBusy, setLibraryBusy] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
+  const [libraryMessage, setLibraryMessage] = useState("");
+  const [libraryUploadCategory, setLibraryUploadCategory] = useState<LibraryCategory>("document");
+  const [libraryEditor, setLibraryEditor] = useState<LibraryEditor | null>(null);
+  const [libraryPreview, setLibraryPreview] = useState<{
+    item: LibraryDocument;
+    text?: string;
+    url?: string;
+  } | null>(null);
   const vaultInput = useRef<HTMLInputElement | null>(null);
+  const libraryInput = useRef<HTMLInputElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<number>(0);
   const vaultLockTimer = useRef<number>(0);
@@ -210,6 +258,11 @@ export default function App() {
   }, [ready]);
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [chat, busy]);
+
+  useEffect(() => {
+    if (!ready || !["contracts", "documents"].includes(activeNav)) return;
+    void loadLibrary();
+  }, [ready, activeNav]);
 
   useEffect(() => {
     if (!vaultOpen || vaultRetryAfter <= 0) return;
@@ -439,6 +492,139 @@ export default function App() {
     catch (err) { setVaultError(err instanceof Error ? err.message : "Rimozione non riuscita"); }
   }
 
+  async function loadLibrary() {
+    setLibraryBusy(true); setLibraryError("");
+    try {
+      const result = await api.libraryDocuments();
+      setLibraryDocuments(result.documents);
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Archivio non disponibile");
+    } finally { setLibraryBusy(false); }
+  }
+
+  function newLibraryText(category: LibraryCategory) {
+    setLibraryError(""); setLibraryMessage("");
+    setLibraryEditor({
+      mode: "new",
+      category,
+      title: category === "contract" ? "Nuova bozza di contratto" : "Nuovo documento",
+      notes: "",
+      content: category === "contract" ? CONTRACT_TEMPLATE : "",
+      editable: true,
+    });
+  }
+
+  function chooseLibraryFile(category: LibraryCategory) {
+    setLibraryUploadCategory(category); setLibraryError(""); setLibraryMessage("");
+    if (libraryInput.current) {
+      libraryInput.current.value = "";
+      libraryInput.current.click();
+    }
+  }
+
+  async function uploadLibraryFile(file: File | null) {
+    if (!file) return;
+    setLibraryBusy(true); setLibraryError(""); setLibraryMessage("");
+    try {
+      const title = file.name.replace(/\.[^.]+$/, "");
+      await api.uploadLibraryDocument(libraryUploadCategory, title, "", file);
+      setLibraryMessage(`${file.name} caricato e cifrato nell’archivio.`);
+      await loadLibrary();
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Caricamento non riuscito");
+    } finally { setLibraryBusy(false); }
+  }
+
+  async function editLibraryItem(item: LibraryDocument) {
+    setLibraryBusy(true); setLibraryError(""); setLibraryMessage("");
+    try {
+      const content = item.editable ? (await api.libraryDocumentText(item.id)).content : "";
+      setLibraryEditor({
+        mode: "edit",
+        id: item.id,
+        category: item.category,
+        title: item.title,
+        notes: item.notes,
+        content,
+        editable: item.editable,
+      });
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Documento non modificabile");
+    } finally { setLibraryBusy(false); }
+  }
+
+  async function saveLibraryItem(event: FormEvent) {
+    event.preventDefault();
+    if (!libraryEditor) return;
+    setLibraryBusy(true); setLibraryError(""); setLibraryMessage("");
+    try {
+      if (libraryEditor.mode === "new") {
+        await api.createLibraryText(
+          libraryEditor.category,
+          libraryEditor.title,
+          libraryEditor.content,
+          libraryEditor.notes,
+        );
+      } else if (libraryEditor.id) {
+        await api.updateLibraryDocument(
+          libraryEditor.id,
+          libraryEditor.title,
+          libraryEditor.notes,
+          libraryEditor.editable ? libraryEditor.content : undefined,
+        );
+      }
+      setLibraryMessage(libraryEditor.mode === "new" ? "Documento creato e cifrato." : "Modifiche salvate.");
+      setLibraryEditor(null); await loadLibrary();
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Salvataggio non riuscito");
+    } finally { setLibraryBusy(false); }
+  }
+
+  async function openLibraryItem(item: LibraryDocument) {
+    setLibraryBusy(true); setLibraryError(""); setLibraryMessage("");
+    try {
+      if (item.editable) {
+        const result = await api.libraryDocumentText(item.id);
+        setLibraryPreview({ item, text: result.content });
+      } else if (item.previewable) {
+        const blob = await api.libraryDocumentBlob(item.id, true);
+        setLibraryPreview({ item, url: URL.createObjectURL(blob) });
+      } else {
+        await downloadLibraryItem(item);
+        setLibraryMessage(`${item.filename} è stato scaricato: aprilo con il programma associato.`);
+      }
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Apertura non riuscita");
+    } finally { setLibraryBusy(false); }
+  }
+
+  function closeLibraryPreview() {
+    if (libraryPreview?.url) URL.revokeObjectURL(libraryPreview.url);
+    setLibraryPreview(null);
+  }
+
+  async function downloadLibraryItem(item: LibraryDocument) {
+    try {
+      const blob = await api.libraryDocumentBlob(item.id); const url = URL.createObjectURL(blob);
+      const link = document.createElement("a"); link.href = url; link.download = item.filename;
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Download non riuscito");
+    }
+  }
+
+  async function deleteLibraryItem(item: LibraryDocument) {
+    if (!window.confirm(`Cancellare definitivamente “${item.title}”?`)) return;
+    setLibraryBusy(true); setLibraryError(""); setLibraryMessage("");
+    try {
+      await api.deleteLibraryDocument(item.id);
+      setLibraryMessage("Documento cancellato dall’archivio."); await loadLibrary();
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Cancellazione non riuscita");
+    } finally { setLibraryBusy(false); }
+  }
+
   function openAISettings(provider = overview?.ai_provider || "grok") {
     const option = aiProviders.find((item) => item.provider === provider);
     setAISettingsProvider(provider);
@@ -594,6 +780,28 @@ export default function App() {
     </article>)}</div>;
   }
 
+  function libraryRows(category: LibraryCategory) {
+    const rows = libraryDocuments.filter((item) => item.category === category);
+    return <>
+      <input
+        ref={libraryInput}
+        type="file"
+        hidden
+        accept=".txt,.md,.csv,.json,.xml,.pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.odt,.rtf,.xls,.xlsx,.ods"
+        onChange={(event) => void uploadLibraryFile(event.target.files?.[0] || null)}
+      />
+      {libraryError ? <div className="library-alert error" role="alert">{libraryError}</div> : null}
+      {libraryMessage ? <div className="library-alert success">{libraryMessage}</div> : null}
+      <div className="library-summary"><strong>{rows.length} {category === "contract" ? "contratti" : "documenti"}</strong><span>File cifrati e separati per studio</span></div>
+      {rows.length ? <div className="library-list">{rows.map((item) => <article className="library-row" key={item.id}>
+        <span className={`library-file-icon ${item.content_type.includes("pdf") ? "pdf" : item.editable ? "text" : "binary"}`}>{item.content_type.includes("pdf") ? "PDF" : item.editable ? "TXT" : "FILE"}</span>
+        <div className="library-row-copy"><strong>{item.title}</strong><span>{item.filename} · {formatFileSize(item.size_bytes)}</span>{item.notes ? <small>{item.notes}</small> : null}</div>
+        <div className="library-row-date"><span>Aggiornato</span><time>{item.updated_at ? new Date(item.updated_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</time></div>
+        <div className="library-actions"><button disabled={libraryBusy} onClick={() => void openLibraryItem(item)}>Apri</button><button disabled={libraryBusy} onClick={() => void downloadLibraryItem(item)}>Scarica</button><button disabled={libraryBusy} onClick={() => void editLibraryItem(item)}>Modifica</button><button className="danger-text" disabled={libraryBusy} onClick={() => void deleteLibraryItem(item)}>Cancella</button></div>
+      </article>)}</div> : <div className="workspace-empty"><strong>Archivio vuoto</strong><span>{category === "contract" ? "Crea una bozza o carica un contratto già esistente." : "Crea una nota o carica PDF, immagini, Word, Excel e altri documenti."}</span></div>}
+    </>;
+  }
+
   function workspacePage() {
     if (activeNav === "agents") return <section className="workspace-page" aria-labelledby="workspace-title">
       <div className="workspace-heading"><div><span>CONTROLLO LOCALE</span><h2 id="workspace-title">PC &amp; FEATURE</h2><p>Installa, attiva o sospendi gli Agent autorizzati dello studio.</p></div><button onClick={() => void refresh()}>↻ Aggiorna stato</button></div>
@@ -610,11 +818,11 @@ export default function App() {
 
     if (activeNav === "errors") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>DIAGNOSTICA</span><h2 id="workspace-title">ERRORI</h2><p>I problemi da risolvere sono separati dagli errori già chiusi.</p></div><button onClick={() => void refresh()}>↻ Ricontrolla</button></div><div className="workspace-error-group"><h3><i className="error-active" /> Attivi ({activeErrors.length})</h3>{taskRows(activeErrors, "Nessun errore attivo: tutti i sistemi sono operativi.")}</div><div className="workspace-error-group historical"><h3><i /> Storico ({historicalErrors.length})</h3>{taskRows(historicalErrors, "Non ci sono errori storici.")}</div></section>;
 
-    if (activeNav === "contracts") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>AREA DOCUMENTALE</span><h2 id="workspace-title">CONTRATTI</h2><p>Prepara bozze e raccogli dati. Nessun contratto viene inviato o firmato automaticamente.</p></div><button onClick={() => openComposer("Prepara una bozza di contratto per il cliente ")}>＋ Prepara contratto</button></div><div className="workspace-safety">✓ Bozze soltanto · invio e firma restano sempre alla persona</div>{taskRows(contractTasks, "Non hai ancora preparato contratti con Kreluna.")}</section>;
+    if (activeNav === "contracts") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>AREA DOCUMENTALE</span><h2 id="workspace-title">CONTRATTI</h2><p>Crea, apri, scarica, modifica e cancella le bozze conservate nello studio.</p></div><div className="workspace-heading-actions"><button onClick={() => newLibraryText("contract")}>＋ Nuova bozza</button><button onClick={() => chooseLibraryFile("contract")}>↑ Carica contratto</button><button onClick={() => openComposer("Prepara una bozza di contratto per il cliente ")}>✦ Chiedi a Kreluna</button></div></div><div className="workspace-safety">✓ Bozze soltanto · invio e firma restano sempre alla persona</div>{libraryRows("contract")}{contractTasks.length ? <details className="library-linked-tasks"><summary>Attività collegate ({contractTasks.length})</summary>{taskRows(contractTasks, "")}</details> : null}</section>;
 
     if (activeNav === "visure") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>AREA CAMERALI</span><h2 id="workspace-title">VISURE</h2><p>Prepara richieste di visura e consulta le prove prodotte dall’Agent.</p></div><button onClick={() => openComposer("Prepara una visura per il cliente ")}>＋ Nuova visura</button></div><div className="workspace-safety">✓ Accesso umano per SPID, CNS, CIE e OTP · nessun invio automatico</div>{taskRows(visureTasks, "Non ci sono ancora richieste di visura.")}</section>;
 
-    if (activeNav === "documents") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>ARCHIVIO OPERATIVO</span><h2 id="workspace-title">DOCUMENTI</h2><p>Controlli documentali e prove raccolte dai lavori, senza mostrare credenziali.</p></div><button onClick={() => openComposer("Controlla i documenti mancanti per il cliente ")}>＋ Controlla documenti</button></div>{taskRows(documentTasks, "I controlli e le prove dei task compariranno qui.")}</section>;
+    if (activeNav === "documents") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>ARCHIVIO OPERATIVO</span><h2 id="workspace-title">DOCUMENTI</h2><p>Archivio cifrato per PDF, immagini, Word, Excel e note dello studio.</p></div><div className="workspace-heading-actions"><button onClick={() => newLibraryText("document")}>＋ Nuovo documento</button><button onClick={() => chooseLibraryFile("document")}>↑ Carica file</button><button onClick={() => openComposer("Controlla i documenti mancanti per il cliente ")}>✦ Chiedi a Kreluna</button></div></div>{libraryRows("document")}{documentTasks.length ? <details className="library-linked-tasks"><summary>Prove e controlli dei task ({documentTasks.length})</summary>{taskRows(documentTasks, "")}</details> : null}</section>;
 
     return <section className="workspace-page settings-workspace" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>CONTROLLO DEL PROGRAMMA</span><h2 id="workspace-title">IMPOSTAZIONI</h2><p>Connessione IA, aggiornamenti, sessione e protezioni operative.</p></div><button onClick={() => void refresh()}>↻ Aggiorna</button></div><div className="settings-grid">
       <article><span>INTELLIGENZA ARTIFICIALE</span><h3>{providerLabel}</h3><p>{overview?.ai_detail || (aiConnected ? "Collegata e pronta." : "Servizio non disponibile.")}</p><div className={`settings-state ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "Da controllare"}</div><button onClick={() => openAISettings()}>Configura e verifica</button></article>
@@ -775,6 +983,19 @@ export default function App() {
       <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}</span><small className="vault-saved-link" title={item.portal_url}>{item.portal_url || "Link da aggiungere"}</small></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => editVaultCredential(item)}>Aggiorna</button><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Premi Nuovo cliente oppure importa il modello CSV.</span></div> : null}</div>
       <div className="vault-safety"><strong>Barriere sempre attive</strong><span>Niente SPID/CNS automatico · niente invio fatture, F24, PEC o pagamenti · OTP inserito dalla persona.</span></div>
       </>}
+    </div></div> : null}
+    {libraryEditor ? <div className="library-dialog" role="dialog" aria-modal="true" aria-labelledby="library-editor-title"><form className="library-editor-card" onSubmit={saveLibraryItem}>
+      <div className="library-dialog-heading"><div><span>{libraryEditor.category === "contract" ? "CONTRATTI" : "DOCUMENTI"}</span><h2 id="library-editor-title">{libraryEditor.mode === "new" ? "Nuovo file" : "Modifica file"}</h2><p>{libraryEditor.editable ? "Titolo, note e testo possono essere modificati direttamente." : "Per questo formato puoi modificare titolo e note; il contenuto si apre nel programma associato."}</p></div><button type="button" aria-label="Chiudi" onClick={() => setLibraryEditor(null)}>×</button></div>
+      <label>Titolo<input required maxLength={240} value={libraryEditor.title} onChange={(event) => setLibraryEditor({ ...libraryEditor, title: event.target.value })} /></label>
+      <label>Note<input maxLength={4000} value={libraryEditor.notes} onChange={(event) => setLibraryEditor({ ...libraryEditor, notes: event.target.value })} placeholder="Cliente, scadenza o annotazioni" /></label>
+      {libraryEditor.editable ? <label className="library-content-label">Contenuto<textarea value={libraryEditor.content} onChange={(event) => setLibraryEditor({ ...libraryEditor, content: event.target.value })} spellCheck /></label> : <div className="library-binary-note">Il file originale resta cifrato e invariato. Usa Apri o Scarica per lavorarlo con Word, Excel o il programma adatto.</div>}
+      {libraryError ? <div className="library-alert error" role="alert">{libraryError}</div> : null}
+      <div className="library-dialog-actions"><button type="button" onClick={() => setLibraryEditor(null)}>Annulla</button><button className="primary" disabled={libraryBusy}>{libraryBusy ? "Salvataggio…" : "Salva modifiche"}</button></div>
+    </form></div> : null}
+    {libraryPreview ? <div className="library-dialog" role="dialog" aria-modal="true" aria-labelledby="library-preview-title"><div className="library-preview-card">
+      <div className="library-dialog-heading"><div><span>ANTEPRIMA</span><h2 id="library-preview-title">{libraryPreview.item.title}</h2><p>{libraryPreview.item.filename}</p></div><button type="button" aria-label="Chiudi anteprima" onClick={closeLibraryPreview}>×</button></div>
+      <div className="library-preview-content">{libraryPreview.text !== undefined ? <pre>{libraryPreview.text}</pre> : libraryPreview.item.content_type.startsWith("image/") && libraryPreview.url ? <img src={libraryPreview.url} alt={libraryPreview.item.title} /> : libraryPreview.url ? <iframe src={libraryPreview.url} title={libraryPreview.item.title} /> : null}</div>
+      <div className="library-dialog-actions"><button onClick={closeLibraryPreview}>Chiudi</button><button onClick={() => void downloadLibraryItem(libraryPreview.item)}>Scarica originale</button>{libraryPreview.item.editable ? <button className="primary" onClick={() => { const item = libraryPreview.item; closeLibraryPreview(); void editLibraryItem(item); }}>Modifica</button> : null}</div>
     </div></div> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>
     {updateStatus?.available && !updateOpen ? <button className="update-note" onClick={() => setUpdateOpen(true)}>↑ Kreluna {updateStatus.latest_version} disponibile</button> : null}

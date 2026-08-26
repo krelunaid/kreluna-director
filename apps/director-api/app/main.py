@@ -16,6 +16,7 @@ from app.database import Base, SessionLocal, engine, migrate_compatible_schema
 from app.routers.agent_io import router as agent_io_router
 from app.routers.billing import router as billing_router
 from app.routers.core import router as core_router
+from app.routers.library import router as library_router
 from app.routers.vault import router as vault_router
 from app.routers.work import router as work_router
 from app.routers.ws import router as ws_router
@@ -67,6 +68,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(core_router)
+app.include_router(library_router)
 app.include_router(work_router)
 app.include_router(agent_io_router)
 app.include_router(billing_router)
@@ -118,6 +120,7 @@ async def spa_fallback(full_path: str):
         "openapi.json",
         "assets",
         "vault",
+        "library",
     }
     head = full_path.split("/", 1)[0]
     if head in reserved:

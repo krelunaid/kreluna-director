@@ -24,6 +24,22 @@ def test_websockets_require_device_proof_and_dashboard_session():
             "/agents/pc-fatture/enrollment",
             headers={"Authorization": f"Bearer {token}"},
         )
+        if issued.status_code == 409:
+            agents = client.get(
+                "/agents", headers={"Authorization": f"Bearer {token}"}
+            ).json()["agents"]
+            existing = next(
+                item for item in agents if item["agent_id"] == "pc-fatture"
+            )
+            revoked = client.post(
+                f"/devices/{existing['device_id']}/revoke",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert revoked.status_code == 200
+            issued = client.post(
+                "/agents/pc-fatture/enrollment",
+                headers={"Authorization": f"Bearer {token}"},
+            )
         assert issued.status_code == 200
         private, public = generate_device_keypair()
         enrolled = client.post(

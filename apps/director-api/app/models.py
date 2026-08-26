@@ -138,6 +138,26 @@ class Evidence(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class WorkspaceDocument(Base):
+    """Tenant-scoped encrypted file shown in Contratti or Documenti."""
+
+    __tablename__ = "workspace_documents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    category: Mapped[str] = mapped_column(String(20), index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    filename: Mapped[str] = mapped_column(String(240))
+    content_type: Mapped[str] = mapped_column(String(160), default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str] = mapped_column(String(64))
+    storage_key: Mapped[str] = mapped_column(String(400), unique=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Approval(Base):
     __tablename__ = "approvals"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
