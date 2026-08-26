@@ -7,6 +7,15 @@
 # submit: MAI. L'Agent compila e si ferma. L'invio lo fai tu.
 
 portals:
+  f24-ipsoa:
+    role: pc-f24
+    name: F24 — IPSOA
+    configured: false
+    url: https://www.ipsoa.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    username_field: "input[type=email], input[name*=user], input[name*=login]"
+    password_field: "input[type=password]"
+    login_note: Completa l’accesso e l’eventuale OTP a mano. L’Agent non trasmette e non paga.
   visure-cgn:
     role: pc-visure
     name: Visure — CGN

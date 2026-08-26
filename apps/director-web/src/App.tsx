@@ -30,6 +30,26 @@ type LibraryEditor = {
   content: string;
   editable: boolean;
 };
+type F24LinePreview = {
+  section_label: string;
+  tax_code: string;
+  reference_year: string;
+  debit_eur: number;
+  credit_eur: number;
+};
+type F24DraftPreview = {
+  form_label: string;
+  client_name: string;
+  payment_date: string;
+  period: string;
+  rules_version: string;
+  ready_for_review: boolean;
+  sent: boolean;
+  payment_started: boolean;
+  issues: string[];
+  lines: F24LinePreview[];
+  totals: { debit_eur: number; credit_eur: number; balance_eur: number };
+};
 
 const INITIAL_CHAT: ChatItem[] = [{ role: "director", text: "Ciao Andrea, sono Kreluna, il tuo assistente IA operativo. Posso aiutarti con fatture elettroniche, F24, contabilità, pratiche camerali, contratti, DURC e visure.\n\nPer lavorare su un sito vero aggiungi «vera» o «apri il sito». Importi e nomi non li invento: se mancano, te li chiedo.\n\nNiente invii, niente pagamenti: prima chiedo Approva." }];
 
@@ -42,7 +62,7 @@ function chatSource(item: ChatItem): string {
 
 const SUGGESTIONS = [
   { short: "Fattura Gadducci", full: "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera" },
-  { short: "F24 IPSOA", full: "Prepara gli F24 in scadenza, ma non inviarli" },
+  { short: "F24 IVA", full: "Prepara F24 ordinario IVA trimestrale secondo trimestre per Andrea Gadducci, anno 2026, debito 1.250 euro" },
   { short: "Contabilità", full: "Scarica le fatture in IPSOA per Gadducci" },
   { short: "Camerali", full: "Prepara la pratica camerale per Gadducci" },
   { short: "Contratti", full: "Prepara una bozza di contratto per il cliente indicato, senza inviarla" },
@@ -115,6 +135,17 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function f24DraftFor(task: Task): F24DraftPreview | null {
+  if (task.capability !== "f24_prepare") return null;
+  const draft = task.result.draft;
+  if (!draft || typeof draft !== "object") return null;
+  return draft as F24DraftPreview;
+}
+
+function euro(value: number): string {
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value || 0);
+}
+
 function currentWork(agent: Agent, tasks: Task[]): Task | undefined {
   if (agent.active_task_id) {
     const hit = tasks.find((item) => item.id === agent.active_task_id);
@@ -157,6 +188,7 @@ export default function App() {
   const [updateInstallState, setUpdateInstallState] = useState<"idle" | "installing" | "restarting">("idle");
   const [updateInstallError, setUpdateInstallError] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [f24Preview, setF24Preview] = useState<Task | null>(null);
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
   const [activeNav, setActiveNav] = useState<NavSection>("dashboard");
   const [requestFilter, setRequestFilter] = useState<RequestFilter>("all");
@@ -773,11 +805,14 @@ export default function App() {
 
   function taskRows(rows: Task[], empty: string) {
     if (!rows.length) return <div className="workspace-empty"><strong>Nessun elemento</strong><span>{empty}</span></div>;
-    return <div className="workspace-list">{rows.map((task) => <article className={`workspace-row ${task.status}`} key={task.id}>
-      <span className={`workspace-row-icon ${task.status}`}>{task.status === "failed" || task.error_state === "active" ? "△" : "▣"}</span>
-      <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{task.capability.replace(/_/g, " ")} · rischio {task.risk}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
-      <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
-    </article>)}</div>;
+    return <div className="workspace-list">{rows.map((task) => {
+      const f24 = f24DraftFor(task);
+      return <article className={`workspace-row ${task.status}`} key={task.id}>
+        <span className={`workspace-row-icon ${task.status}`}>{task.status === "failed" || task.error_state === "active" ? "△" : "▣"}</span>
+        <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{f24 ? `${f24.form_label} · saldo ${euro(f24.totals.balance_eur)} · ${f24.ready_for_review ? "validato" : "da completare"}` : `${task.capability.replace(/_/g, " ")} · rischio ${task.risk}`}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
+        <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
+      </article>;
+    })}</div>;
   }
 
   function libraryRows(category: LibraryCategory) {
@@ -997,6 +1032,7 @@ export default function App() {
       <div className="library-preview-content">{libraryPreview.text !== undefined ? <pre>{libraryPreview.text}</pre> : libraryPreview.item.content_type.startsWith("image/") && libraryPreview.url ? <img src={libraryPreview.url} alt={libraryPreview.item.title} /> : libraryPreview.url ? <iframe src={libraryPreview.url} title={libraryPreview.item.title} /> : null}</div>
       <div className="library-dialog-actions"><button onClick={closeLibraryPreview}>Chiudi</button><button onClick={() => void downloadLibraryItem(libraryPreview.item)}>Scarica originale</button>{libraryPreview.item.editable ? <button className="primary" onClick={() => { const item = libraryPreview.item; closeLibraryPreview(); void editLibraryItem(item); }}>Modifica</button> : null}</div>
     </div></div> : null}
+    {f24Preview && f24DraftFor(f24Preview) ? <F24PreviewDialog task={f24Preview} onClose={() => setF24Preview(null)} /> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>
     {updateStatus?.available && !updateOpen ? <button className="update-note" onClick={() => setUpdateOpen(true)}>↑ Kreluna {updateStatus.latest_version} disponibile</button> : null}
     {updateOpen && updateStatus ? <div className="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><div className="update-card">
@@ -1046,4 +1082,17 @@ function EvidenceThumb({ id, onOpen }: { id: string; onOpen: (src: string) => vo
   }, [id]);
   if (!src) return null;
   return <button type="button" className="thumb" onClick={() => onOpen(src)}><img src={src} alt="" /></button>;
+}
+
+function F24PreviewDialog({ task, onClose }: { task: Task; onClose: () => void }) {
+  const draft = f24DraftFor(task);
+  if (!draft) return null;
+  return <div className="f24-dialog" role="dialog" aria-modal="true" aria-labelledby="f24-preview-title"><div className="f24-card">
+    <div className="library-dialog-heading"><div><span>AGENTE F24 · SOLO BOZZA</span><h2 id="f24-preview-title">{draft.form_label}</h2><p>{draft.client_name} · regole {draft.rules_version}</p></div><button type="button" aria-label="Chiudi bozza" onClick={onClose}>×</button></div>
+    <div className={`f24-state ${draft.ready_for_review ? "ready" : "warning"}`}><strong>{draft.ready_for_review ? "Bozza validata" : "Dati da completare"}</strong><span>{draft.ready_for_review ? "Pronta per il controllo della persona" : draft.issues.join(" · ")}</span></div>
+    <div className="f24-lines"><div className="f24-line heading"><span>Sezione</span><span>Codice</span><span>Anno</span><span>Debito</span><span>Credito</span></div>{draft.lines.map((line, index) => <div className="f24-line" key={`${line.tax_code}-${index}`}><span>{line.section_label}</span><strong>{line.tax_code}</strong><span>{line.reference_year}</span><span>{line.debit_eur ? euro(line.debit_eur) : "—"}</span><span>{line.credit_eur ? euro(line.credit_eur) : "—"}</span></div>)}</div>
+    <div className="f24-totals"><span>Debiti <strong>{euro(draft.totals.debit_eur)}</strong></span><span>Crediti <strong>{euro(draft.totals.credit_eur)}</strong></span><span>Saldo <strong>{euro(draft.totals.balance_eur)}</strong></span></div>
+    <div className="workspace-safety">✓ Nessun invio telematico · nessun pagamento · conferma, SPID/CNS e OTP restano alla persona</div>
+    <div className="library-dialog-actions"><button onClick={onClose}>Chiudi</button></div>
+  </div></div>;
 }

@@ -7,12 +7,14 @@ vietate o con argomenti sbagliati vengono fermate da apply_policy.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import httpx
 
 from kreluna_shared.agents import load_live_agent_roles
 from kreluna_shared.capabilities import CAPABILITIES, DENIED_CAPABILITIES
+from kreluna_shared.f24 import F24PrepareArgs, official_rule_catalog
 from kreluna_shared.models import PlannedTask, PlanResult, Risk
 from kreluna_shared.programs import load_portals
 
@@ -37,6 +39,9 @@ ASK_AMOUNT = "Mi manca l'importo. Non invento cifre: quanto devo scrivere in fat
 ASK_CLIENT = "Non ho capito per quale cliente. Scrivimi il nome, non lo invento."
 ASK_DESCRIPTION = "Non ho capito il lavoro da fatturare. Scrivilo in poche parole."
 ASK_VAT = "Non ho capito il regime IVA. Indica aliquota o esenzione."
+ASK_F24_DATA = (
+    "Per preparare l’F24 indicami cliente, modello, codice tributo, anno e importo."
+)
 OUT_OF_SCOPE = (
     "Posso aiutarti solo con contabilità, fiscale, paghe, clienti e attività di Kreluna Director. "
     "Non cerco ricette, film o altri contenuti generici."
@@ -110,6 +115,90 @@ def _amount_is_in_the_text(value: float, message: str) -> bool:
     if spoken is None:
         return False
     return abs(spoken - value) <= max(1.0, spoken * 0.001)
+
+
+def _number_is_in_the_text(value: float, message: str) -> bool:
+    """Every F24 amount must be traceable to a number supplied by the operator."""
+
+    from kreluna_shared.planner import _parse_amount
+
+    for token in re.findall(r"\d{1,3}(?:[.\s]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?", message):
+        try:
+            found = _parse_amount(token.replace(" ", ""))
+        except ValueError:
+            continue
+        if abs(found - value) <= max(0.01, abs(value) * 0.0001):
+            return True
+    return False
+
+
+def _f24_args_are_grounded(args: dict[str, Any], message: str) -> bool:
+    """Reject tax data invented by the model before the local policy sees it."""
+
+    try:
+        parsed = F24PrepareArgs.model_validate(args)
+    except ValueError:
+        return False
+    if parsed.client_name == "Da indicare" or not parsed.lines:
+        return False
+    lowered = message.lower()
+    if not _client_is_in_the_text(parsed.client_name, message):
+        return False
+    if parsed.taxpayer_id and parsed.taxpayer_id.lower() not in lowered.replace(" ", ""):
+        return False
+    for line in parsed.lines:
+        compact = "".join(ch for ch in lowered if ch.isalnum())
+        if line.rule_key:
+            if not _f24_rule_is_grounded(line.rule_key, lowered):
+                return False
+        elif line.tax_code.lower() not in compact:
+            return False
+        if line.reference_year not in message:
+            return False
+        amount = line.debit_eur or line.credit_eur
+        if not _number_is_in_the_text(float(amount), message):
+            return False
+    return True
+
+
+def _f24_rule_is_grounded(rule_key: str, lowered: str) -> bool:
+    months = {
+        1: "gennaio",
+        2: "febbraio",
+        3: "marzo",
+        4: "aprile",
+        5: "maggio",
+        6: "giugno",
+        7: "luglio",
+        8: "agosto",
+        9: "settembre",
+        10: "ottobre",
+        11: "novembre",
+        12: "dicembre",
+    }
+    monthly = re.fullmatch(r"iva_monthly_(\d{2})", rule_key)
+    if monthly:
+        month = int(monthly.group(1))
+        return "iva" in lowered and "mensil" in lowered and months[month] in lowered
+    quarterly = re.fullmatch(r"iva_quarterly_([1-4])", rule_key)
+    if quarterly:
+        quarter = quarterly.group(1)
+        words = {
+            "1": ("primo", "1 trimestre", "1° trimestre"),
+            "2": ("secondo", "2 trimestre", "2° trimestre"),
+            "3": ("terzo", "3 trimestre", "3° trimestre"),
+            "4": ("quarto", "4 trimestre", "4° trimestre"),
+        }
+        return "iva" in lowered and "trimestr" in lowered and any(
+            item in lowered for item in words[quarter]
+        )
+    checks = {
+        "iva_monthly_advance": ("iva", "acconto", "mensil"),
+        "iva_quarterly_advance": ("iva", "acconto", "trimestr"),
+        "withholding_salary": ("ritenut", "retribuz"),
+        "withholding_self_employed": ("ritenut", "autonom"),
+    }
+    return all(marker in lowered for marker in checks.get(rule_key, ("__unknown__",)))
 
 
 def _short_question(raw: str) -> str:
@@ -200,6 +289,15 @@ Regole non negoziabili:
    account_name="Gadducci" e client_name="Otil Srl".
 7. Se il titolare scrive "senza IVA", "non imponibile" o "dichiarazione d'intento",
    usa vat_rate=0 e riporta il motivo in vat_note. Non sostituire mai con IVA 22%.
+8. Per f24_prepare crea il task soltanto quando il titolare ha fornito cliente, modello,
+   codice tributo, anno di riferimento e importo a debito o credito. Non ricavare mai il
+   codice tributo dalla tua memoria. Usa form_type ordinary, simplified, elide, accise o
+   public_entities; lines contiene section, tax_code, reference_year, debit_eur/credit_eur.
+   Se manca un dato chiedilo. Nessuna capability può trasmettere o pagare l'F24.
+
+Regole F24 ufficiali locali che puoi indicare con rule_key senza chiedere il codice tributo:
+{official_rule_catalog()}
+Per tutte le altre causali il titolare deve indicare esplicitamente il codice tributo.
 
 Come parla il titolare, e cosa vuol dire:
 - "il certificato dei contributi", "il documento dell'INPS" = durc_prepare
@@ -316,6 +414,14 @@ def _as_plan(payload: dict[str, Any], message: str = "") -> PlanResult:
             else:
                 args["vat_rate"] = 0.22
                 args["vat_note"] = ""
+        if capability == "f24_prepare" and not _f24_args_are_grounded(args, message):
+            return PlanResult(
+                ok=False,
+                summary=ASK_F24_DATA,
+                denied=False,
+                deny_reason="",
+                source="llm-ask",
+            )
         tasks.append(
             PlannedTask(
                 goal=str(item.get("goal") or "Compito dallo studio")[:300],
@@ -420,7 +526,7 @@ async def plan_with_llm(
     body: dict[str, Any] = {
         "model": model,
         "temperature": 0,
-        "max_tokens": 260,
+        "max_tokens": 1000 if "f24" in message.lower() else 260,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": build_system_prompt()},

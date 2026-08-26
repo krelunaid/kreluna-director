@@ -20,6 +20,8 @@ agents:
     platforms: [macos, windows]
     capabilities:
       - f24_prepare
+      - portal_open
+      - portal_learn
   - role: pc-contabilita
     display_name: PC-CONTABILITA
     job: Contabilità

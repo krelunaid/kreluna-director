@@ -50,6 +50,14 @@ def test_f24_is_prepare_not_send():
     assert "IPSOA" in plan.summary
     assert "Telematico" in plan.summary
 
+    live = plan_deterministic(
+        "Apri il sito IPSOA e prepara F24 vero per Gadducci usando Fort Knox"
+    )
+    assert live.ok
+    assert live.tasks[0].capability == "portal_open"
+    assert live.tasks[0].args["portal"] == "f24-ipsoa"
+    assert live.tasks[0].args["use_saved_access"] is True
+
 
 def test_payments_and_invoice_check_are_split():
     pay = plan_deterministic("Prepara il pagamento di 500 euro, non eseguirlo")
