@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import subprocess
 from collections.abc import Callable
 from typing import Any
@@ -8,7 +7,6 @@ from typing import Any
 import httpx
 from kreluna_shared.workflows import build_invoice_draft
 
-from agent.capabilities.portal import prepare_invoice_portal
 from agent.tools.gestionale import fill_invoice_on_pc
 
 
@@ -30,32 +28,20 @@ async def prepare(
 ) -> dict[str, Any]:
     check = cancel_check or (lambda: None)
     check()
-    live = await asyncio.to_thread(
-        prepare_invoice_portal,
+    # Questa capability e' dichiarata demo-only: deve sempre mostrare la
+    # finestra locale controllata. Un portale configurato in Fort Knox non
+    # deve trasformare silenziosamente una prova in lavoro sul sito reale.
+    evidence = fill_invoice_on_pc(
         account_name=account_name or "",
         client_name=client_name,
         description=description,
         net_eur=net_eur,
         vat_rate=vat_rate,
         vat_note=vat_note,
+        status="draft",
         cancel_check=check,
+        register_process=register_process,
     )
-    check()
-    evidence = list(live.get("evidence") or [])
-    if not live.get("filled"):
-        evidence.extend(
-            fill_invoice_on_pc(
-                account_name=account_name or "",
-                client_name=client_name,
-                description=description,
-                net_eur=net_eur,
-                vat_rate=vat_rate,
-                vat_note=vat_note,
-                status="draft",
-                cancel_check=check,
-                register_process=register_process,
-            )
-        )
     check()
     path = "/agent/demo-invoice/prepare"
     response = await client.post(
@@ -91,13 +77,13 @@ async def prepare(
     return {
         "ok": True,
         **data,
-        "method": "portal_fields_visible" if live.get("filled") else "ui_visible",
-        "program": live.get("program") or "PC-FATTURE (prova locale)",
+        "method": "ui_visible",
+        "program": "PC-FATTURE (prova locale)",
         "live_target": {
-            "configured": bool(live.get("configured")),
-            "filled": bool(live.get("filled")),
+            "configured": False,
+            "filled": False,
             "sent": False,
-            "message": live.get("message") or "",
+            "message": "Prova locale: nessun portale fiscale aperto.",
         },
         "agent": "pc-fatture",
         "draft": draft,
