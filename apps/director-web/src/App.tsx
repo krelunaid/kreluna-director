@@ -50,6 +50,19 @@ type F24DraftPreview = {
   lines: F24LinePreview[];
   totals: { debit_eur: number; credit_eur: number; balance_eur: number };
 };
+type WorkFieldPreview = { key: string; label: string; value: string; required: boolean; source: string };
+type WorkDraftPreview = {
+  kind: "operational_draft";
+  title: string;
+  client_name: string;
+  program: string;
+  rules_version: string;
+  ready_for_review: boolean;
+  issues: string[];
+  fields: WorkFieldPreview[];
+  steps: string[];
+  credential_lookup: { requested: boolean; portals: string[]; source: string; secret_exposed: boolean };
+};
 
 const INITIAL_CHAT: ChatItem[] = [{ role: "director", text: "Ciao Andrea, sono Kreluna, il tuo assistente IA operativo. Posso aiutarti con fatture elettroniche, F24, contabilità, pratiche camerali, contratti, DURC e visure.\n\nPer lavorare su un sito vero aggiungi «vera» o «apri il sito». Importi e nomi non li invento: se mancano, te li chiedo.\n\nNiente invii, niente pagamenti: prima chiedo Approva." }];
 
@@ -142,6 +155,12 @@ function f24DraftFor(task: Task): F24DraftPreview | null {
   return draft as F24DraftPreview;
 }
 
+function workDraftFor(task: Task): WorkDraftPreview | null {
+  const draft = task.result.draft;
+  if (!draft || typeof draft !== "object" || (draft as Record<string, unknown>).kind !== "operational_draft") return null;
+  return draft as WorkDraftPreview;
+}
+
 function euro(value: number): string {
   return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value || 0);
 }
@@ -189,6 +208,7 @@ export default function App() {
   const [updateInstallError, setUpdateInstallError] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [f24Preview, setF24Preview] = useState<Task | null>(null);
+  const [workPreview, setWorkPreview] = useState<Task | null>(null);
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
   const [activeNav, setActiveNav] = useState<NavSection>("dashboard");
   const [requestFilter, setRequestFilter] = useState<RequestFilter>("all");
@@ -807,10 +827,11 @@ export default function App() {
     if (!rows.length) return <div className="workspace-empty"><strong>Nessun elemento</strong><span>{empty}</span></div>;
     return <div className="workspace-list">{rows.map((task) => {
       const f24 = f24DraftFor(task);
+      const work = workDraftFor(task);
       return <article className={`workspace-row ${task.status}`} key={task.id}>
         <span className={`workspace-row-icon ${task.status}`}>{task.status === "failed" || task.error_state === "active" ? "△" : "▣"}</span>
-        <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{f24 ? `${f24.form_label} · saldo ${euro(f24.totals.balance_eur)} · ${f24.ready_for_review ? "validato" : "da completare"}` : `${task.capability.replace(/_/g, " ")} · rischio ${task.risk}`}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
-        <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
+        <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{f24 ? `${f24.form_label} · saldo ${euro(f24.totals.balance_eur)} · ${f24.ready_for_review ? "validato" : "da completare"}` : work ? `${work.title} · ${work.program} · ${work.ready_for_review ? "validata" : "da completare"}` : `${task.capability.replace(/_/g, " ")} · rischio ${task.risk}`}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
+        <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : work ? <button onClick={() => setWorkPreview(task)}>Apri scheda</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
       </article>;
     })}</div>;
   }
@@ -1033,6 +1054,7 @@ export default function App() {
       <div className="library-dialog-actions"><button onClick={closeLibraryPreview}>Chiudi</button><button onClick={() => void downloadLibraryItem(libraryPreview.item)}>Scarica originale</button>{libraryPreview.item.editable ? <button className="primary" onClick={() => { const item = libraryPreview.item; closeLibraryPreview(); void editLibraryItem(item); }}>Modifica</button> : null}</div>
     </div></div> : null}
     {f24Preview && f24DraftFor(f24Preview) ? <F24PreviewDialog task={f24Preview} onClose={() => setF24Preview(null)} /> : null}
+    {workPreview && workDraftFor(workPreview) ? <WorkPreviewDialog task={workPreview} onClose={() => setWorkPreview(null)} /> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>
     {updateStatus?.available && !updateOpen ? <button className="update-note" onClick={() => setUpdateOpen(true)}>↑ Kreluna {updateStatus.latest_version} disponibile</button> : null}
     {updateOpen && updateStatus ? <div className="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><div className="update-card">
@@ -1093,6 +1115,20 @@ function F24PreviewDialog({ task, onClose }: { task: Task; onClose: () => void }
     <div className="f24-lines"><div className="f24-line heading"><span>Sezione</span><span>Codice</span><span>Anno</span><span>Debito</span><span>Credito</span></div>{draft.lines.map((line, index) => <div className="f24-line" key={`${line.tax_code}-${index}`}><span>{line.section_label}</span><strong>{line.tax_code}</strong><span>{line.reference_year}</span><span>{line.debit_eur ? euro(line.debit_eur) : "—"}</span><span>{line.credit_eur ? euro(line.credit_eur) : "—"}</span></div>)}</div>
     <div className="f24-totals"><span>Debiti <strong>{euro(draft.totals.debit_eur)}</strong></span><span>Crediti <strong>{euro(draft.totals.credit_eur)}</strong></span><span>Saldo <strong>{euro(draft.totals.balance_eur)}</strong></span></div>
     <div className="workspace-safety">✓ Nessun invio telematico · nessun pagamento · conferma, SPID/CNS e OTP restano alla persona</div>
+    <div className="library-dialog-actions"><button onClick={onClose}>Chiudi</button></div>
+  </div></div>;
+}
+
+function WorkPreviewDialog({ task, onClose }: { task: Task; onClose: () => void }) {
+  const draft = workDraftFor(task);
+  if (!draft) return null;
+  return <div className="f24-dialog" role="dialog" aria-modal="true" aria-labelledby="work-preview-title"><div className="f24-card workflow-card">
+    <div className="library-dialog-heading"><div><span>SCHEDA OPERATIVA · SOLO BOZZA</span><h2 id="work-preview-title">{draft.title}</h2><p>{draft.client_name} · {draft.program}</p></div><button type="button" aria-label="Chiudi scheda" onClick={onClose}>×</button></div>
+    <div className={`f24-state ${draft.ready_for_review ? "ready" : "warning"}`}><strong>{draft.ready_for_review ? "Scheda validata" : "Dati da completare"}</strong><span>{draft.ready_for_review ? "Pronta per il controllo della persona" : draft.issues.join(" · ")}</span></div>
+    <div className="workflow-fields">{draft.fields.map((field) => <div key={field.key}><span>{field.label}{field.required ? " *" : ""}</span><strong>{String(field.value || "Da indicare")}</strong><small>Fonte: {field.source}</small></div>)}</div>
+    <div className="workflow-route"><strong>Percorso controllato</strong><ol>{draft.steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ol></div>
+    <div className="workflow-vault"><strong>Fort Knox</strong><span>{draft.credential_lookup.requested ? `Accesso ordinario richiesto per ${draft.credential_lookup.portals.join(", ")}; il segreto non viene mostrato.` : `Accesso disponibile solo quando richiesto dal percorso: ${draft.credential_lookup.portals.join(", ")}.`}</span></div>
+    <div className="workspace-safety">✓ Nessun invio, firma, pagamento o download definitivo · SPID/CNS/CIE e OTP restano alla persona</div>
     <div className="library-dialog-actions"><button onClick={onClose}>Chiudi</button></div>
   </div></div>;
 }

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
+from kreluna_shared.workflows import build_invoice_draft
 
 from agent.capabilities.portal import prepare_invoice_portal
 from agent.tools.gestionale import fill_invoice_on_pc
@@ -76,6 +77,14 @@ async def prepare(
     )
     response.raise_for_status()
     data = response.json()
+    draft = build_invoice_draft(
+        account_name=account_name or "",
+        client_name=client_name,
+        description=description,
+        net_eur=net_eur,
+        vat_rate=vat_rate,
+        vat_note=vat_note,
+    )
     if evidence:
         evidence[-1]["metadata"]["draft_id"] = data["observed"]["draft_id"]
         evidence[-1]["metadata"]["status"] = "draft"
@@ -91,6 +100,7 @@ async def prepare(
             "message": live.get("message") or "",
         },
         "agent": "pc-fatture",
+        "draft": draft,
         "evidence": evidence,
     }
 

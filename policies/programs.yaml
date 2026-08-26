@@ -16,6 +16,21 @@ portals:
     username_field: "input[type=email], input[name*=user], input[name*=login]"
     password_field: "input[type=password]"
     login_note: Completa l’accesso e l’eventuale OTP a mano. L’Agent non trasmette e non paga.
+  contabilita-ipsoa:
+    role: pc-contabilita
+    name: Contabilità — IPSOA
+    configured: false
+    url: https://www.ipsoa.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    username_field: "input[type=email], input[name*=user], input[name*=login]"
+    password_field: "input[type=password]"
+    login_note: L’Agent prepara l’importazione e si ferma prima di ogni conferma definitiva.
+  contabilita-ade:
+    role: pc-contabilita
+    name: Contabilità — Agenzia delle Entrate
+    url: https://www.agenziaentrate.gov.it
+    field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
+    login_note: SPID, CNS, CIE, smart card e OTP vengono completati soltanto dalla persona.
   visure-cgn:
     role: pc-visure
     name: Visure — CGN

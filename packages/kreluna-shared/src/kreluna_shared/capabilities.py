@@ -5,6 +5,13 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from kreluna_shared.f24 import F24PrepareArgs
+from kreluna_shared.workflows import (
+    AccountingPrepareArgs,
+    CameraPrepareArgs,
+    ContractPrepareArgs,
+    DurcPrepareArgs,
+    VisurePrepareArgs,
+)
 
 
 class NotepadWriteArgs(BaseModel):
@@ -70,20 +77,6 @@ class PortalOpenArgs(BaseModel):
         return " ".join(value.split())
 
 
-class StudioPrepareArgs(BaseModel):
-    client_name: str = Field(default="Cliente", min_length=1, max_length=200)
-    notes: str = Field(default="", max_length=500)
-    period: str = Field(default="", max_length=80)
-    practice_type: str = Field(default="", max_length=80)
-    contract_type: str = Field(default="", max_length=80)
-    visura_type: str = Field(default="", max_length=80)
-
-    @field_validator("client_name", "notes", "period", "practice_type", "contract_type", "visura_type")
-    @classmethod
-    def strip_studio(cls, value: str) -> str:
-        return " ".join(value.split())
-
-
 class CapabilitySpec(BaseModel):
     name: str
     args_model: type[BaseModel]
@@ -131,38 +124,38 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
     ),
     "contabilita_prepare": CapabilitySpec(
         name="contabilita_prepare",
-        args_model=StudioPrepareArgs,
+        args_model=AccountingPrepareArgs,
         default_risk="medium",
         description="Prepara lo scarico AdE XML/P7M, il carico IPSOA e l'importatore contabile. Nessun SPID.",
-        demo_only=True,
+        demo_only=False,
     ),
     "camera_prepare": CapabilitySpec(
         name="camera_prepare",
-        args_model=StudioPrepareArgs,
+        args_model=CameraPrepareArgs,
         default_risk="medium",
         description="Prepara una pratica camerale su sito CGN e Desktop ComUnica. Nessun invio.",
-        demo_only=True,
+        demo_only=False,
     ),
     "contratti_prepare": CapabilitySpec(
         name="contratti_prepare",
-        args_model=StudioPrepareArgs,
+        args_model=ContractPrepareArgs,
         default_risk="medium",
         description="Prepara un contratto sul sito AdE (utenza Samuele). Nessun invio.",
-        demo_only=True,
+        demo_only=False,
     ),
     "durc_prepare": CapabilitySpec(
         name="durc_prepare",
-        args_model=StudioPrepareArgs,
+        args_model=DurcPrepareArgs,
         default_risk="medium",
         description="Prepara una richiesta DURC sul sito INPS. Nessun SPID, nessun invio.",
-        demo_only=True,
+        demo_only=False,
     ),
     "visure_prepare": CapabilitySpec(
         name="visure_prepare",
-        args_model=StudioPrepareArgs,
+        args_model=VisurePrepareArgs,
         default_risk="medium",
         description="Prepara una visura sul sito CGN. Nessun download reale.",
-        demo_only=True,
+        demo_only=False,
     ),
     "portal_open": CapabilitySpec(
         name="portal_open",

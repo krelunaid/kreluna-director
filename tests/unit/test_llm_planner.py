@@ -153,7 +153,8 @@ async def test_model_cannot_grant_itself_approval_free_risk():
                     }
                 ],
             }
-        )
+        ),
+        message="Prepara il DURC per Andrea Gadducci",
     )
     assert plan is not None and plan.ok
     engine = load_policy(ROOT / "policies" / "default.yaml")

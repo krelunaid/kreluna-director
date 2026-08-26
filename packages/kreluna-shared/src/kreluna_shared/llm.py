@@ -42,6 +42,7 @@ ASK_VAT = "Non ho capito il regime IVA. Indica aliquota o esenzione."
 ASK_F24_DATA = (
     "Per preparare l’F24 indicami cliente, modello, codice tributo, anno e importo."
 )
+ASK_WORK_DATA = "Il modello ha aggiunto un dato non scritto. Indicami il dettaglio esatto."
 OUT_OF_SCOPE = (
     "Posso aiutarti solo con contabilità, fiscale, paghe, clienti e attività di Kreluna Director. "
     "Non cerco ricette, film o altri contenuti generici."
@@ -226,6 +227,65 @@ def _client_is_in_the_text(name: str, message: str) -> bool:
     )
 
 
+def _words_are_in_the_text(value: str, message: str) -> bool:
+    """Accetta un dettaglio solo se le sue parole significative sono state scritte."""
+
+    proposed = {
+        word
+        for word in re.findall(r"[a-zà-ÿ0-9]+", value.casefold())
+        if len(word) >= 4
+        and word
+        not in {
+            "other",
+            "prepare",
+            "cliente",
+            "contratto",
+            "pratica",
+            "visura",
+            "contabilità",
+            "contabilita",
+        }
+    }
+    evidence = set(re.findall(r"[a-zà-ÿ0-9]+", message.casefold()))
+    return not proposed or bool(proposed & evidence)
+
+
+def _work_args_are_grounded(capability: str, args: dict[str, Any], message: str) -> bool:
+    lowered = message.casefold()
+    if capability == "contabilita_prepare":
+        operation = str(args.get("operation") or "invoice_import")
+        markers = {
+            "invoice_import": ("fattur", "xml", "p7m", "ipsoa", "scaric"),
+            "ledger_import": ("prima nota", "ledger"),
+            "reconciliation": ("riconcil",),
+            "other": ("contabil",),
+        }
+        if not any(marker in lowered for marker in markers.get(operation, ())):
+            return False
+        period = str(args.get("period") or "")
+        if period and not _words_are_in_the_text(period, message):
+            return False
+    elif capability == "camera_prepare":
+        detail = str(args.get("practice_type") or "")
+        if detail and not _words_are_in_the_text(detail, message):
+            return False
+    elif capability == "contratti_prepare":
+        detail = str(args.get("contract_type") or "")
+        if detail and not _words_are_in_the_text(detail, message):
+            return False
+    elif capability == "durc_prepare":
+        if not any(marker in lowered for marker in ("durc", "regolarità contribut", "certificato dei contribut")):
+            return False
+    elif capability == "visure_prepare":
+        detail = str(args.get("visura_type") or "ordinary")
+        required = {"historical": "storic", "protests": "protest"}
+        if detail in required and required[detail] not in lowered:
+            return False
+        if detail == "other" and "visura" not in lowered:
+            return False
+    return True
+
+
 def capability_catalog() -> str:
     lines: list[str] = []
     for name in PLANNABLE:
@@ -294,6 +354,12 @@ Regole non negoziabili:
    codice tributo dalla tua memoria. Usa form_type ordinary, simplified, elide, accise o
    public_entities; lines contiene section, tax_code, reference_year, debit_eur/credit_eur.
    Se manca un dato chiedilo. Nessuna capability può trasmettere o pagare l'F24.
+9. Per contabilità usa operation invoice_import, ledger_import, reconciliation o other;
+   per visure usa visura_type ordinary, historical, protests o other. practice_type,
+   contract_type e period possono contenere soltanto dettagli scritti dal titolare.
+   Se un dettaglio manca, lascialo vuoto: la scheda locale risulterà da completare.
+10. use_saved_access indica soltanto che il percorso operativo potrà chiedere a Fort Knox
+    le credenziali ordinarie del cliente. Non chiedere, mostrare o riportare password.
 
 Regole F24 ufficiali locali che puoi indicare con rule_key senza chiedere il codice tributo:
 {official_rule_catalog()}
@@ -418,6 +484,20 @@ def _as_plan(payload: dict[str, Any], message: str = "") -> PlanResult:
             return PlanResult(
                 ok=False,
                 summary=ASK_F24_DATA,
+                denied=False,
+                deny_reason="",
+                source="llm-ask",
+            )
+        if capability in {
+            "contabilita_prepare",
+            "camera_prepare",
+            "contratti_prepare",
+            "durc_prepare",
+            "visure_prepare",
+        } and not _work_args_are_grounded(capability, args, message):
+            return PlanResult(
+                ok=False,
+                summary=ASK_WORK_DATA,
                 denied=False,
                 deny_reason="",
                 source="llm-ask",

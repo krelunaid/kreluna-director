@@ -497,7 +497,7 @@ def plan_deterministic(text: str) -> PlanResult:
                 PlannedTask(
                     goal=f"Preparare lo scarico e il carico IPSOA per {client}",
                     capability="contabilita_prepare",
-                    args={"client_name": client, "notes": raw[:500], "period": ""},
+                    args={"client_name": client, "notes": raw[:500], "operation": "invoice_import", "period": ""},
                     risk=Risk.MEDIUM,
                     needs_approval=False,
                 )
@@ -508,12 +508,12 @@ def plan_deterministic(text: str) -> PlanResult:
         client = _client_name(raw) or _client_name(lowered) or "Cliente"
         return PlanResult(
             ok=True,
-            summary=f"Mando PC-DURC: sito INPS per {client}. Demo: niente SPID, nessuna richiesta vera.",
+            summary=f"Preparo sul PC-DURC la bozza INPS per {client}. SPID e invio restano alla persona.",
             tasks=[
                 PlannedTask(
                     goal=f"Preparare richiesta DURC per {client}",
                     capability="durc_prepare",
-                    args={"client_name": client, "notes": raw[:500]},
+                    args={"client_name": client, "notes": raw[:500], "request_type": "regularity_certificate"},
                     risk=Risk.MEDIUM,
                     needs_approval=False,
                 )
@@ -524,12 +524,12 @@ def plan_deterministic(text: str) -> PlanResult:
         client = _client_name(raw) or _client_name(lowered) or "Cliente"
         return PlanResult(
             ok=True,
-            summary=f"Mando PC-VISURE: sito CGN per {client}. Nessun download reale.",
+            summary=f"Preparo sul PC-VISURE la bozza CGN per {client}. Nessun acquisto o download definitivo.",
             tasks=[
                 PlannedTask(
                     goal=f"Preparare visura per {client}",
                     capability="visure_prepare",
-                    args={"client_name": client, "notes": raw[:500], "visura_type": ""},
+                    args={"client_name": client, "notes": raw[:500], "visura_type": "historical" if "storic" in lowered else "protests" if "protest" in lowered else "ordinary"},
                     risk=Risk.MEDIUM,
                     needs_approval=False,
                 )
