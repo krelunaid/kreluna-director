@@ -231,3 +231,18 @@ class ClientCredential(Base):
             name="uq_client_credential",
         ),
     )
+
+
+class VaultPin(Base):
+    """Tenant-scoped Fort Knox PIN verifier; the PIN itself is never stored."""
+
+    __tablename__ = "vault_pins"
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    pin_hash: Mapped[str] = mapped_column(String(240))
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -140,6 +140,11 @@ export type VaultPreview = {
 };
 
 const TOKEN_KEY = "kreluna.token";
+let vaultGrant = "";
+
+export function setVaultGrant(value: string | null) {
+  vaultGrant = value || "";
+}
 
 export function token(): string | null {
   return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
@@ -152,7 +157,7 @@ export function tokenIsPersistent(): boolean {
 export function setToken(value: string | null, persistent = true) {
   localStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
-  if (!value) return;
+  if (!value) { setVaultGrant(null); return; }
   (persistent ? localStorage : sessionStorage).setItem(TOKEN_KEY, value);
 }
 
@@ -161,6 +166,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set("Content-Type", "application/json");
   const current = token();
   if (current) headers.set("Authorization", `Bearer ${current}`);
+  if (vaultGrant && path.startsWith("/vault/")) headers.set("X-Vault-Grant", vaultGrant);
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
     let detail = response.statusText;
@@ -179,6 +185,7 @@ async function upload<T>(path: string, file: File): Promise<T> {
   const headers = new Headers();
   const current = token();
   if (current) headers.set("Authorization", `Bearer ${current}`);
+  if (vaultGrant && path.startsWith("/vault/")) headers.set("X-Vault-Grant", vaultGrant);
   const body = new FormData();
   body.set("file", file, file.name);
   const response = await fetch(path, { method: "POST", headers, body });
@@ -199,6 +206,7 @@ async function authenticatedBlob(path: string): Promise<Blob> {
   const headers = new Headers();
   const current = token();
   if (current) headers.set("Authorization", `Bearer ${current}`);
+  if (vaultGrant && path.startsWith("/vault/")) headers.set("X-Vault-Grant", vaultGrant);
   const response = await fetch(path, { headers });
   if (!response.ok) throw new Error("Download non riuscito");
   return response.blob();
@@ -226,6 +234,18 @@ export const api = {
   me: () => request<{ name: string; email: string; role: string; license_state: string }>("/me"),
   overview: () => request<Overview>("/overview"),
   aiProviders: () => request<{ selected: string; providers: AIProviderOption[] }>("/ai/providers"),
+  vaultPinStatus: () =>
+    request<{ configured: boolean; locked: boolean; retry_after: number }>("/vault/pin/status"),
+  configureVaultPin: (pin: string) =>
+    request<{ ok: boolean; configured: true }>("/vault/pin/configure", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    }),
+  unlockVault: (pin: string) =>
+    request<{ ok: boolean; grant: string; expires_in: number }>("/vault/unlock", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    }),
   vaultCredentials: () =>
     request<{ credentials: VaultCredential[]; count: number }>("/vault/credentials"),
   createVaultCredential: (credential: VaultCredentialInput) =>
