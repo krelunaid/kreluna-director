@@ -2,6 +2,8 @@ import { GatewayError } from "./errors";
 import { readJsonLimited, readResponseJsonLimited } from "./http";
 
 type TextMessage = { role: "system" | "user" | "assistant"; content: string };
+const MAX_MESSAGE_CHARACTERS = 12_000;
+const MAX_CONVERSATION_CHARACTERS = 24_000;
 type SafeChatRequest = {
   model: string;
   messages: TextMessage[];
@@ -72,11 +74,11 @@ function parseMessages(payload: Record<string, unknown>): TextMessage[] {
     if (!message || !["system", "user", "assistant"].includes(String(role)) || typeof content !== "string") {
       throw new GatewayError(400, "text_only", "Il gateway accetta soltanto messaggi di testo.");
     }
-    if (!content || content.length > 8000) {
+    if (!content || content.length > MAX_MESSAGE_CHARACTERS) {
       throw new GatewayError(400, "message_size", "Un messaggio supera il limite consentito.");
     }
     totalCharacters += content.length;
-    if (totalCharacters > 24000) {
+    if (totalCharacters > MAX_CONVERSATION_CHARACTERS) {
       throw new GatewayError(400, "conversation_size", "La conversazione supera il limite consentito.");
     }
     messages.push({ role: role as TextMessage["role"], content });
