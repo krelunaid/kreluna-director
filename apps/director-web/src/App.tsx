@@ -5,6 +5,7 @@ import {
   api,
   Approval,
   Overview,
+  setVaultGrant,
   setToken,
   Task,
   token,
@@ -132,6 +133,12 @@ export default function App() {
   } | null>(null);
   const [enrollmentError, setEnrollmentError] = useState("");
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const [vaultPinConfigured, setVaultPinConfigured] = useState<boolean | null>(null);
+  const [vaultPin, setVaultPin] = useState("");
+  const [vaultPinConfirm, setVaultPinConfirm] = useState("");
+  const [vaultUnlockBusy, setVaultUnlockBusy] = useState(false);
+  const [vaultRetryAfter, setVaultRetryAfter] = useState(0);
   const [vaultCredentials, setVaultCredentials] = useState<VaultCredential[]>([]);
   const [vaultFile, setVaultFile] = useState<File | null>(null);
   const [vaultPreview, setVaultPreview] = useState<VaultPreview | null>(null);
@@ -151,6 +158,7 @@ export default function App() {
   const vaultInput = useRef<HTMLInputElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<number>(0);
+  const vaultLockTimer = useRef<number>(0);
   const refreshInFlight = useRef<Promise<void> | null>(null);
 
   function refresh(): Promise<void> {
@@ -202,6 +210,15 @@ export default function App() {
   }, [ready]);
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [chat, busy]);
+
+  useEffect(() => {
+    if (!vaultOpen || vaultRetryAfter <= 0) return;
+    const timer = window.setInterval(
+      () => setVaultRetryAfter((value) => Math.max(0, value - 1)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [vaultOpen, vaultRetryAfter]);
 
   async function onLogin(event: FormEvent) {
     event.preventDefault(); setError("");
@@ -282,15 +299,65 @@ export default function App() {
   }
 
   async function openVault() {
-    setActiveNav("vault"); setVaultOpen(true); setVaultError(""); setVaultMessage("");
-    try { await loadVault(); }
-    catch (err) { setVaultError(err instanceof Error ? err.message : "Fort Knox non disponibile"); }
+    window.clearTimeout(vaultLockTimer.current); setVaultGrant(null);
+    setActiveNav("vault"); setVaultOpen(true); setVaultUnlocked(false);
+    setVaultPin(""); setVaultPinConfirm(""); setVaultPinConfigured(null);
+    setVaultError(""); setVaultMessage(""); setVaultCredentials([]);
+    try {
+      const status = await api.vaultPinStatus();
+      setVaultPinConfigured(status.configured); setVaultRetryAfter(status.retry_after);
+    } catch (err) { setVaultError(err instanceof Error ? err.message : "Fort Knox non disponibile"); }
   }
 
   function closeVault() {
+    window.clearTimeout(vaultLockTimer.current); setVaultGrant(null);
     setVaultOpen(false); setVaultFormOpen(false); setVaultEditingId(null);
     setVaultForm({ ...EMPTY_VAULT_FORM }); setVaultFile(null); setVaultPreview(null);
+    setVaultUnlocked(false); setVaultPin(""); setVaultPinConfirm("");
     setActiveNav("dashboard");
+  }
+
+  function addVaultPinDigit(digit: string) {
+    if (vaultUnlockBusy) return;
+    if (vaultPinConfigured === false && vaultPin.length === 6) {
+      setVaultPinConfirm((value) => (value + digit).slice(0, 6));
+    } else {
+      setVaultPin((value) => (value + digit).slice(0, 6));
+    }
+    setVaultError("");
+  }
+
+  function removeVaultPinDigit() {
+    if (vaultPinConfirm) setVaultPinConfirm((value) => value.slice(0, -1));
+    else setVaultPin((value) => value.slice(0, -1));
+    setVaultError("");
+  }
+
+  async function unlockVault(event?: FormEvent) {
+    event?.preventDefault();
+    if (vaultPin.length !== 6) { setVaultError("Inserisci tutte le 6 cifre del PIN."); return; }
+    if (vaultPinConfigured === false && vaultPinConfirm !== vaultPin) {
+      setVaultError("I due PIN non coincidono."); return;
+    }
+    setVaultUnlockBusy(true); setVaultError("");
+    try {
+      if (vaultPinConfigured === false) {
+        await api.configureVaultPin(vaultPin); setVaultPinConfigured(true);
+      }
+      const result = await api.unlockVault(vaultPin);
+      setVaultGrant(result.grant); setVaultUnlocked(true); setVaultPin(""); setVaultPinConfirm("");
+      await loadVault();
+      window.clearTimeout(vaultLockTimer.current);
+      vaultLockTimer.current = window.setTimeout(() => {
+        setVaultGrant(null); setVaultUnlocked(false); setVaultCredentials([]);
+        setVaultMessage(""); setVaultError("Fort Knox si è richiuso automaticamente. Inserisci di nuovo il PIN.");
+      }, result.expires_in * 1000);
+    } catch (err) {
+      setVaultPin(""); setVaultPinConfirm("");
+      setVaultError(err instanceof Error ? err.message : "Apertura non riuscita");
+      const status = await api.vaultPinStatus().catch(() => null);
+      if (status) setVaultRetryAfter(status.retry_after);
+    } finally { setVaultUnlockBusy(false); }
   }
 
   function newVaultCredential() {
@@ -674,8 +741,20 @@ export default function App() {
       <div className="ai-settings-actions"><button type="button" onClick={closeAISettings}>Annulla</button><button className="primary" disabled={aiSettingsBusy || !aiSettingsModel.trim()}>{aiSettingsBusy ? "Controllo…" : settingsManaged ? "Controlla connessione" : "Salva e controlla"}</button></div>
       <small>La verifica usa il provider selezionato. Nessun fallback automatico verso OpenAI.</small>
     </form></div> : null}
-    {vaultOpen ? <div className="vault-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-title"><div className="vault-card">
-      <div className="vault-heading"><div><span className="vault-eyebrow">KRELUNA FORT KNOX</span><h2 id="vault-title">Cassaforte digitale clienti</h2><p>Inserisci un cliente oppure importa un CSV. Ogni accesso è cifrato separatamente per lo studio e non viene inviato all’IA.</p></div><button className="vault-close" aria-label="Chiudi Fort Knox" onClick={closeVault}>×</button></div>
+    {vaultOpen ? <div className="vault-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-title"><div className={`vault-card ${vaultUnlocked ? "open" : "sealed"}`}>
+      <div className="vault-heading"><div><span className="vault-eyebrow">KRELUNA FORT KNOX</span><h2 id="vault-title">{vaultUnlocked ? "Cassaforte digitale clienti" : "Fort Knox è chiuso"}</h2><p>{vaultUnlocked ? "Inserisci un cliente oppure importa un CSV. Ogni accesso è cifrato separatamente per lo studio e non viene inviato all’IA." : "Solo il titolare può aprire lo sportello. Il PIN viene verificato nel Director e non viene mai conservato in chiaro."}</p></div><button className="vault-close" aria-label="Chiudi Fort Knox" onClick={closeVault}>×</button></div>
+      {!vaultUnlocked ? <form className="vault-gate" onSubmit={unlockVault} autoComplete="off">
+        <div className="vault-door" aria-hidden="true"><div className="vault-door-rim"><i className="vault-bolt b1" /><i className="vault-bolt b2" /><i className="vault-bolt b3" /><i className="vault-bolt b4" /><i className="vault-bolt b5" /><i className="vault-bolt b6" /><div className="vault-wheel"><span /><span /><span /><b>K</b></div></div></div>
+        <div className="vault-keypad-panel"><span className="vault-gate-state">{vaultPinConfigured === null ? "CONTROLLO SERRATURA" : vaultPinConfigured ? "ACCESSO PROTETTO" : "PRIMA CONFIGURAZIONE"}</span><h3>{vaultPinConfigured === false ? "Crea il PIN della cassaforte" : "Inserisci il PIN a 6 cifre"}</h3>
+          <input className="vault-pin-input" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} autoComplete="off" autoFocus aria-label={vaultPinConfigured === false && vaultPin.length === 6 ? "Conferma PIN Fort Knox" : "PIN Fort Knox"} value={vaultPinConfigured === false && vaultPin.length === 6 ? vaultPinConfirm : vaultPin} onChange={(event) => { const value = event.target.value.replace(/\D/g, "").slice(0, 6); if (vaultPinConfigured === false && vaultPin.length === 6) setVaultPinConfirm(value); else setVaultPin(value); setVaultError(""); }} onKeyDown={(event) => { if (event.key === "Backspace" && vaultPinConfigured === false && vaultPin.length === 6 && !vaultPinConfirm) setVaultPin((value) => value.slice(0, -1)); }} />
+          <div className="vault-pin-display" aria-label="PIN inserito">{Array.from({ length: 6 }, (_, index) => <i className={index < vaultPin.length ? "filled" : ""} key={index} />)}</div>
+          {vaultPinConfigured === false ? <><small>Conferma lo stesso PIN</small><div className="vault-pin-display confirm" aria-label="Conferma PIN">{Array.from({ length: 6 }, (_, index) => <i className={index < vaultPinConfirm.length ? "filled" : ""} key={index} />)}</div></> : null}
+          <div className="vault-keypad">{[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => <button type="button" disabled={vaultUnlockBusy || vaultPinConfigured === null} onClick={() => addVaultPinDigit(String(digit))} key={digit}>{digit}</button>)}<button type="button" className="clear" disabled={vaultUnlockBusy} onClick={() => { setVaultPin(""); setVaultPinConfirm(""); setVaultError(""); }}>C</button><button type="button" disabled={vaultUnlockBusy || vaultPinConfigured === null} onClick={() => addVaultPinDigit("0")}>0</button><button type="button" className="backspace" disabled={vaultUnlockBusy} onClick={removeVaultPinDigit} aria-label="Cancella ultima cifra">⌫</button></div>
+          {vaultRetryAfter > 0 ? <div className="vault-lockout">Serratura temporaneamente bloccata. Riprova tra circa {vaultRetryAfter} secondi.</div> : null}
+          {vaultError ? <div className="vault-alert error" role="alert">{vaultError}</div> : null}
+          <button className="vault-unlock" disabled={vaultUnlockBusy || vaultPinConfigured === null || vaultRetryAfter > 0}>{vaultUnlockBusy ? "Verifica…" : vaultPinConfigured === false ? "Configura e apri" : "Apri Fort Knox"}</button><small className="vault-gate-note">5 tentativi massimi · blocco automatico · chiusura dopo 10 minuti</small>
+        </div>
+      </form> : <>
       <div className="vault-toolbar"><input ref={vaultInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void previewVaultFile(event.target.files?.[0] || null)} /><button className="primary" disabled={vaultBusy} onClick={newVaultCredential}>＋ Nuovo cliente</button><button disabled={vaultBusy} onClick={() => vaultInput.current?.click()}>{vaultBusy ? "Elaborazione…" : "Importa CSV"}</button><button disabled={vaultBusy} onClick={() => void downloadVaultTemplate()}>Scarica modello</button><span>🔒 Nessun segreto mostrato</span></div>
       {vaultError ? <div className="vault-alert error" role="alert">{vaultError}</div> : null}{vaultMessage ? <div className="vault-alert success">{vaultMessage}</div> : null}
       {vaultFormOpen ? <form className="vault-form" onSubmit={saveVaultCredential} autoComplete="off">
@@ -695,6 +774,7 @@ export default function App() {
       {vaultPreview ? <section className="vault-preview"><div><strong>{vaultPreview.recognized} accessi riconosciuti</strong><span>{vaultPreview.warnings.length ? ` · ${vaultPreview.warnings.length} righe da correggere` : " · CSV pronto"}</span></div><div className="vault-preview-list">{vaultPreview.rows.slice(0, 8).map((row) => <span key={`${row.row_number}-${row.client_name}-${row.portal}`} title={row.portal_url || "Link non indicato"}><b>{row.client_name}</b><i>{row.portal}</i><em>{row.username_masked}</em></span>)}</div><div className="vault-preview-actions"><button onClick={() => { setVaultFile(null); setVaultPreview(null); }}>Annulla</button><button className="primary" disabled={vaultBusy} onClick={() => void importVaultFile()}>Cifra e importa</button></div></section> : null}
       <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}</span><small className="vault-saved-link" title={item.portal_url}>{item.portal_url || "Link da aggiungere"}</small></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => editVaultCredential(item)}>Aggiorna</button><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Premi Nuovo cliente oppure importa il modello CSV.</span></div> : null}</div>
       <div className="vault-safety"><strong>Barriere sempre attive</strong><span>Niente SPID/CNS automatico · niente invio fatture, F24, PEC o pagamenti · OTP inserito dalla persona.</span></div>
+      </>}
     </div></div> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>
     {updateStatus?.available && !updateOpen ? <button className="update-note" onClick={() => setUpdateOpen(true)}>↑ Kreluna {updateStatus.latest_version} disponibile</button> : null}

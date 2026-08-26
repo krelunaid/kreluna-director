@@ -18,6 +18,7 @@ from app.models import (
     Evidence,
     InvoiceDraft,
     Task,
+    VaultPin,
     utcnow,
 )
 from app.routers.agent_io import purge_expired_evidence
@@ -84,6 +85,24 @@ async def test_login_remembers_device_without_returning_password(client: AsyncCl
 
 def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+async def unlock_fort_knox(
+    client: AsyncClient,
+    token: str,
+    pin: str = "654321",
+) -> dict[str, str]:
+    headers = auth(token)
+    status = await client.get("/vault/pin/status", headers=headers)
+    assert status.status_code == 200
+    if not status.json()["configured"]:
+        configured = await client.post(
+            "/vault/pin/configure", headers=headers, json={"pin": pin}
+        )
+        assert configured.status_code == 201
+    unlocked = await client.post("/vault/unlock", headers=headers, json={"pin": pin})
+    assert unlocked.status_code == 200
+    return {**headers, "X-Vault-Grant": unlocked.json()["grant"]}
 
 
 async def issue_agent_code(
@@ -227,13 +246,55 @@ async def test_health_and_login(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_fort_knox_requires_pin_and_scoped_temporary_grant(client: AsyncClient):
+    token = await login(client)
+    assert (await client.get("/vault/credentials", headers=auth(token))).status_code == 423
+
+    configured = await client.post(
+        "/vault/pin/configure", headers=auth(token), json={"pin": "654321"}
+    )
+    assert configured.status_code == 201
+    assert "654321" not in configured.text
+    async with SessionLocal() as session:
+        stored = await session.get(VaultPin, DEMO_TENANT_ID)
+        assert stored is not None
+        assert stored.pin_hash.startswith("$argon2id$")
+        assert "654321" not in stored.pin_hash
+
+    wrong = await client.post(
+        "/vault/unlock", headers=auth(token), json={"pin": "000000"}
+    )
+    assert wrong.status_code == 403
+    assert "000000" not in wrong.text
+    unlocked = await client.post(
+        "/vault/unlock", headers=auth(token), json={"pin": "654321"}
+    )
+    assert unlocked.status_code == 200
+    grant = unlocked.json()["grant"]
+    assert "654321" not in grant
+    assert (
+        await client.get(
+            "/vault/credentials",
+            headers={**auth(token), "X-Vault-Grant": grant},
+        )
+    ).status_code == 200
+    assert (
+        await client.get(
+            "/vault/credentials",
+            headers={**auth(token), "X-Vault-Grant": "non-valido"},
+        )
+    ).status_code == 423
+
+
+@pytest.mark.asyncio
 async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncClient):
     token = await login(client)
+    vault = await unlock_fort_knox(client, token)
     client_name = f"Cliente Fort Knox {uuid4()}"
     secret = "Fort-Knox-Segreto-123"
     created = await client.post(
         "/vault/credentials",
-        headers=auth(token),
+        headers=vault,
         json={
             "client_name": client_name,
             "portal": "webdesk",
@@ -251,7 +312,7 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
 
     duplicate = await client.post(
         "/vault/credentials",
-        headers=auth(token),
+        headers=vault,
         json={
             "client_name": client_name,
             "portal": "webdesk",
@@ -267,7 +328,7 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
     replacement = "Fort-Knox-Nuovo-Segreto-456"
     updated = await client.put(
         f"/vault/credentials/{credential_id}",
-        headers=auth(token),
+        headers=vault,
         json={
             "client_name": client_name,
             "portal": "webdesk",
@@ -281,7 +342,7 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
     assert updated.status_code == 200
     assert replacement not in updated.text
 
-    listing = await client.get("/vault/credentials", headers=auth(token))
+    listing = await client.get("/vault/credentials", headers=vault)
     item = next(row for row in listing.json()["credentials"] if row["id"] == credential_id)
     assert item["portal_url"] == "https://fatture.example.it/accesso"
     assert item["username_masked"] != "fortknox-nuovo@example.it"
@@ -296,7 +357,8 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
         assert decrypt_credential(stored) == ("fortknox-nuovo@example.it", replacement)
 
     other_owner = await login(client, "altro@studio.demo")
-    other_listing = await client.get("/vault/credentials", headers=auth(other_owner))
+    other_vault = await unlock_fort_knox(client, other_owner)
+    other_listing = await client.get("/vault/credentials", headers=other_vault)
     assert credential_id not in other_listing.text
 
     viewer = await login(client, "viewer@studio.demo")
@@ -316,10 +378,11 @@ async def test_owner_manages_fort_knox_without_exposing_plaintext(client: AsyncC
 @pytest.mark.asyncio
 async def test_fort_knox_api_refuses_spid_cns_cie_and_otp(client: AsyncClient):
     token = await login(client)
+    vault = await unlock_fort_knox(client, token)
     for portal in ("spid", "cns", "cie", "smart-card", "otp"):
         denied = await client.post(
             "/vault/credentials",
-            headers=auth(token),
+            headers=vault,
             json={
                 "client_name": f"Cliente {portal}",
                 "portal": portal,
@@ -334,13 +397,14 @@ async def test_fort_knox_api_refuses_spid_cns_cie_and_otp(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_owner_imports_masked_client_credentials_without_plaintext(client: AsyncClient):
     token = await login(client)
+    vault = await unlock_fort_knox(client, token)
     csv_data = (
         b"cliente;portale;username;password;tipo_segreto;etichetta\n"
         b"Cliente Cassaforte;webdesk;cassaforte@example.it;Segreto-Non-In-DB;password;principale\n"
     )
     preview = await client.post(
         "/vault/import/preview",
-        headers=auth(token),
+        headers=vault,
         files={"file": ("accessi.csv", csv_data, "text/csv")},
     )
     assert preview.status_code == 200
@@ -350,13 +414,13 @@ async def test_owner_imports_masked_client_credentials_without_plaintext(client:
 
     imported = await client.post(
         "/vault/import",
-        headers=auth(token),
+        headers=vault,
         files={"file": ("accessi.csv", csv_data, "text/csv")},
     )
     assert imported.status_code == 200
     assert imported.json()["created"] == 1
     assert imported.json()["source_file_retained"] is False
-    listing = await client.get("/vault/credentials", headers=auth(token))
+    listing = await client.get("/vault/credentials", headers=vault)
     assert listing.status_code == 200
     item = next(row for row in listing.json()["credentials"] if row["client_name"] == "Cliente Cassaforte")
     assert item["username_masked"] != "cassaforte@example.it"
@@ -373,17 +437,36 @@ async def test_owner_imports_masked_client_credentials_without_plaintext(client:
 
     viewer = await login(client, "viewer@studio.demo")
     assert (await client.get("/vault/credentials", headers=auth(viewer))).status_code == 403
-    checked = await client.post(f"/vault/credentials/{item['id']}/check", headers=auth(token))
+    checked = await client.post(f"/vault/credentials/{item['id']}/check", headers=vault)
     assert checked.json()["state"] == "ready"
-    revoked = await client.delete(f"/vault/credentials/{item['id']}", headers=auth(token))
+    revoked = await client.delete(f"/vault/credentials/{item['id']}", headers=vault)
     assert revoked.status_code == 200
-    listing = await client.get("/vault/credentials", headers=auth(token))
+    listing = await client.get("/vault/credentials", headers=vault)
     assert all(row["id"] != item["id"] for row in listing.json()["credentials"])
+
+
+@pytest.mark.asyncio
+async def test_fort_knox_locks_after_five_wrong_pins(client: AsyncClient):
+    token = await login(client, "altro@studio.demo")
+    await unlock_fort_knox(client, token)
+    for attempt in range(5):
+        denied = await client.post(
+            "/vault/unlock", headers=auth(token), json={"pin": "111111"}
+        )
+        assert denied.status_code == (429 if attempt == 4 else 403)
+    status = await client.get("/vault/pin/status", headers=auth(token))
+    assert status.json()["locked"] is True
+    assert status.json()["retry_after"] > 0
+    still_locked = await client.post(
+        "/vault/unlock", headers=auth(token), json={"pin": "654321"}
+    )
+    assert still_locked.status_code == 429
 
 
 @pytest.mark.asyncio
 async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncClient):
     token = await login(client)
+    vault = await unlock_fort_knox(client, token)
     csv_data = (
         b"cliente;portale;link_portale;username;password\n"
         b"Cliente Lease;webdesk;https://fatture.example.it/login;"
@@ -391,7 +474,7 @@ async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncC
     )
     imported = await client.post(
         "/vault/import",
-        headers=auth(token),
+        headers=vault,
         files={"file": ("accessi.csv", csv_data, "text/csv")},
     )
     assert imported.status_code == 200
