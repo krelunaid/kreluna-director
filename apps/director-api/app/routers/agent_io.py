@@ -71,6 +71,7 @@ class CredentialLeaseBody(BaseModel):
 
 TASK_PORTALS = {
     "f24-ipsoa": {"ipsoa", "telematico"},
+    "contabilita-ipsoa": {"ipsoa"},
     "fatture-webdesk": {"webdesk", "ade"},
     "visure-cgn": {"cgn"},
     "camerali-cgn": {"cgn", "comunica"},

@@ -88,6 +88,32 @@ async def test_client_without_an_amount_field_is_still_checked():
 
 
 @pytest.mark.asyncio
+async def test_model_cannot_invent_studio_workflow_details():
+    contract = {
+        "understood": True,
+        "summary": "Preparo il contratto.",
+        "tasks": [{"goal": "Contratto", "capability": "contratti_prepare", "args": {"client_name": "Andrea Gadducci", "contract_type": "locazione"}}],
+    }
+    rejected = await ask(contract, "prepara un contratto per Andrea Gadducci")
+    assert rejected is not None and not rejected.ok
+    accepted = await ask(contract, "prepara un contratto di locazione per Andrea Gadducci")
+    assert accepted is not None and accepted.ok
+
+
+@pytest.mark.asyncio
+async def test_model_cannot_turn_an_ordinary_visura_into_a_historical_one():
+    payload = {
+        "understood": True,
+        "summary": "Preparo la visura.",
+        "tasks": [{"goal": "Visura", "capability": "visure_prepare", "args": {"client_name": "Andrea Gadducci", "visura_type": "historical"}}],
+    }
+    rejected = await ask(payload, "prepara una visura per Andrea Gadducci")
+    assert rejected is not None and not rejected.ok
+    accepted = await ask(payload, "prepara una visura storica per Andrea Gadducci")
+    assert accepted is not None and accepted.ok
+
+
+@pytest.mark.asyncio
 async def test_explicit_tax_exemption_cannot_be_replaced_with_vat_22():
     payload = invoice("Otil Srl", 50000)
     payload["tasks"][0]["args"].update(

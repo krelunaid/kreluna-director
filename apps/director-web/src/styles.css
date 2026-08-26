@@ -468,6 +468,13 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .f24-state { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 9px; font-size: 10px; }.f24-state.ready { color: #a9eeb9; border: 1px solid rgba(93, 222, 128, .28); background: rgba(21, 76, 42, .24); }.f24-state.warning { color: #ecd68f; border: 1px solid rgba(244, 210, 119, .28); background: rgba(75, 58, 13, .22); }
 .f24-lines { min-height: 0; display: flex; flex-direction: column; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }.f24-line { display: grid; grid-template-columns: minmax(160px, 1.4fr) .7fr .6fr .8fr .8fr; gap: 10px; padding: 10px 12px; color: #c8cede; border-bottom: 1px solid rgba(111, 128, 194, .16); font-size: 10px; }.f24-line:last-child { border-bottom: 0; }.f24-line.heading { color: #7f89a5; background: rgba(4, 10, 24, .45); font-size: 8px; text-transform: uppercase; }.f24-line strong { color: #ffe19a; }
 .f24-totals { display: flex; justify-content: flex-end; gap: 18px; color: #98a2bd; font-size: 10px; }.f24-totals strong { margin-left: 4px; color: #f2e2ad; }
+.workflow-card { width: min(900px, 94vw); }
+.workflow-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.workflow-fields > div, .workflow-route, .workflow-vault { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(4, 10, 24, .35); }
+.workflow-fields span, .workflow-fields small { display: block; color: #7f89a5; font-size: 9px; }.workflow-fields strong { display: block; margin: 5px 0; color: #ffe19a; font-size: 12px; }
+.workflow-route { min-height: 0; overflow: auto; }.workflow-route > strong, .workflow-vault strong { color: #f2e2ad; font-size: 11px; }.workflow-route ol { margin: 9px 0 0 18px; padding: 0; color: #c8cede; font-size: 10px; line-height: 1.7; }
+.workflow-vault { display: flex; gap: 12px; align-items: center; color: #a9eeb9; font-size: 10px; }
+@media (max-width: 620px) { .workflow-fields { grid-template-columns: 1fr; } .workflow-vault { align-items: flex-start; flex-direction: column; } }
 
 @media (max-width: 1050px) {
   .workspace-heading { flex-direction: column; }

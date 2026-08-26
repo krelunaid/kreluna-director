@@ -30,6 +30,8 @@ agents:
     capabilities:
       - contabilita_prepare
       - invoice_check
+      - portal_open
+      - portal_learn
   - role: pc-camerali
     display_name: PC-CAMERALI
     job: Pratiche camerali

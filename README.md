@@ -91,6 +91,11 @@ Accise ed Enti pubblici. I codici automatici sono limitati al catalogo ufficiale
 locale versionato; gli altri devono essere indicati dall'operatore. Dettagli e
 limiti: [`docs/F24-ENGINE.md`](docs/F24-ENGINE.md).
 
+Anche fatture, contabilità, camerali, contratti, DURC e visure producono una
+scheda strutturata con dati forniti, percorso, passaggi e informazioni mancanti.
+Il Director la mostra prima di qualsiasi operazione definitiva. Dettagli:
+[`docs/STRUCTURED-WORKFLOWS.md`](docs/STRUCTURED-WORKFLOWS.md).
+
 ## Cosa non fa (di proposito)
 
 - Nessuna shell remota, nessun `eval` di output IA
