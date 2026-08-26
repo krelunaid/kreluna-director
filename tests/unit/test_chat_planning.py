@@ -48,6 +48,57 @@ async def test_incomplete_invoice_with_typos_is_understood_by_the_model(ai_on):
 
 
 @pytest.mark.asyncio
+async def test_written_invoice_facts_survive_an_unnecessary_model_question(ai_on):
+    payload = {"understood": False, "question": "Qual è l'importo della fattura?"}
+    message = (
+        "Prepara una fattura demo per Cliente Seconda Prova SRL, "
+        "assistenza amministrativa, imponibile 150 euro, IVA 22%, senza inviare"
+    )
+    async with model_saying(payload) as client:
+        plan = await plan_message(message, client=client)
+
+    assert plan.ok
+    assert plan.source == "llm-grounded"
+    task = plan.tasks[0]
+    assert task.capability == "invoice_prepare_demo"
+    assert task.args["client_name"] == "Seconda Prova SRL"
+    assert task.args["description"] == "Assistenza amministrativa"
+    assert task.args["net_eur"] == 150
+    assert task.args["vat_rate"] == 0.22
+
+
+@pytest.mark.asyncio
+async def test_model_question_keeps_the_partial_invoice_for_the_next_reply(ai_on):
+    payload = {"understood": False, "question": "Qual è l'importo della fattura?"}
+    async with model_saying(payload) as client:
+        plan = await plan_message("mi crei una fattura per gadducci", client=client)
+
+    assert not plan.ok
+    assert plan.source == "llm-ask"
+    assert plan.pending
+    assert plan.pending["client_name"] == "Andrea Gadducci"
+    assert plan.pending["net_eur"] is None
+
+
+@pytest.mark.asyncio
+async def test_provider_error_is_never_hidden_by_local_invoice_facts(ai_on):
+    def unavailable(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": {"code": "provider_unavailable"}})
+
+    message = (
+        "Prepara una fattura demo per Cliente Prova SRL, consulenza amministrativa, "
+        "imponibile 100 euro, IVA 22%, senza inviare"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unavailable)) as client:
+        plan = await plan_message(message, client=client)
+
+    assert not plan.ok
+    assert plan.source == "llm-error"
+    assert plan.tasks == []
+    assert plan.diagnostic and plan.diagnostic["code"] == "provider_unavailable"
+
+
+@pytest.mark.asyncio
 async def test_security_denials_never_reach_the_model(ai_on):
     def explode(_request: httpx.Request) -> httpx.Response:
         raise AssertionError("una richiesta vietata non si manda al modello")
