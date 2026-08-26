@@ -134,3 +134,17 @@ def test_invoice_typo_still_keeps_the_client_name():
     assert plan.pending["client_name"] == "Vanni Gioitoli"
     assert "cliente" not in plan.summary
     assert "importo" in plan.summary
+
+
+def test_structured_invoice_keeps_full_client_description_and_amount():
+    plan = plan_deterministic(
+        "Prepara una fattura demo per Cliente Seconda Prova SRL, "
+        "assistenza amministrativa, imponibile 150 euro, IVA 22%, senza inviare"
+    )
+
+    assert plan.ok
+    task = plan.tasks[0]
+    assert task.args["client_name"] == "Seconda Prova SRL"
+    assert task.args["description"] == "Assistenza amministrativa"
+    assert task.args["net_eur"] == 150
+    assert task.args["vat_rate"] == 0.22

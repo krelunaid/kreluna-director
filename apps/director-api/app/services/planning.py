@@ -10,6 +10,47 @@ from kreluna_shared.planner import plan_deterministic
 from app.config import AIProviderConfig, settings
 
 
+def _reconcile_invoice_facts(local: PlanResult, model: PlanResult) -> PlanResult:
+    """Conserva i dati fiscali scritti dall'utente senza nascondere guasti IA.
+
+    Il modello continua a interpretare ogni richiesta normale. Per una fattura
+    completa, pero', cliente/importo/descrizione/IVA estratti dal testo locale
+    sono l'autorita': non ha senso chiedere di nuovo un importo gia' presente.
+    Se il provider e' davvero guasto, l'errore resta esplicito e non si crea
+    alcun task.
+    """
+
+    if model.source == "llm-error" or model.denied:
+        return model
+
+    local_invoice = next(
+        (task for task in local.tasks if task.capability == "invoice_prepare_demo"),
+        None,
+    )
+    if local.ok and local_invoice is not None:
+        model_invoice = next(
+            (task for task in model.tasks if task.capability == "invoice_prepare_demo"),
+            None,
+        )
+        summary = model.summary if model.ok and model_invoice is not None else local.summary
+        return local.model_copy(
+            update={
+                "summary": summary,
+                "source": "llm-grounded",
+                "diagnostic": {"code": "invoice_facts_grounded"},
+            }
+        )
+
+    pending = local.pending or {}
+    if (
+        not model.ok
+        and model.source == "llm-ask"
+        and pending.get("capability") == "invoice_prepare_demo"
+    ):
+        return model.model_copy(update={"pending": pending})
+    return model
+
+
 async def plan_message(
     message: str,
     client: httpx.AsyncClient | None = None,
@@ -39,7 +80,9 @@ async def plan_message(
     else:
         async with httpx.AsyncClient() as owned:
             from_model = await _ask(message, owned, config=resolved, history=history)
-    return from_model or PlanResult(
+    if from_model is not None:
+        return _reconcile_invoice_facts(plan, from_model)
+    return PlanResult(
         ok=False,
         summary="IA non disponibile: configurazione incompleta. Nessun lavoro è stato creato.",
         source="llm-error",

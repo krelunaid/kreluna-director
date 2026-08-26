@@ -156,6 +156,9 @@ def _client_name(text: str) -> str | None:
         if needle in lowered:
             return name
     patterns = [
+        # Modulo parlato/strutturato: "cliente Rossi Servizi SRL, consulenza…".
+        # Il vecchio pattern prendeva soltanto due parole e perdeva il suffisso.
+        r"\bcliente\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'&.-]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'&.-]*){0,4}?)(?=\s*,|\s+(?:per|di|imponibile|importo|euro|eur|€|\d)|$)",
         r"(?:fattura|invoice)(?:\s+demo)?\s+(?:ad|al cliente|a|per|pae|pre|pe|to)\s+([A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ']+){0,3}?)(?=\s+(?:per|di|for|da|euro|eur|€|\d)|[,.]|$)",
         r"(?:per)\s+([A-Za-zÀ-ÿ']+)(?:\s+di\s+)",
         r"(?:cliente)\s+([A-Za-zÀ-ÿ']+\s+[A-Za-zÀ-ÿ']+)",
@@ -219,6 +222,15 @@ def _email_body(text: str) -> str:
 
 def _description(text: str, default: str = "Consulenza") -> str:
     lowered = text.lower()
+    structured = re.search(
+        r",\s*([^,]{3,80}?)\s*,\s*(?:imponibile|importo)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if structured:
+        value = " ".join(structured.group(1).split()).strip(" .;:-")
+        if value:
+            return value[:1].upper() + value[1:]
     words = re.findall(r"[a-zà-ÿ']{5,}", lowered)
     looks_like_manodopera = any(SequenceMatcher(None, word, "manodopera").ratio() >= 0.72 for word in words)
     if "manodopera" in lowered or "manpower" in lowered or looks_like_manodopera:
