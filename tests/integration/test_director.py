@@ -19,6 +19,7 @@ from app.models import (
     InvoiceDraft,
     Task,
     VaultPin,
+    WorkspaceDocument,
     utcnow,
 )
 from app.routers.agent_io import purge_expired_evidence
@@ -461,6 +462,90 @@ async def test_fort_knox_locks_after_five_wrong_pins(client: AsyncClient):
         "/vault/unlock", headers=auth(token), json={"pin": "654321"}
     )
     assert still_locked.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_document_library_crud_download_encryption_and_tenant_isolation(client: AsyncClient):
+    token = await login(client)
+    headers = auth(token)
+    title = f"Contratto prova {uuid4()}"
+    original = "Bozza privata dello studio\nClausola iniziale"
+    created = await client.post(
+        "/library/text",
+        headers=headers,
+        json={"category": "contract", "title": title, "content": original, "notes": "Bozza"},
+    )
+    assert created.status_code == 201, created.text
+    document_id = created.json()["id"]
+    assert created.json()["editable"] is True
+
+    listing = await client.get("/library?category=contract", headers=headers)
+    assert listing.status_code == 200
+    assert any(item["id"] == document_id for item in listing.json()["documents"])
+
+    text = await client.get(f"/library/{document_id}/text", headers=headers)
+    assert text.status_code == 200
+    assert text.json()["content"] == original
+
+    downloaded = await client.get(
+        f"/library/{document_id}/file?disposition=attachment", headers=headers
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.content.decode() == original
+    assert "attachment" in downloaded.headers["content-disposition"]
+
+    updated = await client.put(
+        f"/library/{document_id}",
+        headers=headers,
+        json={"title": "Contratto aggiornato", "notes": "Controllato", "content": "Nuovo testo"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "Contratto aggiornato"
+    assert (await client.get(f"/library/{document_id}/text", headers=headers)).json()["content"] == "Nuovo testo"
+
+    async with SessionLocal() as session:
+        row = await session.get(WorkspaceDocument, document_id)
+        assert row is not None
+        encrypted = (settings.evidence_path.parent / "documents" / row.storage_key).read_bytes()
+        assert b"Nuovo testo" not in encrypted
+
+    other = await login(client, "altro@studio.demo")
+    assert (await client.get(f"/library/{document_id}/text", headers=auth(other))).status_code == 404
+    viewer = await login(client, "viewer@studio.demo")
+    assert (await client.delete(f"/library/{document_id}", headers=auth(viewer))).status_code == 403
+
+    deleted = await client.delete(f"/library/{document_id}", headers=headers)
+    assert deleted.status_code == 200
+    assert (await client.get(f"/library/{document_id}/text", headers=headers)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_document_library_uploads_pdf_and_refuses_binary_content_edit(client: AsyncClient):
+    token = await login(client)
+    headers = auth(token)
+    uploaded = await client.post(
+        "/library/upload",
+        headers=headers,
+        data={"category": "document", "title": "Documento PDF", "notes": "Allegato"},
+        files={"file": ("documento.pdf", b"%PDF-1.4\nprova", "application/pdf")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    body = uploaded.json()
+    assert body["previewable"] is True
+    assert body["editable"] is False
+
+    metadata = await client.put(
+        f"/library/{body['id']}",
+        headers=headers,
+        json={"title": "PDF rinominato", "notes": "Nuova nota"},
+    )
+    assert metadata.status_code == 200
+    refused = await client.put(
+        f"/library/{body['id']}",
+        headers=headers,
+        json={"title": "PDF", "notes": "", "content": "non consentito"},
+    )
+    assert refused.status_code == 409
 
 
 @pytest.mark.asyncio
