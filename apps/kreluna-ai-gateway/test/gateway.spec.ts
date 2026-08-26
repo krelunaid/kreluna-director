@@ -160,6 +160,51 @@ describe("Kreluna managed AI gateway", () => {
     expect(columns).not.toContain("content");
   });
 
+  it("accepts the bounded Kreluna system prompt used by Director", async () => {
+    const created = await createTestLicense();
+    let forwarded: Record<string, unknown> | undefined;
+    network.use(http.post("https://api.x.ai/v1/chat/completions", async ({ request }) => {
+      forwarded = await request.json() as Record<string, unknown>;
+      return HttpResponse.json({
+        id: "chat-system-prompt",
+        choices: [{ message: { role: "assistant", content: "{}" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 100, completion_tokens: 1, total_tokens: 101 },
+      });
+    }));
+
+    const systemPrompt = "K".repeat(9_600);
+    const response = await dispatch("/v1/chat/completions", licensedJson(created.token, {
+      model: "grok-4.6",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Prepara una fattura demo senza inviarla" },
+      ],
+      response_format: { type: "json_object" },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(forwarded).toMatchObject({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Prepara una fattura demo senza inviarla" },
+      ],
+      response_format: { type: "json_object" },
+    });
+  });
+
+  it("still rejects an individual message above the explicit limit", async () => {
+    const created = await createTestLicense();
+    const response = await dispatch("/v1/chat/completions", licensedJson(created.token, {
+      model: "grok-4.6",
+      messages: [{ role: "system", content: "K".repeat(12_001) }],
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "message_size" },
+    });
+  });
+
   it("enforces daily quota and revocation", async () => {
     const created = await createTestLicense({ daily_request_limit: 1 });
     network.use(http.post("https://api.x.ai/v1/chat/completions", () => HttpResponse.json({
