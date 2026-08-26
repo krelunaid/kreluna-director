@@ -35,16 +35,37 @@ class Runner:
     timeout: float = 30.0
 
     def osascript(self, script: str) -> str:
-        result = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            text=True,
-            timeout=self.timeout,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise MacControlError(
+                f"Il browser non ha risposto entro {int(self.timeout)} secondi."
+            ) from exc
         if result.returncode != 0:
             raise MacControlError((result.stderr or "osascript non ha risposto").strip())
         return result.stdout.strip()
+
+    def open_application_url(self, browser: str, url: str) -> None:
+        """Ripiego sicuro per aprire una pagina senza Apple Events."""
+
+        try:
+            result = subprocess.run(
+                ["/usr/bin/open", "-a", browser, url],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise MacControlError("Il Mac non è riuscito ad aprire il browser.") from exc
+        if result.returncode != 0:
+            raise MacControlError((result.stderr or "Il browser non si apre").strip())
 
     def screencapture(self, path: Path) -> bytes:
         result = subprocess.run(
@@ -226,7 +247,13 @@ def field_center_script(browser: str, selector: str) -> str:
 
 
 def open_url(runner: Runner, browser: str, url: str) -> None:
-    runner.osascript(open_url_script(browser, url))
+    try:
+        runner.osascript(open_url_script(browser, url))
+    except MacControlError:
+        fallback = getattr(runner, "open_application_url", None)
+        if fallback is None:
+            raise
+        fallback(browser, url)
 
 
 def current_url(runner: Runner, browser: str) -> str:

@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 import pytest
@@ -98,6 +99,30 @@ async def test_old_errors_get_rewritten_in_italian(session):
     assert changed == 1
     assert "Agent vecchio" in gergo.error
     assert chiaro.error == "PORTALE_SCONOSCIUTO:x"
+
+
+@pytest.mark.asyncio
+async def test_legacy_browser_timeout_is_archived_as_resolved(session):
+    from app.services.housekeeping import resolve_legacy_browser_timeouts
+
+    raw = await a_task(
+        session,
+        "timeout-browser",
+        status="failed",
+        error=(
+            "Command '['osascript', '-e', 'tell application \"Google Chrome\"'] "
+            "timed out after 30.0 seconds"
+        ),
+    )
+
+    changed = await resolve_legacy_browser_timeouts(session)
+    await session.flush()
+
+    assert changed == 1
+    assert raw.error.startswith("Risolto dall'aggiornamento")
+    result = json.loads(raw.result_json)
+    assert result["error_resolved"] is True
+    assert result["resolution_code"] == "legacy_browser_timeout_fixed"
 
 
 @pytest.mark.asyncio

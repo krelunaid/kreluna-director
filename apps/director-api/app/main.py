@@ -27,6 +27,7 @@ from app.services.housekeeping import (
     heal_stopped_tasks,
     housekeeping_loop,
     purge_old_evidence,
+    resolve_legacy_browser_timeouts,
     translate_old_errors,
 )
 from app.services.remote_access import remote_tunnel
@@ -50,6 +51,7 @@ async def lifespan(_app: FastAPI):
         await purge_old_evidence(session)
         await heal_stopped_tasks(session)
         await translate_old_errors(session)
+        await resolve_legacy_browser_timeouts(session)
         await close_expired_approvals(session)
         await session.commit()
     # Una sola connessione riutilizzabile verso l'IA evita un nuovo handshake

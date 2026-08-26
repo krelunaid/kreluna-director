@@ -969,6 +969,21 @@ async def test_the_error_counter_shows_today_not_forever(client: AsyncClient):
                 created_at=utcnow() - timedelta(days=8),
             )
         )
+        session.add(
+            Task(
+                tenant_id=DEMO_TENANT_ID,
+                requested_by="22222222-2222-2222-2222-222222222222",
+                goal="Errore tecnico già corretto dall'aggiornamento",
+                capability="portal_open",
+                args_json="{}",
+                result_json=json.dumps({"error_resolved": True}),
+                risk="medium",
+                status="failed",
+                error="Risolto dall'aggiornamento.",
+                idempotency_key="errore-recente-risolto",
+                created_at=utcnow(),
+            )
+        )
         await session.commit()
 
     overview = await client.get("/overview", headers=auth(token))
@@ -980,6 +995,8 @@ async def test_the_error_counter_shows_today_not_forever(client: AsyncClient):
     stale = [t for t in tasks.json()["tasks"] if t["goal"].startswith("Lavoro andato male")]
     assert stale and stale[0]["status"] == "failed", "l'errore vecchio resta visibile nella lista"
     assert stale[0]["error_state"] == "historical"
+    resolved = [t for t in tasks.json()["tasks"] if t["goal"].startswith("Errore tecnico")]
+    assert resolved and resolved[0]["error_state"] == "historical"
 
 
 @pytest.mark.asyncio
