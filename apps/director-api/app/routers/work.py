@@ -24,6 +24,7 @@ from app.models import (
     Evidence,
     InvoiceDraft,
     Task,
+    VaultPin,
     as_utc,
     utcnow,
 )
@@ -505,6 +506,14 @@ async def overview(
     historical_errors = [
         task for task in failed if not task.created_at or as_utc(task.created_at) <= cutoff
     ]
+    vault_pin = await session.get(VaultPin, actor.tenant_id)
+    vault_retry_after = 0
+    if vault_pin and vault_pin.locked_until:
+        vault_retry_after = max(
+            0,
+            int((as_utc(vault_pin.locked_until) - now).total_seconds()),
+        )
+    vault_blocked_attempts = vault_pin.blocked_attempts if vault_pin else 0
     ai_config = await provider_config(session, actor.tenant_id)
     ai_health = await check_ai_health(ai_config)
     return {
@@ -520,6 +529,10 @@ async def overview(
         "errors": len(active_errors),
         "active_errors": len(active_errors),
         "historical_errors": len(historical_errors),
+        "vault_security_alerts": 1 if vault_blocked_attempts > 0 else 0,
+        "vault_blocked_attempts": vault_blocked_attempts,
+        "vault_locked": vault_retry_after > 0,
+        "vault_retry_after": vault_retry_after,
         "kill_armed": any(device.killed for device in devices),
         "ai_connected": ai_health["connected"],
         "ai_provider": ai_health["provider"],

@@ -44,6 +44,13 @@ def migrate_compatible_schema(connection) -> None:
                 "ALTER TABLE client_credentials "
                 "ADD COLUMN portal_url VARCHAR(1000) NOT NULL DEFAULT ''"
             )
+    if "vault_pins" in tables:
+        columns = {item["name"] for item in inspector.get_columns("vault_pins")}
+        if "blocked_attempts" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE vault_pins "
+                "ADD COLUMN blocked_attempts INTEGER NOT NULL DEFAULT 0"
+            )
 
 
 def _engine_url() -> str:

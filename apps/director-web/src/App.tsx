@@ -237,6 +237,7 @@ export default function App() {
   const [vaultPinConfirm, setVaultPinConfirm] = useState("");
   const [vaultUnlockBusy, setVaultUnlockBusy] = useState(false);
   const [vaultRetryAfter, setVaultRetryAfter] = useState(0);
+  const [vaultBlockedAttempts, setVaultBlockedAttempts] = useState(0);
   const [vaultCredentials, setVaultCredentials] = useState<VaultCredential[]>([]);
   const [vaultFile, setVaultFile] = useState<File | null>(null);
   const [vaultPreview, setVaultPreview] = useState<VaultPreview | null>(null);
@@ -424,6 +425,7 @@ export default function App() {
     try {
       const status = await api.vaultPinStatus();
       setVaultPinConfigured(status.configured); setVaultRetryAfter(status.retry_after);
+      setVaultBlockedAttempts(status.blocked_attempts);
     } catch (err) { setVaultError(err instanceof Error ? err.message : "Fort Knox non disponibile"); }
   }
 
@@ -464,7 +466,9 @@ export default function App() {
       }
       const result = await api.unlockVault(vaultPin);
       setVaultGrant(result.grant); setVaultUnlocked(true); setVaultPin(""); setVaultPinConfirm("");
+      setVaultBlockedAttempts(0);
       await loadVault();
+      await refresh();
       window.clearTimeout(vaultLockTimer.current);
       vaultLockTimer.current = window.setTimeout(() => {
         setVaultGrant(null); setVaultUnlocked(false); setVaultCredentials([]);
@@ -474,7 +478,11 @@ export default function App() {
       setVaultPin(""); setVaultPinConfirm("");
       setVaultError(err instanceof Error ? err.message : "Apertura non riuscita");
       const status = await api.vaultPinStatus().catch(() => null);
-      if (status) setVaultRetryAfter(status.retry_after);
+      if (status) {
+        setVaultRetryAfter(status.retry_after);
+        setVaultBlockedAttempts(status.blocked_attempts);
+        await refresh();
+      }
     } finally { setVaultUnlockBusy(false); }
   }
 
@@ -950,7 +958,7 @@ export default function App() {
         <Metric icon="?" label="ERRORI" value={overview?.active_errors ?? 0} note="Da risolvere" tone="red" />
       </div>
       <div className="orbit-art" aria-hidden="true"><span className="orbit-line orbit-one" /><span className="orbit-line orbit-two" /><span className="orbit-line orbit-three" /><span className="orbit-planet"><i /></span></div>
-      <div className="header-tools"><button className="approval-shortcut" onClick={() => goTo("requests")}>Da approvare ({pending.length})</button><button className="notification" aria-label="Notifiche" onClick={() => updateStatus?.available ? setUpdateOpen(true) : goTo("errors")}>♧{activeErrors.length || updateStatus?.available ? <i /> : null}</button><button className="avatar" aria-label="Profilo e impostazioni" onClick={() => goTo("settings")}>AR</button></div>
+      <div className="header-tools"><button className="approval-shortcut" onClick={() => goTo("requests")}>Da approvare ({pending.length})</button><button className="notification" aria-label="Notifiche" onClick={() => updateStatus?.available ? setUpdateOpen(true) : overview?.vault_security_alerts ? void openVault() : goTo("errors")}>♧{activeErrors.length || updateStatus?.available || overview?.vault_security_alerts ? <i /> : null}</button><button className="avatar" aria-label="Profilo e impostazioni" onClick={() => goTo("settings")}>AR</button></div>
     </header>
 
     <div className="cockpit-body">
@@ -963,7 +971,7 @@ export default function App() {
           <NavButton active={activeNav === "errors"} icon="△" label="Errori" count={overview?.active_errors} onClick={() => goTo("errors")} />
           <NavButton active={activeNav === "contracts"} icon="▤" label="Contratti" onClick={() => goTo("contracts")} />
           <NavButton active={activeNav === "visure"} icon="▧" label="Visure" onClick={() => goTo("visure")} />
-          <NavButton active={activeNav === "vault"} icon="▦" label="Fort Knox" count={vaultCredentials.length || undefined} onClick={() => void openVault()} />
+          <NavButton active={activeNav === "vault"} icon="▦" label="Fort Knox" count={overview?.vault_security_alerts || vaultCredentials.length || undefined} onClick={() => void openVault()} />
           <NavButton active={activeNav === "documents"} icon="▤" label="Documenti" onClick={() => goTo("documents")} />
           <NavButton active={activeNav === "settings"} icon="⚙" label="Impostazioni" onClick={() => goTo("settings")} />
           <button
@@ -1070,6 +1078,7 @@ export default function App() {
           <div className="vault-pin-display" aria-label="PIN inserito">{Array.from({ length: 6 }, (_, index) => <i className={index < vaultPin.length ? "filled" : ""} key={index} />)}</div>
           {vaultPinConfigured === false ? <><small>Conferma lo stesso PIN</small><div className="vault-pin-display confirm" aria-label="Conferma PIN">{Array.from({ length: 6 }, (_, index) => <i className={index < vaultPinConfirm.length ? "filled" : ""} key={index} />)}</div></> : null}
           <div className="vault-keypad">{[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => <button type="button" disabled={vaultUnlockBusy || vaultPinConfigured === null} onClick={() => addVaultPinDigit(String(digit))} key={digit}>{digit}</button>)}<button type="button" className="clear" disabled={vaultUnlockBusy} onClick={() => { setVaultPin(""); setVaultPinConfirm(""); setVaultError(""); }}>C</button><button type="button" disabled={vaultUnlockBusy || vaultPinConfigured === null} onClick={() => addVaultPinDigit("0")}>0</button><button type="button" className="backspace" disabled={vaultUnlockBusy} onClick={removeVaultPinDigit} aria-label="Cancella ultima cifra">⌫</button></div>
+          {vaultBlockedAttempts > 0 ? <div className="vault-alert error" role="alert">Allarme sicurezza: {vaultBlockedAttempts.toLocaleString("it-IT")} tentativi bloccati durante la chiusura. L’evento è registrato nell’audit.</div> : null}
           {vaultRetryAfter > 0 ? <div className="vault-lockout">Serratura temporaneamente bloccata. Riprova tra circa {vaultRetryAfter} secondi.</div> : null}
           {vaultError ? <div className="vault-alert error" role="alert">{vaultError}</div> : null}
           <button className="vault-unlock" disabled={vaultUnlockBusy || vaultPinConfigured === null || vaultRetryAfter > 0}>{vaultUnlockBusy ? "Verifica…" : vaultPinConfigured === false ? "Configura e apri" : "Apri Fort Knox"}</button><small className="vault-gate-note">5 tentativi massimi · blocco automatico · chiusura dopo 10 minuti</small>

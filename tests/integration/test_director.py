@@ -13,6 +13,7 @@ from app.main import app
 from app.models import (
     AgentSlot,
     AIProviderCredential,
+    AuditEvent,
     ClientCredential,
     EnrollmentCode,
     Evidence,
@@ -486,10 +487,49 @@ async def test_fort_knox_locks_after_five_wrong_pins(client: AsyncClient):
     status = await client.get("/vault/pin/status", headers=auth(token))
     assert status.json()["locked"] is True
     assert status.json()["retry_after"] > 0
+    assert status.json()["security_alert"] is True
+    assert status.json()["blocked_attempts"] == 1
     still_locked = await client.post(
         "/vault/unlock", headers=auth(token), json={"pin": "654321"}
     )
     assert still_locked.status_code == 429
+    for _ in range(8):
+        blocked = await client.post(
+            "/vault/unlock", headers=auth(token), json={"pin": "111111"}
+        )
+        assert blocked.status_code == 429
+
+    status = await client.get("/vault/pin/status", headers=auth(token))
+    assert status.json()["security_alert"] is True
+    assert status.json()["blocked_attempts"] == 10
+
+    overview = await client.get("/overview", headers=auth(token))
+    assert overview.json()["vault_security_alerts"] == 1
+    assert overview.json()["vault_blocked_attempts"] == 10
+    assert overview.json()["vault_locked"] is True
+
+    async with SessionLocal() as session:
+        checkpoints = (
+            await session.execute(
+                select(AuditEvent).where(
+                    AuditEvent.tenant_id == OTHER_TENANT_ID,
+                    AuditEvent.action == "fort_knox.lockout_aggregate",
+                )
+            )
+        ).scalars().all()
+        assert checkpoints[-1].detail.split(";", 1)[0] == "blocked_attempts=10"
+        pin = await session.get(VaultPin, OTHER_TENANT_ID)
+        assert pin is not None
+        pin.locked_until = utcnow() - timedelta(seconds=1)
+        await session.commit()
+
+    reopened = await client.post(
+        "/vault/unlock", headers=auth(token), json={"pin": "654321"}
+    )
+    assert reopened.status_code == 200
+    cleared = await client.get("/vault/pin/status", headers=auth(token))
+    assert cleared.json()["blocked_attempts"] == 0
+    assert cleared.json()["security_alert"] is False
 
 
 @pytest.mark.asyncio
