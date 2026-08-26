@@ -56,6 +56,10 @@ export type Overview = {
   errors: number;
   active_errors: number;
   historical_errors: number;
+  vault_security_alerts: number;
+  vault_blocked_attempts: number;
+  vault_locked: boolean;
+  vault_retry_after: number;
   kill_armed: boolean;
   ai_connected?: boolean;
   ai_model?: string;
@@ -298,7 +302,13 @@ export const api = {
   overview: () => request<Overview>("/overview"),
   aiProviders: () => request<{ selected: string; providers: AIProviderOption[] }>("/ai/providers"),
   vaultPinStatus: () =>
-    request<{ configured: boolean; locked: boolean; retry_after: number }>("/vault/pin/status"),
+    request<{
+      configured: boolean;
+      locked: boolean;
+      retry_after: number;
+      blocked_attempts: number;
+      security_alert: boolean;
+    }>("/vault/pin/status"),
   configureVaultPin: (pin: string) =>
     request<{ ok: boolean; configured: true }>("/vault/pin/configure", {
       method: "POST",

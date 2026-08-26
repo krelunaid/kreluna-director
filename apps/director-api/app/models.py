@@ -260,6 +260,7 @@ class VaultPin(Base):
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
     pin_hash: Mapped[str] = mapped_column(String(240))
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    blocked_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

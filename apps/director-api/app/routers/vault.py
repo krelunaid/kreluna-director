@@ -7,7 +7,7 @@ from cryptography.exceptions import InvalidTag
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -31,6 +31,7 @@ router = APIRouter(prefix="/vault", tags=["vault"])
 VAULT_GRANT_TTL_SECONDS = 10 * 60
 VAULT_MAX_PIN_ATTEMPTS = 5
 VAULT_LOCK_SECONDS = 5 * 60
+VAULT_ALERT_CHECKPOINTS = frozenset({10, 100, 1_000, 10_000})
 
 
 class VaultCredentialWrite(BaseModel):
@@ -78,6 +79,12 @@ def _require_vault_grant(actor: Actor, grant: str | None) -> None:
         raise HTTPException(status_code=423, detail="Sblocco Fort Knox non valido")
 
 
+def _is_alert_checkpoint(count: int) -> bool:
+    """Mantiene l'audit leggibile anche durante un attacco ad alto volume."""
+
+    return count in VAULT_ALERT_CHECKPOINTS or (count > 10_000 and count % 10_000 == 0)
+
+
 @router.get("/pin/status")
 async def pin_status(
     actor: Annotated[Actor, Depends(get_actor)],
@@ -88,7 +95,14 @@ async def pin_status(
     retry_after = 0
     if row and row.locked_until:
         retry_after = max(0, int((as_utc(row.locked_until) - utcnow()).total_seconds()))
-    return {"configured": row is not None, "locked": retry_after > 0, "retry_after": retry_after}
+    blocked_attempts = row.blocked_attempts if row else 0
+    return {
+        "configured": row is not None,
+        "locked": retry_after > 0,
+        "retry_after": retry_after,
+        "blocked_attempts": blocked_attempts,
+        "security_alert": blocked_attempts > 0,
+    }
 
 
 @router.post("/pin/configure", status_code=201)
@@ -133,6 +147,30 @@ async def unlock_vault(
     now = utcnow()
     if row.locked_until and as_utc(row.locked_until) > now:
         retry_after = int((as_utc(row.locked_until) - now).total_seconds())
+        blocked_attempts = (
+            await session.execute(
+                update(VaultPin)
+                .where(VaultPin.tenant_id == actor.tenant_id)
+                .values(
+                    blocked_attempts=VaultPin.blocked_attempts + 1,
+                    updated_at=now,
+                )
+                .returning(VaultPin.blocked_attempts)
+            )
+        ).scalar_one()
+        if _is_alert_checkpoint(blocked_attempts):
+            await write_audit(
+                session,
+                tenant_id=actor.tenant_id,
+                actor=actor.user_id,
+                action="fort_knox.lockout_aggregate",
+                result="blocked",
+                detail=(
+                    f"blocked_attempts={blocked_attempts};"
+                    f"retry_after={max(1, retry_after)}"
+                ),
+            )
+        await session.commit()
         raise HTTPException(
             status_code=429,
             detail=f"Troppi tentativi. Riprova tra {max(1, retry_after)} secondi",
@@ -143,6 +181,7 @@ async def unlock_vault(
         locked = row.failed_attempts >= VAULT_MAX_PIN_ATTEMPTS
         if locked:
             row.locked_until = now + timedelta(seconds=VAULT_LOCK_SECONDS)
+            row.blocked_attempts = 1
         row.updated_at = now
         await write_audit(
             session,
@@ -150,7 +189,10 @@ async def unlock_vault(
             actor=actor.user_id,
             action="fort_knox.unlock",
             result="denied",
-            detail=f"attempt={row.failed_attempts};locked={str(locked).lower()}",
+            detail=(
+                f"attempt={row.failed_attempts};locked={str(locked).lower()};"
+                f"blocked_attempts={row.blocked_attempts}"
+            ),
         )
         await session.commit()
         if locked:
@@ -160,6 +202,7 @@ async def unlock_vault(
             )
         raise HTTPException(status_code=403, detail="PIN non valido")
     row.failed_attempts = 0
+    row.blocked_attempts = 0
     row.locked_until = None
     row.updated_at = now
     await write_audit(
