@@ -13,6 +13,7 @@ from kreluna_shared.update import APP_VERSION
 
 from app.config import ROOT, settings
 from app.database import Base, SessionLocal, engine, migrate_compatible_schema
+from app.middleware.remote_agent_only import RemoteAgentOnlyMiddleware
 from app.routers.agent_io import router as agent_io_router
 from app.routers.billing import router as billing_router
 from app.routers.core import router as core_router
@@ -28,6 +29,14 @@ from app.services.housekeeping import (
     purge_old_evidence,
     translate_old_errors,
 )
+from app.services.remote_access import remote_tunnel
+
+
+async def verify_remote_tunnel_after_start() -> None:
+    if not remote_tunnel.status()["configured"]:
+        return
+    await asyncio.sleep(2)
+    await remote_tunnel.probe()
 
 
 @asynccontextmanager
@@ -49,17 +58,22 @@ async def lifespan(_app: FastAPI):
         limits=httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=90),
         timeout=httpx.Timeout(45.0, connect=10.0),
     )
+    remote_tunnel.start()
+    remote_probe = asyncio.create_task(verify_remote_tunnel_after_start())
     keeper = asyncio.create_task(housekeeping_loop(SessionLocal))
     try:
         yield
     finally:
-        keeper.cancel()
-        with suppress(asyncio.CancelledError):
-            await keeper
+        for task in (keeper, remote_probe):
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        remote_tunnel.stop()
         await _app.state.ai_client.aclose()
 
 
 app = FastAPI(title="Kreluna Director", version=APP_VERSION, lifespan=lifespan)
+app.add_middleware(RemoteAgentOnlyMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins + ["http://127.0.0.1:8080", "http://localhost:8080"],
@@ -121,6 +135,7 @@ async def spa_fallback(full_path: str):
         "assets",
         "vault",
         "library",
+        "remote",
     }
     head = full_path.split("/", 1)[0]
     if head in reserved:

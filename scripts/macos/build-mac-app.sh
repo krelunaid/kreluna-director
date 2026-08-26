@@ -40,6 +40,9 @@ chmod +x "$APP/Contents/MacOS/KrelunaWindow"
 
 bash "$ROOT/scripts/lib/copy-app-tree.sh" "$RES"
 
+echo "Includo il collegamento sicuro per i PC remoti…"
+bash "$ROOT/scripts/lib/fetch-cloudflared.sh" macos-arm64 "$APP/Contents/Resources/cloudflared"
+
 echo "Includo Python Apple Silicon (niente Intel)…"
 python3 "$ROOT/scripts/lib/bundle_python.py" macos-arm64 "$APP/Contents/Resources/python-arm64"
 rm -rf "$APP/Contents/Resources/python-x64"
@@ -57,6 +60,7 @@ echo "Precompilo Python prima della firma…"
   "$RES/packages/kreluna-shared/src"
 
 file "$APP/Contents/MacOS/KrelunaWindow" | grep -q 'arm64'
+file "$APP/Contents/Resources/cloudflared" | grep -q 'arm64'
 
 cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$BUILD_OUT/LEGGIMI-MAC.txt"
 cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$BUILD_OUT/1-SE-DICE-CESTINO.txt"

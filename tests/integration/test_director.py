@@ -84,6 +84,34 @@ async def test_login_remembers_device_without_returning_password(client: AsyncCl
     assert refreshed.json()["expires_in"] == settings.director_remember_session_ttl_seconds
 
 
+@pytest.mark.asyncio
+async def test_owner_can_configure_remote_link_without_token_disclosure(
+    client: AsyncClient,
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "director_remote_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "director_cloudflared_path", str(tmp_path / "missing-cloudflared"))
+    monkeypatch.setattr(settings, "director_public_url", settings.director_public_url)
+    owner = await login(client)
+    secret = "R" * 100
+
+    configured = await client.post(
+        "/remote/configure",
+        headers=auth(owner),
+        json={
+            "public_url": "https://director.studio.example",
+            "tunnel_token": secret,
+        },
+    )
+
+    assert configured.status_code == 200
+    assert configured.json()["configured"] is True
+    assert configured.json()["connector_available"] is False
+    assert secret not in configured.text
+    assert (tmp_path / "remote-tunnel.token").read_text().strip() == secret
+
+
 def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 

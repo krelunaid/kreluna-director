@@ -27,6 +27,7 @@ set "DIRECTOR_DATABASE_URL=sqlite+aiosqlite:///%INSTALL%\data\kreluna.db"
 set "DIRECTOR_EVIDENCE_DIR=%INSTALL%\data\evidence"
 set "KRELUNA_DIRECTOR_URL=http://127.0.0.1:8080"
 set "KRELUNA_DESKTOP_APP=1"
+if exist "%ROOT%runtime\cloudflared.exe" set "DIRECTOR_CLOUDFLARED_PATH=%ROOT%runtime\cloudflared.exe"
 
 cd /d "%ROOT%"
 "%PY%" "%ROOT%apps\director-desktop\kreluna_desktop.py"

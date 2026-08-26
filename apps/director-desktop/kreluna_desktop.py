@@ -150,10 +150,14 @@ def start_installed_mac_agent() -> subprocess.Popen | None:
     if not role.startswith("pc-") or not 3 <= len(role) <= 80:
         return None
     parsed = urlparse(director_url)
+    remote_https = parsed.scheme == "https" and bool(parsed.hostname)
+    local_http = (
+        parsed.scheme == "http"
+        and (parsed.hostname or "").lower() in {"127.0.0.1", "localhost", "::1"}
+        and parsed.port == 8080
+    )
     if (
-        parsed.scheme != "http"
-        or (parsed.hostname or "").lower() not in {"127.0.0.1", "localhost", "::1"}
-        or parsed.port != 8080
+        not (remote_https or local_http)
         or parsed.username
         or parsed.password
         or parsed.path not in {"", "/"}
@@ -166,6 +170,9 @@ def start_installed_mac_agent() -> subprocess.Popen | None:
     env["KRELUNA_AGENT_ID"] = role
     env["KRELUNA_AGENT_DISPLAY_NAME"] = str(data.get("display_name") or role.upper())
     env["AGENT_DIRECTOR_URL"] = director_url
+    env["AGENT_DIRECTOR_WSS"] = (
+        director_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws/agent"
+    )
     target = str(data.get("fatture_target") or "").strip()
     if target:
         env["KRELUNA_FATTURE_TARGET"] = target
@@ -183,6 +190,25 @@ def prepare_env() -> None:
     os.environ.setdefault("DIRECTOR_SESSION_SECRET", _local_secret("session.key"))
     os.environ.setdefault("DIRECTOR_EVIDENCE_KEY", _local_secret("evidence.key"))
     os.environ.setdefault("DIRECTOR_CREDENTIAL_KEY", _local_secret("credential.key"))
+    remote_dir = SUPPORT / "remote"
+    os.environ.setdefault("DIRECTOR_REMOTE_DIR", str(remote_dir))
+    remote_config = remote_dir / "remote-link.json"
+    try:
+        remote_data = json.loads(remote_config.read_text(encoding="utf-8"))
+        remote_url = str(remote_data.get("public_url") or "").strip().rstrip("/")
+        parsed_remote = urlparse(remote_url)
+        if (
+            parsed_remote.scheme == "https"
+            and parsed_remote.hostname
+            and not parsed_remote.username
+            and not parsed_remote.password
+            and parsed_remote.path in {"", "/"}
+            and not parsed_remote.query
+            and not parsed_remote.fragment
+        ):
+            os.environ.setdefault("DIRECTOR_PUBLIC_URL", remote_url)
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        pass
     os.environ.setdefault("DIRECTOR_BOOTSTRAP_EMAIL", owner["email"])
     os.environ.setdefault("DIRECTOR_BOOTSTRAP_PASSWORD", owner["password"])
     os.environ.setdefault("DIRECTOR_BOOTSTRAP_NAME", "Titolare studio")

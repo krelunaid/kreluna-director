@@ -40,6 +40,9 @@ export KRELUNA_DESKTOP_APP="1"
 export KRELUNA_NATIVE_WINDOW="$APP_DIR/MacOS/KrelunaWindow"
 export KRELUNA_APP_BUNDLE="$APP_BUNDLE"
 export KRELUNA_SUPPORT_DIR="$SUPPORT"
+if [[ -x "$APP_DIR/Resources/cloudflared" ]]; then
+  export DIRECTOR_CLOUDFLARED_PATH="$APP_DIR/Resources/cloudflared"
+fi
 notify "Apro Kreluna Director…"
 cd "$ROOT"
 exec "$PYTHON" "$ROOT/apps/director-desktop/kreluna_desktop.py"
