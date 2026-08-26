@@ -87,10 +87,20 @@ class ApprovalDecision(BaseModel):
 
 
 def _task_out(task: Task, evidence: list[Evidence] | None = None) -> dict[str, Any]:
+    try:
+        result = json.loads(task.result_json or "{}")
+    except json.JSONDecodeError:
+        result = {}
     error_state = None
     if task.status == "failed" and task.error:
         cutoff = utcnow() - timedelta(days=1)
-        error_state = "active" if task.created_at and as_utc(task.created_at) > cutoff else "historical"
+        error_state = (
+            "historical"
+            if result.get("error_resolved")
+            else "active"
+            if task.created_at and as_utc(task.created_at) > cutoff
+            else "historical"
+        )
     return {
         "id": task.id,
         "goal": task.goal,
@@ -100,7 +110,7 @@ def _task_out(task: Task, evidence: list[Evidence] | None = None) -> dict[str, A
         "status": task.status,
         "needs_approval": task.needs_approval,
         "assigned_device_id": task.assigned_device_id,
-        "result": json.loads(task.result_json or "{}"),
+        "result": result,
         "error": task.error,
         "error_state": error_state,
         "created_at": task.created_at.isoformat() if task.created_at else None,
@@ -500,12 +510,17 @@ async def overview(
     now = utcnow()
     cutoff = now - timedelta(days=1)
     failed = [task for task in tasks if task.status == "failed" and task.error]
-    active_errors = [
-        task for task in failed if task.created_at and as_utc(task.created_at) > cutoff
-    ]
-    historical_errors = [
-        task for task in failed if not task.created_at or as_utc(task.created_at) <= cutoff
-    ]
+    active_errors = []
+    historical_errors = []
+    for task in failed:
+        try:
+            resolved = bool(json.loads(task.result_json or "{}").get("error_resolved"))
+        except json.JSONDecodeError:
+            resolved = False
+        if resolved or not task.created_at or as_utc(task.created_at) <= cutoff:
+            historical_errors.append(task)
+        else:
+            active_errors.append(task)
     vault_pin = await session.get(VaultPin, actor.tenant_id)
     vault_retry_after = 0
     if vault_pin and vault_pin.locked_until:

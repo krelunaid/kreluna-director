@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,6 +54,33 @@ async def translate_old_errors(session: AsyncSession) -> int:
     return len(rows)
 
 
+async def resolve_legacy_browser_timeouts(session: AsyncSession) -> int:
+    """Archivia il vecchio errore tecnico corretto nelle versioni recenti dell'Agent."""
+
+    rows = (
+        await session.execute(
+            select(Task).where(
+                Task.status == "failed",
+                Task.error.contains("Command '['osascript'"),
+                Task.error.contains("timed out after"),
+            )
+        )
+    ).scalars().all()
+    for task in rows:
+        try:
+            result = json.loads(task.result_json or "{}")
+        except json.JSONDecodeError:
+            result = {}
+        result["error_resolved"] = True
+        result["resolution_code"] = "legacy_browser_timeout_fixed"
+        task.result_json = json.dumps(result, ensure_ascii=False)
+        task.error = (
+            "Risolto dall'aggiornamento: il vecchio Agent non riusciva ad aprire "
+            "Chrome entro 30 secondi. Ora usa un'apertura alternativa sicura."
+        )
+    return len(rows)
+
+
 async def close_expired_approvals(session: AsyncSession) -> int:
     """Una conferma scaduta non deve restare in "Da approvare" per sempre."""
 
@@ -80,6 +108,7 @@ async def housekeeping_loop(session_factory, every_seconds: int = 3600) -> None:
                 await purge_old_evidence(session)
                 await heal_stopped_tasks(session)
                 await translate_old_errors(session)
+                await resolve_legacy_browser_timeouts(session)
                 await close_expired_approvals(session)
                 await session.commit()
         except asyncio.CancelledError:

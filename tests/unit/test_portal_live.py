@@ -1,3 +1,5 @@
+import subprocess
+
 import pytest
 from agent.capabilities.portal import open_portal, prepare_invoice_portal
 from agent.tools import mac_browser
@@ -200,6 +202,39 @@ def test_permission_errors_explain_what_to_switch_on():
     assert "Apple Event" in str(mac_browser._translate(blocked))
     no_access = mac_browser.MacControlError("assistive access is not enabled (-25211)")
     assert "Accessibilità" in str(mac_browser._translate(no_access))
+
+
+def test_osascript_timeout_never_exposes_the_raw_command(monkeypatch):
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["osascript"], timeout=30)
+
+    monkeypatch.setattr(mac_browser.subprocess, "run", timeout)
+    with pytest.raises(mac_browser.MacControlError) as error:
+        mac_browser.Runner().osascript("tell application \"Google Chrome\"")
+
+    assert "30 secondi" in str(error.value)
+    assert "Command" not in str(error.value)
+    assert "tell application" not in str(error.value)
+
+
+def test_browser_open_uses_the_safe_fallback_after_apple_event_failure():
+    class FallbackMac(FakeMac):
+        def __init__(self):
+            super().__init__()
+            self.opened: list[tuple[str, str]] = []
+
+        def osascript(self, script: str) -> str:
+            if "set URL of" in script:
+                raise mac_browser.MacControlError("Il browser non ha risposto")
+            return super().osascript(script)
+
+        def open_application_url(self, browser: str, url: str) -> None:
+            self.opened.append((browser, url))
+
+    fake = FallbackMac()
+    mac_browser.open_url(fake, "Google Chrome", "https://www.cgn.it")
+
+    assert fake.opened == [("Google Chrome", "https://www.cgn.it")]
 
 
 def test_planner_only_goes_live_when_asked():
