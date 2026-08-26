@@ -86,6 +86,7 @@ def test_invoice_target_can_be_read_from_the_windows_installer_file(monkeypatch,
 
 
 def test_the_right_pc_gets_the_portal():
+    assert preferred_role("portal_open", {"portal": "f24-ipsoa"}) == "pc-f24"
     assert preferred_role("portal_open", {"portal": "visure-cgn"}) == "pc-visure"
     assert preferred_role("portal_open", {"portal": "durc-inps"}) == "pc-durc"
     assert preferred_role("portal_open", {"portal": "inventato"}) is None

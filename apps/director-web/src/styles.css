@@ -392,7 +392,7 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .cockpit-footer > span:last-child { margin-left: auto; border: 0; }
 .cockpit-footer .healthy { color: #a9eeb9; }.cockpit-footer .warning { color: #e8c878; }
 .global-stop { position: absolute; z-index: 8; left: 181px; bottom: 58px; width: 24px; height: 24px; padding: 0; color: #ff8d84; border: 1px solid rgba(255, 101, 95, .25); border-radius: 6px; background: rgba(95, 20, 31, .26); font-size: 9px; }
-.kill-confirm, .lightbox, .update-dialog, .vault-dialog, .ai-settings-dialog, .enrollment-dialog, .library-dialog { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; border: 0; background: rgba(2, 5, 12, .84); backdrop-filter: blur(7px); }
+.kill-confirm, .lightbox, .update-dialog, .vault-dialog, .ai-settings-dialog, .enrollment-dialog, .library-dialog, .f24-dialog { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; border: 0; background: rgba(2, 5, 12, .84); backdrop-filter: blur(7px); }
 .kill-confirm > div { width: 360px; padding: 24px; text-align: center; border: 1px solid var(--line-strong); border-radius: 16px; background: #101a34; box-shadow: 0 30px 80px #000; }
 .kill-confirm h2 { margin-top: 0; }.kill-confirm p { color: var(--muted); }
 .kill-confirm button { margin: 5px; padding: 8px 13px; color: #fff; border: 1px solid var(--line-strong); border-radius: 8px; background: #1b2746; }
@@ -462,6 +462,12 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .library-binary-note { padding: 14px; color: #b9c0d4; border: 1px solid var(--line); border-radius: 10px; background: rgba(4, 10, 24, .42); font-size: 11px; line-height: 1.55; }
 .library-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }.library-dialog-actions button { padding: 9px 13px; color: #d8def0; border: 1px solid rgba(118, 132, 189, .34); border-radius: 8px; background: #172342; font-size: 10px; }.library-dialog-actions button.primary { color: #17110a; border-color: #f4d277; background: linear-gradient(180deg, #ffe7a1, #d9a83e); font-weight: 800; }
 .library-preview-content { min-height: 0; flex: 1; overflow: auto; border: 1px solid var(--line); border-radius: 11px; background: #050a14; }.library-preview-content pre { min-height: 420px; margin: 0; padding: 22px; color: #e4e7f0; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }.library-preview-content img { max-width: 100%; max-height: 65vh; display: block; margin: auto; }.library-preview-content iframe { width: 100%; height: 65vh; border: 0; background: #fff; }
+
+/* Anteprima F24: diagnostica minima, senza modificare il cockpit. */
+.f24-card { width: min(820px, 94vw); max-height: 88vh; display: flex; flex-direction: column; gap: 13px; padding: 24px; overflow: hidden; color: #eef1ff; border: 1px solid rgba(244, 210, 119, .35); border-radius: 20px; background: linear-gradient(145deg, #111c38, #081226); box-shadow: 0 34px 100px #000; }
+.f24-state { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 9px; font-size: 10px; }.f24-state.ready { color: #a9eeb9; border: 1px solid rgba(93, 222, 128, .28); background: rgba(21, 76, 42, .24); }.f24-state.warning { color: #ecd68f; border: 1px solid rgba(244, 210, 119, .28); background: rgba(75, 58, 13, .22); }
+.f24-lines { min-height: 0; display: flex; flex-direction: column; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }.f24-line { display: grid; grid-template-columns: minmax(160px, 1.4fr) .7fr .6fr .8fr .8fr; gap: 10px; padding: 10px 12px; color: #c8cede; border-bottom: 1px solid rgba(111, 128, 194, .16); font-size: 10px; }.f24-line:last-child { border-bottom: 0; }.f24-line.heading { color: #7f89a5; background: rgba(4, 10, 24, .45); font-size: 8px; text-transform: uppercase; }.f24-line strong { color: #ffe19a; }
+.f24-totals { display: flex; justify-content: flex-end; gap: 18px; color: #98a2bd; font-size: 10px; }.f24-totals strong { margin-left: 4px; color: #f2e2ad; }
 
 @media (max-width: 1050px) {
   .workspace-heading { flex-direction: column; }

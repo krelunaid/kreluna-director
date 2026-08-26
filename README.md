@@ -51,7 +51,7 @@ Un PC, un lavoro, un programma (`policies/agents.yaml`):
 Esempi che capisce già:
 
 - `Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera`
-- `Prepara gli F24 in scadenza, ma non inviarli`
+- `Prepara F24 ordinario IVA trimestrale secondo trimestre per Andrea Gadducci, anno 2026, debito 1.250 euro`
 - `Scarica le fatture in IPSOA per Gadducci`
 - `Apri il sito CGN e fai la visura vera per Gadducci` (browser vero sul Mac)
 - `Apri il sito CGN per Gadducci usando l'accesso salvato` (compila, non accede)
@@ -85,6 +85,11 @@ a un altro provider. Dettagli operativi: `docs/MANAGED-AI-GATEWAY.md`.
 Il modello propone, la policy decide. Non può usare capability fuori elenco,
 non può inventare o cambiare un importo o un cliente che non sia nella frase
 del titolare, e non decide da sé cosa non ha bisogno di approvazione.
+
+L'Agente F24 prepara bozze strutturate per Ordinario, Semplificato, ELIDE,
+Accise ed Enti pubblici. I codici automatici sono limitati al catalogo ufficiale
+locale versionato; gli altri devono essere indicati dall'operatore. Dettagli e
+limiti: [`docs/F24-ENGINE.md`](docs/F24-ENGINE.md).
 
 ## Cosa non fa (di proposito)
 

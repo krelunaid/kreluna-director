@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from kreluna_shared.f24 import F24PrepareArgs
+
 
 class NotepadWriteArgs(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
@@ -27,11 +29,6 @@ class InvoicePrepareArgs(BaseModel):
 
 class InvoiceSubmitArgs(BaseModel):
     draft_id: str = Field(min_length=1, max_length=80)
-
-
-class F24PrepareArgs(BaseModel):
-    period: str = Field(default="in_scadenza", max_length=80)
-    note: str = Field(default="", max_length=500)
 
 
 class DocumentCheckArgs(BaseModel):
@@ -126,8 +123,11 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         name="f24_prepare",
         args_model=F24PrepareArgs,
         default_risk="medium",
-        description="Prepara F24 in IPSOA. Non esegue l'Invio Telematico.",
-        demo_only=True,
+        description=(
+            "Prepara e valida una bozza strutturata F24 ordinario, semplificato, ELIDE, "
+            "Accise o Enti pubblici. Non trasmette e non paga."
+        ),
+        demo_only=False,
     ),
     "contabilita_prepare": CapabilitySpec(
         name="contabilita_prepare",

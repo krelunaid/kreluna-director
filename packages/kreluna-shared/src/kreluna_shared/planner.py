@@ -266,6 +266,7 @@ def _amount_in_reply(text: str) -> float | None:
 
 
 LIVE_PORTALS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("f24-ipsoa", "F24 su IPSOA", ("f24", "delega f24", "deleghe f24")),
     ("visure-cgn", "Visure su CGN", ("visura", "visure")),
     ("durc-inps", "DURC su INPS", ("durc", "inps")),
     ("contratti-ade", "Contratti su AdE", ("contratt", "samuele")),
@@ -428,6 +429,7 @@ def plan_deterministic(text: str) -> PlanResult:
                 "password salvata",
                 "usa la cassaforte",
                 "usa fort knox",
+                "fort knox",
             )
         )
         return PlanResult(
