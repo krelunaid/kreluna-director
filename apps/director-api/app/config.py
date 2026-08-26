@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     director_host: str = "127.0.0.1"
     director_port: int = 8080
     director_public_url: str = "http://127.0.0.1:8080"
+    director_remote_dir: str = ""
+    director_cloudflared_path: str = ""
     director_database_url: str = "sqlite+aiosqlite:///./data/kreluna.db"
     director_evidence_dir: str = "./data/evidence"
     director_signing_seed: str = "kreluna-dev-signing-seed-change-in-production"

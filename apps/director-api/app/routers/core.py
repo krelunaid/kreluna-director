@@ -7,6 +7,7 @@ import sys
 import threading
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from kreluna_shared.crypto import b64d, sha256_hex
@@ -36,6 +37,7 @@ from app.services.enrollment import (
 )
 from app.services.orchestrator import kill_all
 from app.services.registry import hub, mark_offline_stale, requeue_device_tasks
+from app.services.remote_access import remote_tunnel, validate_public_url, validate_tunnel_token
 from app.services.updates import latest_update_status
 
 router = APIRouter()
@@ -72,6 +74,11 @@ class AIConfigurationBody(BaseModel):
     api_key: str | None = Field(default=None, max_length=512)
 
 
+class RemoteLinkBody(BaseModel):
+    public_url: str = Field(min_length=12, max_length=500)
+    tunnel_token: str | None = Field(default=None, max_length=4096)
+
+
 @router.get("/health")
 async def health() -> dict:
     from kreluna_shared.crypto import b64e, server_public_bytes
@@ -97,6 +104,55 @@ async def update_manifest() -> dict:
 @router.get("/update/status")
 async def update_status() -> dict:
     return await latest_update_status()
+
+
+@router.get("/remote/status")
+async def remote_status(
+    actor: Annotated[Actor, Depends(get_actor)],
+    check: bool = False,
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può gestire i PC remoti")
+    return await remote_tunnel.probe() if check else remote_tunnel.status()
+
+
+@router.post("/remote/configure")
+async def configure_remote_link(
+    body: RemoteLinkBody,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può gestire i PC remoti")
+    try:
+        public_url = validate_public_url(body.public_url)
+        existing = remote_tunnel.load()
+        raw_token = (body.tunnel_token or "").strip() or (existing.token if existing else "")
+        tunnel_token = validate_tunnel_token(raw_token)
+        remote_tunnel.save(public_url, tunnel_token)
+        remote_tunnel.restart()
+    except (RuntimeError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="remote_link.configure",
+        result="ok",
+        detail=f"host={urlparse(public_url).hostname}",
+    )
+    await session.commit()
+    return await remote_tunnel.probe()
+
+
+@router.post("/remote/restart")
+async def restart_remote_link(
+    actor: Annotated[Actor, Depends(get_actor)],
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può gestire i PC remoti")
+    remote_tunnel.restart()
+    return await remote_tunnel.probe()
 
 
 def _schedule_process_exit(delay: float = 1.5) -> None:
@@ -495,11 +551,14 @@ async def create_agent_enrollment(
         detail=slot.role,
     )
     await session.commit()
+    remote = remote_tunnel.status()
     return {
         "agent_id": slot.role,
         "enrollment_code": raw,
         "expires_at": record.expires_at.isoformat() if record.expires_at else None,
         "single_use": True,
+        "director_url": remote["public_url"] or settings.director_public_url,
+        "remote_ready": remote["connected"],
     }
 
 

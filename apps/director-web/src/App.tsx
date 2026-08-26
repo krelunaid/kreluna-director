@@ -6,6 +6,7 @@ import {
   Approval,
   LibraryDocument,
   Overview,
+  RemoteStatus,
   setVaultGrant,
   setToken,
   Task,
@@ -206,6 +207,13 @@ export default function App() {
   const [updateOpen, setUpdateOpen] = useState(false);
   const [updateInstallState, setUpdateInstallState] = useState<"idle" | "installing" | "restarting">("idle");
   const [updateInstallError, setUpdateInstallError] = useState("");
+  const [remoteStatus, setRemoteStatus] = useState<RemoteStatus | null>(null);
+  const [remoteOpen, setRemoteOpen] = useState(false);
+  const [remoteUrl, setRemoteUrl] = useState("");
+  const [remoteToken, setRemoteToken] = useState("");
+  const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteError, setRemoteError] = useState("");
+  const [remoteMessage, setRemoteMessage] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [f24Preview, setF24Preview] = useState<Task | null>(null);
   const [workPreview, setWorkPreview] = useState<Task | null>(null);
@@ -218,6 +226,8 @@ export default function App() {
     displayName: string;
     code: string;
     expiresAt: string;
+    directorUrl: string;
+    remoteReady: boolean;
   } | null>(null);
   const [enrollmentError, setEnrollmentError] = useState("");
   const [vaultOpen, setVaultOpen] = useState(false);
@@ -263,9 +273,10 @@ export default function App() {
 
   function refresh(): Promise<void> {
     if (refreshInFlight.current) return refreshInFlight.current;
-    const request = Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals(), api.aiProviders()])
-      .then(([over, ag, ts, ap, ai]) => {
+    const request = Promise.all([api.overview(), api.agents(), api.tasks(), api.approvals(), api.aiProviders(), api.remoteStatus().catch(() => null)])
+      .then(([over, ag, ts, ap, ai, remote]) => {
         setOverview(over); setAIProviders(ai.providers); setAgents(ag.agents); setTasks(ts.tasks); setApprovals(ap.approvals);
+        if (remote) setRemoteStatus(remote);
       })
       .finally(() => {
         refreshInFlight.current = null;
@@ -388,6 +399,8 @@ export default function App() {
           displayName: agent.display_name || agent.agent_id,
           code: issued.enrollment_code,
           expiresAt: issued.expires_at,
+          directorUrl: issued.director_url,
+          remoteReady: issued.remote_ready,
         });
       } else if (agent.killed || agent.paused) await api.resume(agent.device_id);
       else await api.pause(agent.device_id);
@@ -720,6 +733,38 @@ export default function App() {
     } finally { setAISettingsBusy(false); }
   }
 
+  function openRemoteSettings() {
+    setRemoteUrl(remoteStatus?.public_url || "");
+    setRemoteToken("");
+    setRemoteError("");
+    setRemoteMessage("");
+    setRemoteOpen(true);
+  }
+
+  async function checkRemoteLink() {
+    setRemoteBusy(true); setRemoteError(""); setRemoteMessage("");
+    try {
+      const result = await api.remoteStatus(true);
+      setRemoteStatus(result);
+      if (result.connected) setRemoteMessage("Collegamento Mac–PC attivo e verificato.");
+      else setRemoteError(result.detail);
+    } catch (err) {
+      setRemoteError(err instanceof Error ? err.message : "Verifica del collegamento non riuscita");
+    } finally { setRemoteBusy(false); }
+  }
+
+  async function saveRemoteSettings(event: FormEvent) {
+    event.preventDefault(); setRemoteBusy(true); setRemoteError(""); setRemoteMessage("");
+    try {
+      const result = await api.configureRemote(remoteUrl, remoteToken);
+      setRemoteStatus(result); setRemoteToken("");
+      if (result.connected) setRemoteMessage("Collegamento Mac–PC attivo e verificato.");
+      else setRemoteError(result.detail);
+    } catch (err) {
+      setRemoteError(err instanceof Error ? err.message : "Configurazione del collegamento non riuscita");
+    } finally { setRemoteBusy(false); }
+  }
+
   function goTo(section: NavSection, prompt?: string) {
     setActiveNav(section); if (prompt) setDraft(prompt);
   }
@@ -883,6 +928,7 @@ export default function App() {
     return <section className="workspace-page settings-workspace" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>CONTROLLO DEL PROGRAMMA</span><h2 id="workspace-title">IMPOSTAZIONI</h2><p>Connessione IA, aggiornamenti, sessione e protezioni operative.</p></div><button onClick={() => void refresh()}>↻ Aggiorna</button></div><div className="settings-grid">
       <article><span>INTELLIGENZA ARTIFICIALE</span><h3>{providerLabel}</h3><p>{overview?.ai_detail || (aiConnected ? "Collegata e pronta." : "Servizio non disponibile.")}</p><div className={`settings-state ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "Da controllare"}</div><button onClick={() => openAISettings()}>Configura e verifica</button></article>
       <article><span>AGGIORNAMENTI</span><h3>Kreluna Director v{version}</h3><p>{updateAvailable ? `È disponibile la versione ${updateStatus?.latest_version}.` : "Il programma è aggiornato."}</p><div className={`settings-state ${updateAvailable ? "warning" : "connected"}`}>● {updateAvailable ? "Aggiornamento disponibile" : "Versione corrente"}</div><button disabled={!updateAvailable} onClick={() => setUpdateOpen(true)}>{updateAvailable ? "Installa aggiornamento" : "Nessun aggiornamento"}</button></article>
+      <article><span>PC REMOTI</span><h3>{remoteStatus?.connected ? "Collegamento attivo" : "Collegamento da configurare"}</h3><p>{remoteStatus?.detail || "Collega in sicurezza gli Agent Windows e Mac senza aprire porte sul router."}</p><div className={`settings-state ${remoteStatus?.connected ? "connected" : "warning"}`}>● {remoteStatus?.connected ? "PC raggiungibili" : remoteStatus?.state === "starting" ? "Connessione in avvio" : "Non collegato"}</div><button onClick={openRemoteSettings}>{remoteStatus?.configured ? "Verifica o modifica" : "Configura collegamento"}</button></article>
       <article><span>SESSIONE</span><h3>{name}</h3><p>Accesso protetto su questo Mac. La password non viene conservata nell’app.</p><div className="settings-state connected">● Sessione attiva</div><button onClick={() => { setToken(null); setReady(false); }}>Esci dallo studio</button></article>
       <article><span>BARRIERE DI SICUREZZA</span><h3>Sempre attive</h3><p>Niente shell remota, eval, pagamenti, invii fiscali o login automatici SPID/CNS. Le schermate non vanno all’IA.</p><div className="settings-state connected">● Protezioni operative</div><button onClick={() => void openVault()}>Apri Fort Knox</button></article>
     </div></section>;
@@ -990,7 +1036,7 @@ export default function App() {
     {confirmKill ? <div className="kill-confirm" role="dialog" aria-modal="true" aria-label="Conferma stop"><div><h2>Fermare tutti gli Agent?</h2><p>I lavori in corso torneranno in attesa.</p><button onClick={() => setConfirmKill(false)}>Annulla</button><button className="danger" onClick={async () => { await api.kill(); setConfirmKill(false); await refresh(); }}>Conferma stop</button></div></div> : null}
     {enrollment || enrollmentError ? <div className="enrollment-dialog" role="dialog" aria-modal="true" aria-labelledby="enrollment-title"><div className="enrollment-card">
       <span>INSTALLAZIONE AGENT</span><h2 id="enrollment-title">{enrollment?.displayName || "Codice non disponibile"}</h2>
-      {enrollment ? <><p>Inserisci questo codice nell’installer Mac o Windows. Vale una sola volta e scade alle {new Date(enrollment.expiresAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}.</p><code>{enrollment.code}</code><button className="primary" onClick={() => void navigator.clipboard.writeText(enrollment.code)}>Copia codice</button></> : null}
+      {enrollment ? <><p>Nel PC da collegare inserisci prima l’indirizzo del Director e poi il codice monouso. Il codice scade alle {new Date(enrollment.expiresAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}.</p><small>INDIRIZZO DIRECTOR</small><code>{enrollment.directorUrl}</code><small>CODICE MONOUSO</small><code>{enrollment.code}</code>{!enrollment.remoteReady ? <div className="enrollment-error">Il collegamento Internet non è ancora verificato. Apri Impostazioni → PC remoti prima di installare l’Agent fuori da questo Mac.</div> : null}<button className="primary" onClick={() => void navigator.clipboard.writeText(`Indirizzo Director: ${enrollment.directorUrl}\nCodice: ${enrollment.code}`)}>Copia dati di collegamento</button></> : null}
       {enrollmentError ? <div className="enrollment-error" role="alert">{enrollmentError}</div> : null}
       <button onClick={() => { setEnrollment(null); setEnrollmentError(""); }}>Chiudi</button>
       <small>Il Director conserva soltanto l’impronta del codice. Per reinstallare un PC già collegato occorre prima revocarlo.</small>
@@ -1004,6 +1050,16 @@ export default function App() {
       {aiSettingsMessage ? <div className="ai-settings-alert success">{aiSettingsMessage}</div> : null}
       <div className="ai-settings-actions"><button type="button" onClick={closeAISettings}>Annulla</button><button className="primary" disabled={aiSettingsBusy || !aiSettingsModel.trim()}>{aiSettingsBusy ? "Controllo…" : settingsManaged ? "Controlla connessione" : "Salva e controlla"}</button></div>
       <small>La verifica usa il provider selezionato. Nessun fallback automatico verso OpenAI.</small>
+    </form></div> : null}
+    {remoteOpen ? <div className="remote-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-settings-title"><form className="ai-settings-card" onSubmit={saveRemoteSettings}>
+      <div className="ai-settings-heading"><div><span>COLLEGAMENTO PC REMOTI</span><h2 id="remote-settings-title">Director ↔ Agent</h2><p>Il Mac apre una connessione cifrata in uscita. La dashboard e Fort Knox restano accessibili soltanto su questo Mac.</p></div><button type="button" aria-label="Chiudi collegamento remoto" onClick={() => setRemoteOpen(false)}>×</button></div>
+      <label>Indirizzo HTTPS assegnato al Director<input type="url" required value={remoteUrl} onChange={(event) => setRemoteUrl(event.target.value)} placeholder="https://director-studio.example.it" autoComplete="url" /></label>
+      <label>Token del tunnel<input type="password" required={!remoteStatus?.token_saved} value={remoteToken} onChange={(event) => setRemoteToken(event.target.value)} placeholder={remoteStatus?.token_saved ? "Token già protetto · inseriscilo solo per sostituirlo" : "Token fornito da Kreluna"} autoComplete="new-password" /></label>
+      <div className="ai-settings-note">Il token viene salvato separatamente con permessi locali protetti e non viene mai mostrato, registrato nei log o inviato all’IA.</div>
+      {remoteError ? <div className="ai-settings-alert error" role="alert">{remoteError}</div> : null}
+      {remoteMessage ? <div className="ai-settings-alert success">{remoteMessage}</div> : null}
+      <div className="ai-settings-actions"><button type="button" onClick={() => setRemoteOpen(false)}>Chiudi</button>{remoteStatus?.configured ? <button type="button" disabled={remoteBusy} onClick={() => void checkRemoteLink()}>Verifica</button> : null}<button className="primary" disabled={remoteBusy || !remoteUrl.trim() || (!remoteToken.trim() && !remoteStatus?.token_saved)}>{remoteBusy ? "Controllo…" : "Salva e collega"}</button></div>
+      <small>Il collegamento pubblico accetta soltanto Agent firmati: login, dashboard e documenti vengono rifiutati.</small>
     </form></div> : null}
     {vaultOpen ? <div className="vault-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-title"><div className={`vault-card ${vaultUnlocked ? "open" : "sealed"}`}>
       <div className="vault-heading"><div><span className="vault-eyebrow">KRELUNA FORT KNOX</span><h2 id="vault-title">{vaultUnlocked ? "Cassaforte digitale clienti" : "Fort Knox è chiuso"}</h2><p>{vaultUnlocked ? "Inserisci un cliente oppure importa un CSV. Ogni accesso è cifrato separatamente per lo studio e non viene inviato all’IA." : "Solo il titolare può aprire lo sportello. Il PIN viene verificato nel Director e non viene mai conservato in chiaro."}</p></div><button className="vault-close" aria-label="Chiudi Fort Knox" onClick={closeVault}>×</button></div>

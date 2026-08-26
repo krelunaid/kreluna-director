@@ -19,6 +19,9 @@ bash "$ROOT/scripts/lib/copy-app-tree.sh" "$APP"
 echo "Includo Python nel programma Windows (non serve installarlo)…"
 "$BUILD_PYTHON" "$ROOT/scripts/lib/bundle_python.py" windows-x64 "$APP/runtime"
 
+echo "Includo il collegamento sicuro per i PC remoti…"
+bash "$ROOT/scripts/lib/fetch-cloudflared.sh" windows-x64 "$APP/runtime/cloudflared.exe"
+
 cp "$ROOT/packaging/windows/Avvia.bat" "$APP/Avvia.bat"
 cp "$ROOT/packaging/windows/Avvia.vbs" "$APP/Avvia.vbs"
 cp "$ROOT/packaging/windows/Installa.ps1" "$OUT/Installa.ps1"

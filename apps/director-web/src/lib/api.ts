@@ -100,6 +100,17 @@ export type UpdateStatus = {
   published_at: string;
 };
 
+export type RemoteStatus = {
+  configured: boolean;
+  connector_available: boolean;
+  process_running: boolean;
+  connected: boolean;
+  state: "disabled" | "connector_missing" | "starting" | "connected" | "error";
+  detail: string;
+  public_url: string;
+  token_saved: boolean;
+};
+
 export type VaultCredential = {
   id: string;
   client_name: string;
@@ -276,6 +287,13 @@ export const api = {
     request<{ ok: boolean; state: "restarting"; version: string }>("/update/install", {
       method: "POST",
     }),
+  remoteStatus: (check = false) => request<RemoteStatus>(`/remote/status${check ? "?check=true" : ""}`),
+  configureRemote: (publicUrl: string, tunnelToken: string) =>
+    request<RemoteStatus>("/remote/configure", {
+      method: "POST",
+      body: JSON.stringify({ public_url: publicUrl, tunnel_token: tunnelToken }),
+    }),
+  restartRemote: () => request<RemoteStatus>("/remote/restart", { method: "POST" }),
   me: () => request<{ name: string; email: string; role: string; license_state: string }>("/me"),
   overview: () => request<Overview>("/overview"),
   aiProviders: () => request<{ selected: string; providers: AIProviderOption[] }>("/ai/providers"),
@@ -363,6 +381,8 @@ export const api = {
       enrollment_code: string;
       expires_at: string;
       single_use: true;
+      director_url: string;
+      remote_ready: boolean;
     }>(`/agents/${agentId}/enrollment`, { method: "POST" }),
   tasks: () => request<{ tasks: Task[] }>("/tasks"),
   approvals: () => request<{ approvals: Approval[] }>("/approvals"),

@@ -9,6 +9,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$DirectorUri = $null
+if (-not [Uri]::TryCreate($DirectorUrl, [UriKind]::Absolute, [ref]$DirectorUri)) {
+    throw "L'indirizzo del Director non e' valido."
+}
+$LocalDirector = $DirectorUri.Host -in @("127.0.0.1", "localhost", "::1")
+if ($DirectorUri.Scheme -ne "https" -and -not ($DirectorUri.Scheme -eq "http" -and $LocalDirector)) {
+    throw "Fuori da questo PC il Director deve usare un indirizzo HTTPS."
+}
+if (-not [string]::IsNullOrEmpty($DirectorUri.UserInfo) -or -not [string]::IsNullOrEmpty($DirectorUri.Query) -or -not [string]::IsNullOrEmpty($DirectorUri.Fragment) -or $DirectorUri.AbsolutePath -notin @("", "/")) {
+    throw "L'indirizzo del Director non e' valido."
+}
+$DirectorUrl = $DirectorUrl.TrimEnd("/")
 if (-not $EnrollCode.StartsWith("KRELUNA-ENROLL-") -or $EnrollCode.Length -lt 50 -or $EnrollCode.Length -gt 100) {
     throw "Usa il codice monouso generato dal Director."
 }

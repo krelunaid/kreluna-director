@@ -2,6 +2,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$Role,
   [string]$DisplayName = "",
+  [string]$DirectorUrl = "",
   [string]$EnrollCode = "",
   [string]$FattureTarget = ""
 )
@@ -17,7 +18,11 @@ $UrlFile = Join-Path $Here "director.url"
 if (-not (Test-Path $UrlFile)) {
   throw "Manca director.url. Scrivi dentro l'indirizzo del Director (es. http://192.168.1.10:8080)."
 }
-$DirectorUrl = (Get-Content $UrlFile -Raw).Trim().Split("`n")[0].Trim()
+$DefaultDirectorUrl = (Get-Content $UrlFile -Raw).Trim().Split("`n")[0].Trim()
+if (-not $DirectorUrl) {
+  $TypedDirectorUrl = (Read-Host "Indirizzo Director mostrato in Impostazioni/PC remoti [$DefaultDirectorUrl]").Trim()
+  $DirectorUrl = if ($TypedDirectorUrl) { $TypedDirectorUrl } else { $DefaultDirectorUrl }
+}
 if (-not $DirectorUrl) {
   throw "director.url e' vuoto. Metti l'indirizzo del Director."
 }
@@ -73,8 +78,8 @@ New-Item -ItemType Directory -Force -Path $Install | Out-Null
 if (Test-Path $App) { Remove-Item -Recurse -Force $App }
 New-Item -ItemType Directory -Force -Path $App | Out-Null
 Copy-Item -Path (Join-Path $Source "*") -Destination $App -Recurse -Force
-Copy-Item -Path $UrlFile -Destination (Join-Path $Install "director.url") -Force
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[IO.File]::WriteAllText((Join-Path $Install "director.url"), $DirectorUrl, $Utf8NoBom)
 [IO.File]::WriteAllText((Join-Path $Install "fatture.target"), $FattureTarget, $Utf8NoBom)
 $EnrollPath = Join-Path $Install "enrollment.once"
 [IO.File]::WriteAllText($EnrollPath, $EnrollCode, $Utf8NoBom)
