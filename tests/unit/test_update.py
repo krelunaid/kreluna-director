@@ -119,9 +119,18 @@ def test_sidebar_update_indicator_has_idle_and_available_states():
     assert "updateAvailable ? <strong>Aggiornamento</strong> : null" in source
     assert ".sidebar-update.available > .sidebar-update-dot" in styles
     assert "background: var(--red)" in styles
-    assert '"Installa ora"' in source
+    assert ">Installa ora<" in source
     assert "api.installUpdate()" in source
+    assert 'updateStatus.platform !== "macos"' not in source
     assert "15 * 60 * 1000" in source
+
+
+def test_dashboard_hides_the_upstream_ai_brand():
+    source = (ROOT / "apps" / "director-web" / "src" / "App.tsx").read_text()
+
+    dashboard = source[source.index("const identityAILabel") :]
+    assert "● IA" in dashboard
+    assert "provider-compact" not in dashboard
 
 
 def test_dashboard_refreshes_do_not_overlap():
@@ -140,3 +149,5 @@ def test_managed_ai_is_white_label_in_the_customer_interface():
     assert "Grok è incluso" not in source
     assert "non vengono inviati a Grok" not in source
     assert "La chiave xAI" not in source
+    assert "Codice di attivazione Kreluna" in source
+    assert "api.activateKreluna(aiSettingsKey)" in source

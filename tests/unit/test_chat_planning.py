@@ -143,6 +143,17 @@ async def test_without_a_key_reports_that_ai_is_not_configured():
 
 
 @pytest.mark.asyncio
+async def test_without_a_key_clear_local_commands_still_work():
+    plan = await plan_message("Apri Blocco Note e scrivi CIAO")
+
+    assert plan.ok
+    assert plan.source == "deterministic-offline"
+    assert plan.diagnostic and plan.diagnostic["code"] == "local_planner"
+    assert plan.tasks[0].capability == "notepad_write"
+    assert plan.tasks[0].args["text"] == "CIAO"
+
+
+@pytest.mark.asyncio
 async def test_managed_gateway_quota_error_is_explicit(monkeypatch):
     monkeypatch.setattr(settings, "kreluna_managed_ai_token", "kreluna_live_" + "A" * 43)
 

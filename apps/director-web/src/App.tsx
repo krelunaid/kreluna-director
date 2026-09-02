@@ -19,6 +19,15 @@ import {
 } from "./lib/api";
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
+type InvoiceChatDraft = {
+  capability: string;
+  account_name?: string | null;
+  client_name?: string | null;
+  description?: string | null;
+  net_eur?: number | null;
+  vat_rate?: number | null;
+  vat_note?: string | null;
+};
 type NavSection = "dashboard" | "agents" | "tasks" | "requests" | "errors" | "contracts" | "visure" | "vault" | "documents" | "settings";
 type RequestFilter = "all" | "active" | "errors" | "approvals";
 type LibraryCategory = "contract" | "document";
@@ -62,6 +71,15 @@ type WorkDraftPreview = {
   issues: string[];
   fields: WorkFieldPreview[];
   steps: string[];
+  customer_workflow?: {
+    search_first: boolean;
+    search_by: string[];
+    result_action: string;
+    create_only_if_missing: boolean;
+    create_path: string[];
+    required_create_fields: string[];
+    stop_before: string;
+  };
   credential_lookup: { requested: boolean; portals: string[]; source: string; secret_exposed: boolean };
 };
 
@@ -199,6 +217,7 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [chat, setChat] = useState<ChatItem[]>(INITIAL_CHAT);
+  const [invoiceChatDraft, setInvoiceChatDraft] = useState<InvoiceChatDraft | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
@@ -317,8 +336,41 @@ export default function App() {
       if (renewed) setToken(renewed.token, persistent);
       return refresh().catch(() => undefined);
     }).catch(() => { setToken(null); setReady(false); });
-    const timer = window.setInterval(() => refresh().catch(() => undefined), 2500);
+    const timer = window.setInterval(() => refresh().catch(() => undefined), 15_000);
     return () => window.clearInterval(timer);
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    let socket: WebSocket | null = null;
+    let reconnectTimer = 0;
+    let heartbeatTimer = 0;
+    let closed = false;
+
+    const connect = () => {
+      const config = api.dashboardSocketConfig();
+      if (!config || closed) return;
+      socket = new WebSocket(config.url, config.protocols);
+      socket.onopen = () => {
+        window.clearInterval(heartbeatTimer);
+        heartbeatTimer = window.setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send("ping");
+        }, 20_000);
+      };
+      socket.onmessage = () => { void refresh().catch(() => undefined); };
+      socket.onclose = () => {
+        window.clearInterval(heartbeatTimer);
+        if (!closed) reconnectTimer = window.setTimeout(connect, 1_500);
+      };
+    };
+
+    connect();
+    return () => {
+      closed = true;
+      window.clearTimeout(reconnectTimer);
+      window.clearInterval(heartbeatTimer);
+      socket?.close();
+    };
   }, [ready]);
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [chat, busy]);
@@ -356,14 +408,29 @@ export default function App() {
     try {
       const result = await api.chat(message, history);
       setChat((items) => [...items, { role: "director", text: result.summary + (result.deny_reason ? `\n${result.deny_reason}` : ""), deny: result.denied, source: result.source }]);
-      setOrb("talk"); window.clearTimeout(talkTimer.current); talkTimer.current = window.setTimeout(() => setOrb("listen"), 4200); await refresh();
+      if (result.pending?.capability === "invoice_prepare_demo") setInvoiceChatDraft(result.pending);
+      else if (result.tasks.length || result.denied) setInvoiceChatDraft(null);
+      setOrb("talk"); window.clearTimeout(talkTimer.current); talkTimer.current = window.setTimeout(() => setOrb("listen"), 4200);
+      await refresh().catch(() => undefined);
     } catch (err) {
       setChat((items) => [...items, { role: "director", text: err instanceof Error ? err.message : "Errore Director", deny: true }]); setOrb("listen");
     } finally { setBusy(false); }
   }
 
+  async function submitInvoiceChatDraft() {
+    const value = invoiceChatDraft;
+    if (!value?.client_name || !value.description || value.net_eur == null) return;
+    const vat = (value.vat_rate ?? 0.22) * 100;
+    await api.resetChat().catch(() => undefined);
+    await send(
+      `Prepara una fattura demo per ${value.client_name}, ${value.description}, `
+      + `imponibile ${value.net_eur} euro, IVA ${vat}%`,
+    );
+  }
+
   function newRequest() {
     setChat(INITIAL_CHAT);
+    setInvoiceChatDraft(null);
     setDraft("");
     setOrb("listen");
     void api.resetChat().catch(() => undefined);
@@ -731,7 +798,9 @@ export default function App() {
       const option = aiProviders.find((item) => item.provider === aiSettingsProvider);
       const result = option?.managed
         ? await api.chooseAIProvider(aiSettingsProvider)
-        : await api.configureAI(aiSettingsProvider, aiSettingsModel, aiSettingsKey);
+        : aiSettingsProvider === "grok"
+          ? await api.activateKreluna(aiSettingsKey)
+          : await api.configureAI(aiSettingsProvider, aiSettingsModel, aiSettingsKey);
       setAISettingsKey("");
       if (result.connected) setAISettingsMessage(`${result.label} è collegato e pronto.`);
       else setAISettingsError(result.detail);
@@ -830,10 +899,6 @@ export default function App() {
 
   async function installUpdate() {
     if (!updateStatus || updateInstallState !== "idle") return;
-    if (updateStatus.platform !== "macos") {
-      downloadUpdateManually();
-      return;
-    }
     setUpdateInstallError("");
     setUpdateInstallState("installing");
     try {
@@ -867,9 +932,7 @@ export default function App() {
   const settingsProvider = aiProviders.find((item) => item.provider === aiSettingsProvider);
   const settingsManaged = Boolean(settingsProvider?.managed);
   const aiUnavailable = aiManaged ? "licenza non attiva" : "da configurare";
-  const identityAILabel = aiManaged
-    ? `IA Kreluna · ${aiConnected ? "attiva" : aiUnavailable}`
-    : `IA: ${providerLabel}${overview?.ai_model ? ` · ${overview.ai_model}` : ""}${aiConnected ? "" : ` · ${aiUnavailable}`}`;
+  const identityAILabel = `● IA ${aiConnected ? "attiva" : aiUnavailable}`;
   const updateAvailable = Boolean(updateStatus?.available);
   const activeTasks = tasks.filter((item) => ["queued", "assigned", "running", "waiting_approval"].includes(item.status));
   const contractTasks = tasks.filter((item) => item.capability.includes("contratt") || String(item.args.portal || "").toLowerCase().includes("contratt"));
@@ -934,7 +997,7 @@ export default function App() {
     if (activeNav === "documents") return <section className="workspace-page" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>ARCHIVIO OPERATIVO</span><h2 id="workspace-title">DOCUMENTI</h2><p>Archivio cifrato per PDF, immagini, Word, Excel e note dello studio.</p></div><div className="workspace-heading-actions"><button onClick={() => newLibraryText("document")}>＋ Nuovo documento</button><button onClick={() => chooseLibraryFile("document")}>↑ Carica file</button><button onClick={() => openComposer("Controlla i documenti mancanti per il cliente ")}>✦ Chiedi a Kreluna</button></div></div>{libraryRows("document")}{documentTasks.length ? <details className="library-linked-tasks"><summary>Prove e controlli dei task ({documentTasks.length})</summary>{taskRows(documentTasks, "")}</details> : null}</section>;
 
     return <section className="workspace-page settings-workspace" aria-labelledby="workspace-title"><div className="workspace-heading"><div><span>CONTROLLO DEL PROGRAMMA</span><h2 id="workspace-title">IMPOSTAZIONI</h2><p>Connessione IA, aggiornamenti, sessione e protezioni operative.</p></div><button onClick={() => void refresh()}>↻ Aggiorna</button></div><div className="settings-grid">
-      <article><span>INTELLIGENZA ARTIFICIALE</span><h3>{providerLabel}</h3><p>{overview?.ai_detail || (aiConnected ? "Collegata e pronta." : "Servizio non disponibile.")}</p><div className={`settings-state ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "Da controllare"}</div><button onClick={() => openAISettings()}>Configura e verifica</button></article>
+      <article><span>INTELLIGENZA ARTIFICIALE</span><h3>IA Kreluna</h3><p>{aiConnected ? "Collegata e pronta." : "Servizio non disponibile."}</p><div className={`settings-state ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "Da controllare"}</div><button onClick={() => openAISettings()}>Configura e verifica</button></article>
       <article><span>AGGIORNAMENTI</span><h3>Kreluna Director v{version}</h3><p>{updateAvailable ? `È disponibile la versione ${updateStatus?.latest_version}.` : "Il programma è aggiornato."}</p><div className={`settings-state ${updateAvailable ? "warning" : "connected"}`}>● {updateAvailable ? "Aggiornamento disponibile" : "Versione corrente"}</div><button disabled={!updateAvailable} onClick={() => setUpdateOpen(true)}>{updateAvailable ? "Installa aggiornamento" : "Nessun aggiornamento"}</button></article>
       <article><span>PC REMOTI</span><h3>{remoteStatus?.connected ? "Collegamento attivo" : "Collegamento da configurare"}</h3><p>{remoteStatus?.detail || "Collega in sicurezza gli Agent Windows e Mac senza aprire porte sul router."}</p><div className={`settings-state ${remoteStatus?.connected ? "connected" : "warning"}`}>● {remoteStatus?.connected ? "PC raggiungibili" : remoteStatus?.state === "starting" ? "Connessione in avvio" : "Non collegato"}</div><button onClick={openRemoteSettings}>{remoteStatus?.configured ? "Verifica o modifica" : "Configura collegamento"}</button></article>
       <article><span>SESSIONE</span><h3>{name}</h3><p>Accesso protetto su questo Mac. La password non viene conservata nell’app.</p><div className="settings-state connected">● Sessione attiva</div><button onClick={() => { setToken(null); setReady(false); }}>Esci dallo studio</button></article>
@@ -1018,11 +1081,9 @@ export default function App() {
 
         <div className="work-grid">
           <section className="kreluna-panel" id="chat">
-            <div className="kreluna-heading"><div className={`orb chat-orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div><h2>Kreluna</h2><span className={`ai-active ${aiConnected ? "connected" : "warning"}`}>{aiConnected ? "IA attiva" : "IA non disponibile"}</span>
-              <label className="provider-compact" id="ai-settings"><select value={overview?.ai_provider || "grok"} onChange={async (event) => { await api.chooseAIProvider(event.target.value); await refresh(); }} aria-label="Provider IA">{aiProviders.map((item) => <option key={item.provider} value={item.provider}>{item.label}{item.configured ? "" : item.managed ? " · licenza non attiva" : " · da configurare"}</option>)}</select></label>
-            </div>
+            <div className="kreluna-heading"><div className={`orb chat-orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div><h2>Kreluna</h2><span className={`ai-active ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "IA non disponibile"}</span></div>
             {!aiConnected ? <button className="ai-diagnostic" title={overview?.ai_detail || "Configurazione incompleta"} onClick={() => openAISettings()}><strong>{providerLabel}</strong>: {overview?.ai_detail || "servizio non disponibile"}. {aiManaged ? "Controlla la licenza." : "Configura ora."}</button> : null}
-            <div className="chat-log" ref={logRef}>{chat.map((item, index) => <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}><strong>{item.role === "user" ? "Tu" : `Kreluna${chatSource(item)}`}</strong><div>{item.text}</div></div>)}{busy ? <div className="typing"><i /><i /><i /></div> : null}</div>
+            <div className="chat-log" ref={logRef}>{chat.map((item, index) => <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}><strong>{item.role === "user" ? "Tu" : `Kreluna${chatSource(item)}`}</strong><div>{item.text}</div></div>)}{invoiceChatDraft ? <InvoiceChatCard draft={invoiceChatDraft} busy={busy} onChange={setInvoiceChatDraft} onSubmit={() => void submitInvoiceChatDraft()} /> : null}{busy ? <div className="typing"><i /><i /><i /></div> : null}</div>
             <div className="chips">{SUGGESTIONS.map((item) => <button key={item.full} className="chip" onClick={() => void send(item.full)} disabled={busy}>{item.short}</button>)}</div>
             <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(draft); }}><span className="mic">♩</span><textarea value={draft} aria-label="Scrivi una richiesta a Kreluna" placeholder="Scrivi qui la tua richiesta…" onChange={(event) => setDraft(event.target.value)} /><button className="send-button" disabled={busy} aria-label="Invia">➤</button></form>
           </section>
@@ -1040,7 +1101,7 @@ export default function App() {
       </main>
     </div>
 
-    <footer className="cockpit-footer"><span>◉&nbsp; Sistema: macOS</span><span>▣&nbsp; Host: questo Mac</span><span>♙&nbsp; Utente: {name}</span><span>◷&nbsp; Sessione attiva</span><span className={aiConnected ? "healthy" : "warning"}>●&nbsp; {aiConnected ? "Tutti i sistemi operativi" : `${providerLabel}: ${aiUnavailable}`}</span></footer>
+    <footer className="cockpit-footer"><span>◉&nbsp; Sistema: macOS</span><span>▣&nbsp; Host: questo Mac</span><span>♙&nbsp; Utente: {name}</span><span>◷&nbsp; Sessione attiva</span><span className={aiConnected ? "healthy" : "warning"}>●&nbsp; {aiConnected ? "IA attiva" : `IA ${aiUnavailable}`}</span></footer>
     {confirmKill ? <div className="kill-confirm" role="dialog" aria-modal="true" aria-label="Conferma stop"><div><h2>Fermare tutti gli Agent?</h2><p>I lavori in corso torneranno in attesa.</p><button onClick={() => setConfirmKill(false)}>Annulla</button><button className="danger" onClick={async () => { await api.kill(); setConfirmKill(false); await refresh(); }}>Conferma stop</button></div></div> : null}
     {enrollment || enrollmentError ? <div className="enrollment-dialog" role="dialog" aria-modal="true" aria-labelledby="enrollment-title"><div className="enrollment-card">
       <span>INSTALLAZIONE AGENT</span><h2 id="enrollment-title">{enrollment?.displayName || "Codice non disponibile"}</h2>
@@ -1050,13 +1111,13 @@ export default function App() {
       <small>Il Director conserva soltanto l’impronta del codice. Per reinstallare un PC già collegato occorre prima revocarlo.</small>
     </div></div> : null}
     {aiSettingsOpen ? <div className="ai-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title"><form className="ai-settings-card" onSubmit={saveAISettings}>
-      <div className="ai-settings-heading"><div><span>CONFIGURAZIONE IA</span><h2 id="ai-settings-title">{settingsManaged ? "IA Kreluna" : "Collega il provider al Director"}</h2><p>{settingsManaged ? "Il servizio IA è gestito e protetto da Kreluna. Questa app usa soltanto la sua licenza revocabile." : "La chiave viene cifrata sul computer e non viene mai mostrata nuovamente."}</p></div><button type="button" aria-label="Chiudi configurazione IA" onClick={closeAISettings}>×</button></div>
+      <div className="ai-settings-heading"><div><span>CONFIGURAZIONE IA</span><h2 id="ai-settings-title">IA Kreluna</h2><p>{settingsManaged ? "Il servizio IA è gestito e protetto da Kreluna. Questa app usa soltanto la sua licenza revocabile." : aiSettingsProvider === "grok" ? "Inserisci il codice consegnato da Kreluna: non servono account tecnici né chiavi del fornitore IA." : "La chiave viene cifrata sul computer e non viene mai mostrata nuovamente."}</p></div><button type="button" aria-label="Chiudi configurazione IA" onClick={closeAISettings}>×</button></div>
       <label>Provider<select value={aiSettingsProvider} onChange={(event) => changeAISettingsProvider(event.target.value as AIProviderOption["provider"])}>{aiProviders.map((item) => <option key={item.provider} value={item.provider}>{item.label}</option>)}</select></label>
-      {settingsManaged ? <div className="ai-settings-note">Nessuna chiave API o configurazione tecnica da inserire. Il motore IA è controllato dalla licenza Kreluna.</div> : <label>Modello<input value={aiSettingsModel} onChange={(event) => setAISettingsModel(event.target.value)} placeholder="Nome del modello" autoComplete="off" /></label>}
-      {!settingsManaged && aiSettingsProvider !== "ollama" ? <label>Chiave API<input type="password" value={aiSettingsKey} onChange={(event) => setAISettingsKey(event.target.value)} placeholder={settingsProvider?.key_saved ? "Chiave già salvata · lascia vuoto per conservarla" : "Incolla la chiave API"} autoComplete="new-password" /></label> : !settingsManaged ? <div className="ai-settings-note">Ollama non usa una chiave API; deve essere attivo su questo computer.</div> : null}
+      {settingsManaged ? <div className="ai-settings-note">Nessuna chiave API o configurazione tecnica da inserire. Il motore IA è controllato dalla licenza Kreluna.</div> : aiSettingsProvider !== "grok" ? <label>Modello<input value={aiSettingsModel} onChange={(event) => setAISettingsModel(event.target.value)} placeholder="Nome del modello" autoComplete="off" /></label> : <div className="ai-settings-note">Motore IA configurato automaticamente da Kreluna.</div>}
+      {!settingsManaged && aiSettingsProvider !== "ollama" ? <label>{aiSettingsProvider === "grok" ? "Codice di attivazione Kreluna" : "Chiave API"}<input type="password" value={aiSettingsKey} onChange={(event) => setAISettingsKey(event.target.value)} placeholder={aiSettingsProvider === "grok" ? "kreluna_live_…" : settingsProvider?.key_saved ? "Chiave già salvata · lascia vuoto per conservarla" : "Incolla la chiave API"} autoComplete="new-password" /></label> : !settingsManaged ? <div className="ai-settings-note">Ollama non usa una chiave API; deve essere attivo su questo computer.</div> : null}
       {aiSettingsError ? <div className="ai-settings-alert error" role="alert">{aiSettingsError}</div> : null}
       {aiSettingsMessage ? <div className="ai-settings-alert success">{aiSettingsMessage}</div> : null}
-      <div className="ai-settings-actions"><button type="button" onClick={closeAISettings}>Annulla</button><button className="primary" disabled={aiSettingsBusy || !aiSettingsModel.trim()}>{aiSettingsBusy ? "Controllo…" : settingsManaged ? "Controlla connessione" : "Salva e controlla"}</button></div>
+      <div className="ai-settings-actions"><button type="button" onClick={closeAISettings}>Annulla</button><button className="primary" disabled={aiSettingsBusy || !aiSettingsModel.trim() || (!settingsManaged && aiSettingsProvider === "grok" && !aiSettingsKey.trim())}>{aiSettingsBusy ? "Controllo…" : settingsManaged ? "Controlla connessione" : aiSettingsProvider === "grok" ? "Attiva IA" : "Salva e controlla"}</button></div>
       <small>La verifica usa il provider selezionato. Nessun fallback automatico verso OpenAI.</small>
     </form></div> : null}
     {remoteOpen ? <div className="remote-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-settings-title"><form className="ai-settings-card" onSubmit={saveRemoteSettings}>
@@ -1133,10 +1194,10 @@ export default function App() {
       {updateInstallError ? <div className="update-install-error" role="alert">{updateInstallError}</div> : null}
       <div className="update-actions">
         <button onClick={remindUpdateLater} disabled={updateInstallState !== "idle"}>Ricordamelo dopo</button>
-        <button className="primary" onClick={() => void installUpdate()} disabled={updateInstallState !== "idle"}>{updateStatus.platform === "macos" ? "Installa ora" : "Scarica aggiornamento"}</button>
+        <button className="primary" onClick={() => void installUpdate()} disabled={updateInstallState !== "idle"}>Installa ora</button>
         {updateInstallError ? <button onClick={downloadUpdateManually}>Scarica manualmente</button> : null}
       </div>
-      <small>Su Mac l’app viene verificata, sostituita in Applicazioni e riaperta automaticamente.</small>
+      <small>Su Mac e Windows il pacchetto viene verificato, installato e riaperto automaticamente.</small>
     </div></div> : null}
     {lightbox ? <button className="lightbox" onClick={() => setLightbox(null)}><img src={lightbox} alt="Schermata del PC" /></button> : null}
   </div>;
@@ -1152,6 +1213,21 @@ function NavButton({ active = false, icon, label, count, onClick }: { active?: b
 
 function Metric({ icon, label, value, note, tone }: { icon: string; label: string; value: string | number; note: string; tone: string }) {
   return <div className={`metric ${tone}`}><div><span className="metric-icon">{icon}</span><strong>{label}</strong></div><b>{value}</b><small>{note}</small></div>;
+}
+
+function InvoiceChatCard({ draft, busy, onChange, onSubmit }: { draft: InvoiceChatDraft; busy: boolean; onChange: (value: InvoiceChatDraft) => void; onSubmit: () => void }) {
+  const ready = Boolean(draft.client_name?.trim() && draft.description?.trim() && draft.net_eur != null && draft.net_eur > 0);
+  return <section className="invoice-chat-card editable" aria-label="Dati della fattura in preparazione">
+    <div><strong>FATTURA IN PREPARAZIONE</strong><span>Si completa con i messaggi della chat</span></div>
+    <div className="invoice-chat-fields">
+      <label>Cliente<input value={draft.client_name || ""} onChange={(event) => onChange({ ...draft, client_name: event.target.value })} placeholder="Nome o ragione sociale" /></label>
+      <label>Prestazione<input value={draft.description || ""} onChange={(event) => onChange({ ...draft, description: event.target.value })} placeholder="Descrizione del lavoro" /></label>
+      <label>Imponibile (€)<input type="number" min="0.01" step="0.01" value={draft.net_eur ?? ""} onChange={(event) => onChange({ ...draft, net_eur: event.target.value === "" ? null : Number(event.target.value) })} placeholder="0,00" /></label>
+      <label>IVA (%)<input type="number" min="0" max="100" step="0.01" value={(draft.vat_rate ?? 0.22) * 100} onChange={(event) => onChange({ ...draft, vat_rate: Number(event.target.value) / 100, vat_note: "" })} /></label>
+    </div>
+    <button type="button" disabled={!ready || busy} onClick={onSubmit}>{busy ? "Preparazione…" : "Crea bozza fattura"}</button>
+    <small>Cliente e prestazione restano campi separati · nessun invio automatico</small>
+  </section>;
 }
 
 function EvidenceStrip({ ids, onOpen }: { ids: string[]; onOpen: (src: string) => void }) {
@@ -1191,6 +1267,7 @@ function WorkPreviewDialog({ task, onClose }: { task: Task; onClose: () => void 
     <div className="library-dialog-heading"><div><span>SCHEDA OPERATIVA · SOLO BOZZA</span><h2 id="work-preview-title">{draft.title}</h2><p>{draft.client_name} · {draft.program}</p></div><button type="button" aria-label="Chiudi scheda" onClick={onClose}>×</button></div>
     <div className={`f24-state ${draft.ready_for_review ? "ready" : "warning"}`}><strong>{draft.ready_for_review ? "Scheda validata" : "Dati da completare"}</strong><span>{draft.ready_for_review ? "Pronta per il controllo della persona" : draft.issues.join(" · ")}</span></div>
     <div className="workflow-fields">{draft.fields.map((field) => <div key={field.key}><span>{field.label}{field.required ? " *" : ""}</span><strong>{String(field.value || "Da indicare")}</strong><small>Fonte: {field.source}</small></div>)}</div>
+    {draft.customer_workflow && <div className="workflow-route"><strong>Cliente: cerca prima, crea solo se manca</strong><ol><li>Cerca per {draft.customer_workflow.search_by.join(", ")}</li><li>Se trovi una sola corrispondenza verificata, usa {draft.customer_workflow.result_action}</li><li>Se non esiste: {draft.customer_workflow.create_path.join(" › ")} ({draft.customer_workflow.required_create_fields.join(", ")})</li><li>Arresto obbligatorio prima di {draft.customer_workflow.stop_before}</li></ol></div>}
     <div className="workflow-route"><strong>Percorso controllato</strong><ol>{draft.steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ol></div>
     <div className="workflow-vault"><strong>Fort Knox</strong><span>{draft.credential_lookup.requested ? `Accesso ordinario richiesto per ${draft.credential_lookup.portals.join(", ")}; il segreto non viene mostrato.` : `Accesso disponibile solo quando richiesto dal percorso: ${draft.credential_lookup.portals.join(", ")}.`}</span></div>
     <div className="workspace-safety">✓ Nessun invio, firma, pagamento o download definitivo · SPID/CNS/CIE e OTP restano alla persona</div>

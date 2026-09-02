@@ -16,6 +16,9 @@ Gli Agent sono programmi separati e si aggiungono in seguito, uno per computer.
 2. Trascina `Kreluna Director.app` sulla cartella **Applicazioni**
 3. Finestra gialla: **Fine** (non Cestino) → Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**
 
+Per cancellare completamente programma e dati, apri lo ZIP e avvia
+**Disinstalla Kreluna.command**; dopo la conferma sposta tutto nel Cestino.
+
 Dettagli: `docs/MAC.md`.
 
 ## Windows (PC)
@@ -83,12 +86,12 @@ un errore esplicito e lascia disponibile **Scarica manualmente**.
 
 ### Windows
 
-1. **Chiudi** Kreluna
-2. Scarica e apri lo zip nuovo
-3. Avvia `Installa.bat`
-4. Riapri Kreluna
+1. Quando compare il pallino rosso, premi **Aggiornamento**
+2. Premi **Installa ora**
+3. Kreluna verifica lo ZIP ufficiale, aggiorna il programma e si riapre
 
-Il programma viene sostituito. **I dati restano.**
+Se il PC impedisce l'installazione automatica, resta disponibile **Scarica manualmente**.
+Il programma viene sostituito. **I dati, i documenti e la configurazione IA restano.**
 
 Ricreare gli zip:
 

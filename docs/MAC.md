@@ -19,9 +19,22 @@ Su macOS nuovo la finestra gialla ha solo **Sposta nel Cestino** e **Fine**. Non
 
 ## Accesso
 
-- Email: `andrea@studio.demo`
-- Password: `demo`
+- Al primo avvio Kreluna mostra una sola volta email e password personali casuali
+- Conservale in un posto sicuro: il pacchetto non contiene password demo
 
 ## Aggiornamento
 
-Chiudi Kreluna, trascina di nuovo l’app in Applicazioni. I dati restano.
+Quando compare il pallino rosso, premi **Aggiornamento → Installa ora**. Kreluna
+verifica il pacchetto ufficiale, sostituisce l'app e si riapre. I dati restano.
+
+## Disinstallazione completa
+
+Apri lo ZIP originale e fai doppio clic su **Disinstalla Kreluna.command**. Dopo una
+conferma esplicita vengono spostati nel Cestino:
+
+- `/Applications/Kreluna Director.app`
+- database, documenti, accessi cifrati e chiave IA
+- cache e preferenze locali del Director
+
+Per rendere definitiva la cancellazione, svuota il Cestino. Gli Agent restano installati
+perché sono applicazioni separate e possono trovarsi su altri computer.

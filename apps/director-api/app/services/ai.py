@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import tempfile
 import time
 from binascii import Error as BinasciiError
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -18,6 +21,64 @@ from app.models import AIProviderCredential, AISelection, utcnow
 _HEALTH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 HEALTH_CACHE_SECONDS = 30
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}")
+MANAGED_LICENSE_PATTERN = re.compile(r"kreluna_live_[A-Za-z0-9_-]{40,80}")
+
+
+def managed_license_config(activation_code: str) -> AIProviderConfig:
+    """Build the white-label gateway configuration without exposing an upstream key."""
+
+    code = activation_code.strip()
+    if not MANAGED_LICENSE_PATTERN.fullmatch(code):
+        raise ValueError("Codice di attivazione Kreluna non valido")
+    return AIProviderConfig(
+        provider="grok",
+        label="IA Kreluna",
+        base_url=settings.kreluna_managed_ai_url.strip(),
+        api_key=code,
+        model=settings.kreluna_managed_ai_model.strip(),
+        managed=True,
+    )
+
+
+def persist_managed_license(activation_code: str) -> Path:
+    """Persist a revocable per-customer license outside the signed application bundle."""
+
+    config = managed_license_config(activation_code)
+    configured_support = os.environ.get("KRELUNA_SUPPORT_DIR", "").strip()
+    if not configured_support:
+        raise ValueError("L'attivazione è disponibile nell'app Kreluna installata")
+    support_dir = Path(configured_support).expanduser()
+    support_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    destination = support_dir / "managed_ai.token"
+    temporary_name = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=support_dir,
+            prefix=".managed_ai.",
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+            os.chmod(temporary_name, 0o600)
+            temporary.write(config.api_key + "\n")
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_name, destination)
+        destination.chmod(0o600)
+    finally:
+        if temporary_name:
+            try:
+                Path(temporary_name).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    settings.kreluna_managed_ai_token = config.api_key
+    settings.kreluna_grok_api_key = ""
+    if settings.selected_ai_provider == "grok":
+        settings.kreluna_llm_api_key = ""
+    _HEALTH_CACHE.clear()
+    return destination
 
 
 async def selected_provider(session: AsyncSession, tenant_id: str) -> str:

@@ -21,6 +21,8 @@ class Portal(BaseModel):
     login_note: str = ""
     configured: bool = True
     app_path: str = ""
+    customer_search_fields: dict[str, str] = Field(default_factory=dict)
+    customer_create_fields: dict[str, str] = Field(default_factory=dict)
     invoice_fields: dict[str, str] = Field(default_factory=dict)
 
 

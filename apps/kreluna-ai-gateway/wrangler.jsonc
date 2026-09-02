@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "workers_dev": true,
   "preview_urls": false,
-  "compatibility_date": "2026-08-25",
+  "compatibility_date": "2026-08-27",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "production",

@@ -19,12 +19,18 @@ L’app va in `%LOCALAPPDATA%\KrelunaDirector` (cartella utente, senza amministr
 ## Accesso
 
 - Indirizzo (si apre da sola): `http://127.0.0.1:8080`
-- Email: `andrea@studio.demo`
-- Password: `demo`
+- Al primo avvio Kreluna mostra una sola volta email e password personali casuali
+- Conservale in un posto sicuro: il pacchetto non contiene password demo
 
 ## Aggiornamento (già installata)
 
-Chiudi Kreluna, poi di nuovo **Installa.bat** sullo zip nuovo. Sostituisce il programma, lascia la cartella `data`.
+Quando compare il pallino rosso sotto **Impostazioni**, premi **Aggiornamento** e poi
+**Installa ora**. Kreluna scarica la release ufficiale, verifica l'impronta SHA-256,
+sostituisce il programma e si riapre. Database, documenti, configurazione e chiave IA
+restano nella cartella dati locale.
+
+Se l'aggiornamento automatico non riesce, usa **Scarica manualmente**, chiudi Kreluna
+e avvia `Installa.bat` dal nuovo ZIP.
 
 ## Agent su un altro PC dello studio (programma a parte)
 

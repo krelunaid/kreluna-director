@@ -199,6 +199,7 @@ def validate_update_archive(archive: Path) -> None:
                     "Applicazioni",
                     "1-SE-DICE-CESTINO.txt",
                     "Apri-me.html",
+                    "Disinstalla Kreluna.command",
                     "LEGGIMI-MAC.txt",
                 }:
                     raise MacUpdateError("Il pacchetto contiene file non previsti.")

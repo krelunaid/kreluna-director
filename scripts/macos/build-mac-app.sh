@@ -65,6 +65,8 @@ file "$APP/Contents/Resources/cloudflared" | grep -q 'arm64'
 cp "$ROOT/packaging/macos/LEGGIMI-MAC.txt" "$BUILD_OUT/LEGGIMI-MAC.txt"
 cp "$ROOT/packaging/macos/1-SE-DICE-CESTINO.txt" "$BUILD_OUT/1-SE-DICE-CESTINO.txt"
 cp "$ROOT/packaging/macos/Apri-me.html" "$BUILD_OUT/Apri-me.html"
+cp "$ROOT/packaging/macos/Disinstalla Kreluna.command" "$BUILD_OUT/Disinstalla Kreluna.command"
+chmod +x "$BUILD_OUT/Disinstalla Kreluna.command"
 ln -sfn /Applications "$BUILD_OUT/Applicazioni"
 
 xattr -cr "$APP" >/dev/null 2>&1 || true
@@ -79,6 +81,7 @@ echo "Firmo il pacchetto Mac per il controllo dell'aggiornamento…"
     "Applicazioni" \
     "1-SE-DICE-CESTINO.txt" \
     "Apri-me.html" \
+    "Disinstalla Kreluna.command" \
     "LEGGIMI-MAC.txt"
 )
 cp "$BUILD_OUT/Kreluna-Director-Mac.zip" "$OUT/Kreluna-Director-Mac.zip"

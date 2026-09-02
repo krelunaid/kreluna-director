@@ -77,6 +77,23 @@ def test_invoice_target_can_be_overridden_without_editing_code(monkeypatch):
     assert target.url == "https://fatture.example.it/nuova"
 
 
+def test_fatture_portal_describes_customer_search_and_create_fields():
+    target = portal_for_key("fatture-webdesk")
+
+    assert target is not None
+    assert {"filter_type", "query", "result_rows", "access_button"} <= set(
+        target.customer_search_fields
+    )
+    assert {
+        "customer_type",
+        "tax_code",
+        "business_name",
+        "legal_address",
+        "recipient_code",
+    } <= set(target.customer_create_fields)
+    assert target.customer_create_fields["save_button"] == ""
+
+
 def test_invoice_target_can_be_read_from_the_windows_installer_file(monkeypatch, tmp_path):
     target_file = tmp_path / "fatture.target"
     target_file.write_text("https://fatture.example.it/nuova", encoding="utf-8")

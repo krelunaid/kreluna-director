@@ -193,6 +193,17 @@ export function setToken(value: string | null, persistent = true) {
   (persistent ? localStorage : sessionStorage).setItem(TOKEN_KEY, value);
 }
 
+function dashboardSocketConfig(): { url: string; protocols: string[] } | null {
+  const current = token();
+  if (!current) return null;
+  const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const encoded = window.btoa(current).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return {
+    url: `${scheme}//${window.location.host}/ws/dashboard`,
+    protocols: ["kreluna-dashboard", `kreluna-session.${encoded}`],
+  };
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
@@ -209,6 +220,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       /* ignore */
     }
     throw new Error(detail);
+  }
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error(`Il servizio ${path} ha restituito una risposta non valida. Ricarica la pagina.`);
   }
   return response.json() as Promise<T>;
 }
@@ -273,6 +288,7 @@ async function uploadLibraryDocument(
 }
 
 export const api = {
+  dashboardSocketConfig,
   login: (email: string, password: string, rememberDevice = true) =>
     request<{ token: string; expires_in: number; user: { name: string; email: string; role: string } }>("/auth/login", {
       method: "POST",
@@ -384,6 +400,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ provider, model, api_key: apiKey || null }),
     }),
+  activateKreluna: (activationCode: string) =>
+    request<AIHealth>("/ai/activate", {
+      method: "POST",
+      body: JSON.stringify({ activation_code: activationCode }),
+    }),
   agents: () => request<{ agents: Agent[] }>("/agents"),
   issueAgentEnrollment: (agentId: string) =>
     request<{
@@ -404,6 +425,15 @@ export const api = {
       deny_reason?: string;
       source?: string;
       diagnostic?: { code: string; detail: string } | null;
+      pending?: {
+        capability: string;
+        account_name?: string | null;
+        client_name?: string | null;
+        description?: string | null;
+        net_eur?: number | null;
+        vat_rate?: number | null;
+        vat_note?: string | null;
+      } | null;
       tasks: Task[];
     }>(
       "/chat",
