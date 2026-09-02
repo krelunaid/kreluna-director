@@ -434,6 +434,11 @@ export const api = {
         net_eur?: number | null;
         vat_rate?: number | null;
         vat_note?: string | null;
+        vat_treatment?: "standard" | "intent_declaration";
+        intent_protocol?: string;
+        intent_progressive?: string;
+        intent_year?: string;
+        lines?: Array<{ description: string; quantity: number; unit_net_eur: number | null; vat_rate: number }>;
       } | null;
       tasks: Task[];
     }>(

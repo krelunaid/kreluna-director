@@ -20,9 +20,10 @@ def create_draft(
     *,
     account_name: str = "",
     vat_note: str = "",
+    vat_eur: float | None = None,
 ) -> InvoiceDraft:
     net = money_cents(net_eur)
-    vat = round(net * vat_rate)
+    vat = money_cents(vat_eur) if vat_eur is not None else round(net * vat_rate)
     return InvoiceDraft(
         id=new_id(),
         tenant_id=tenant_id,

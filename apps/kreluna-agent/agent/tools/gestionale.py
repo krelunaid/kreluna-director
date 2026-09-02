@@ -121,6 +121,7 @@ def show_invoice_on_this_mac(
     account_name: str = "",
     vat_rate: float = 0.22,
     vat_note: str = "",
+    lines: list[dict] | None = None,
     register_process: Callable[[subprocess.Popen], None] | None = None,
 ) -> bool:
     if sys.platform != "darwin":
@@ -136,6 +137,7 @@ def show_invoice_on_this_mac(
             "net_eur": net_eur,
             "vat_rate": vat_rate,
             "vat_note": vat_note,
+            "lines": lines or [],
         },
         ensure_ascii=False,
     )
@@ -161,17 +163,23 @@ def fill_invoice_on_pc(
     net_eur: float,
     vat_rate: float = 0.22,
     vat_note: str = "",
+    lines: list[dict] | None = None,
     status: str = "draft",
     cancel_check: Callable[[], None] | None = None,
     register_process: Callable[[subprocess.Popen], None] | None = None,
 ) -> list[dict]:
     if cancel_check is not None:
         cancel_check()
-    vat = round(net_eur * vat_rate, 2)
+    detail_lines = lines or []
+    vat = round(
+        sum(float(line["quantity"]) * float(line["unit_net_eur"]) * float(line["vat_rate"]) for line in detail_lines),
+        2,
+    ) if detail_lines else round(net_eur * vat_rate, 2)
     total = round(net_eur + vat, 2)
     net_label = f"€ {net_eur:,.2f}"
     vat_label = f"€ {vat:,.2f}"
-    vat_caption = f"IVA {vat_rate * 100:g}%"
+    rates = {float(line["vat_rate"]) for line in detail_lines}
+    vat_caption = "IVA per riga" if len(rates) > 1 else f"IVA {(next(iter(rates)) if rates else vat_rate) * 100:g}%"
     total_label = f"€ {total:,.2f}"
     opened = show_invoice_on_this_mac(
         account_name=account_name,
@@ -180,6 +188,7 @@ def fill_invoice_on_pc(
         net_eur=net_eur,
         vat_rate=vat_rate,
         vat_note=vat_note,
+        lines=detail_lines,
         register_process=register_process,
     )
     if cancel_check is not None:

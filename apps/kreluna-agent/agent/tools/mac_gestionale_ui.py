@@ -17,7 +17,8 @@ def run(payload: dict) -> None:
     net = float(payload.get("net_eur") or 0)
     vat_rate = float(payload.get("vat_rate", 0.22))
     vat_note = str(payload.get("vat_note") or "")
-    vat = round(net * vat_rate, 2)
+    lines = list(payload.get("lines") or [])
+    vat = round(sum(float(line["quantity"]) * float(line["unit_net_eur"]) * float(line["vat_rate"]) for line in lines), 2) if lines else round(net * vat_rate, 2)
     total = round(net + vat, 2)
     net_label = f"€ {net:,.2f}"
     vat_label = f"€ {vat:,.2f}"
@@ -66,7 +67,8 @@ def run(payload: dict) -> None:
         return entry
 
     net_entry = money_field(money, "Imponibile")
-    vat_entry = money_field(money, f"IVA {vat_rate * 100:g}%")
+    rates = {float(line["vat_rate"]) for line in lines}
+    vat_entry = money_field(money, "IVA per riga" if len(rates) > 1 else f"IVA {(next(iter(rates)) if rates else vat_rate) * 100:g}%")
     total_entry = money_field(money, "Totale")
     if vat_note:
         tk.Label(form, text=vat_note, bg="#ece8de", fg="#8a5b12", font=("Helvetica", 12, "bold")).pack(anchor="w", pady=(8, 0))

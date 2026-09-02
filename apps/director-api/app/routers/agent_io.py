@@ -388,6 +388,7 @@ async def agent_prepare_invoice(payload: dict[str, Any], session: Annotated[Asyn
         float(payload.get("vat_rate", 0.22)),
         account_name=str(payload.get("account_name") or ""),
         vat_note=str(payload.get("vat_note") or ""),
+        vat_eur=float(payload["vat_eur"]) if payload.get("vat_eur") is not None else None,
     )
     session.add(draft)
     await session.commit()

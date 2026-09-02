@@ -208,12 +208,67 @@ def build_invoice_draft(
     net_eur: float,
     vat_rate: float,
     vat_note: str,
+    vat_treatment: str = "standard",
+    intent_protocol: str = "",
+    intent_progressive: str = "",
+    intent_year: str = "",
+    lines: list[dict] | None = None,
 ) -> dict:
     """Uniforma anche la fattura alla stessa anteprima operativa locale."""
 
-    net = Decimal(str(net_eur)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    vat = (net * Decimal(str(vat_rate))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    detail_lines = lines or []
+    if detail_lines:
+        net = sum(
+            (Decimal(str(line["quantity"])) * Decimal(str(line["unit_net_eur"]))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            for line in detail_lines
+        )
+        vat = sum(
+            (
+                Decimal(str(line["quantity"]))
+                * Decimal(str(line["unit_net_eur"]))
+                * Decimal(str(line["vat_rate"]))
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            for line in detail_lines
+        )
+    else:
+        net = Decimal(str(net_eur)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        vat = (net * Decimal(str(vat_rate))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     total = net + vat
+    fields = [
+        {"key": "account_name", "label": "Azienda emittente", "value": account_name or "Da verificare", "required": False, "source": "operatore"},
+        {"key": "client_name", "label": "Destinatario", "value": client_name, "required": True, "source": "operatore"},
+        {"key": "description", "label": "Prestazione", "value": description, "required": True, "source": "operatore"},
+        {"key": "net_eur", "label": "Imponibile", "value": f"€ {net:.2f}", "required": True, "source": "operatore"},
+        {"key": "vat", "label": "IVA", "value": vat_note or f"{vat_rate * 100:g}% · € {vat:.2f}", "required": True, "source": "operatore"},
+    ]
+    if detail_lines:
+        fields = fields[:2]
+        for index, line in enumerate(detail_lines, start=1):
+            line_net = (Decimal(str(line["quantity"])) * Decimal(str(line["unit_net_eur"]))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            fields.append(
+                {
+                    "key": f"line_{index}",
+                    "label": f"Riga {index}",
+                    "value": f"{line['description']} · q.tà {line['quantity']:g} · € {line_net:.2f} · IVA {float(line['vat_rate']) * 100:g}%",
+                    "required": True,
+                    "source": "operatore",
+                }
+            )
+        fields.extend(
+            [
+                {"key": "net_eur", "label": "Imponibile", "value": f"€ {net:.2f}", "required": True, "source": "calcolo locale"},
+                {"key": "vat", "label": "IVA", "value": vat_note or f"€ {vat:.2f}", "required": True, "source": "calcolo per riga"},
+            ]
+        )
+    if vat_treatment == "intent_declaration":
+        fields.extend(
+            [
+                {"key": "intent_protocol", "label": "Protocollo dichiarazione", "value": intent_protocol, "required": True, "source": "operatore"},
+                {"key": "intent_progressive", "label": "Progressivo", "value": intent_progressive, "required": True, "source": "operatore"},
+                {"key": "intent_year", "label": "Anno dichiarazione", "value": intent_year, "required": True, "source": "operatore"},
+            ]
+        )
+    fields.append({"key": "total", "label": "Totale", "value": f"€ {total:.2f}", "required": True, "source": "calcolo locale"})
     return {
         "kind": "operational_draft",
         "rules_version": WORKFLOW_RULES_VERSION,
@@ -222,14 +277,7 @@ def build_invoice_draft(
         "role": "pc-fatture",
         "client_name": client_name,
         "program": "Webdesk / Agenzia delle Entrate",
-        "fields": [
-            {"key": "account_name", "label": "Azienda emittente", "value": account_name or "Da verificare", "required": False, "source": "operatore"},
-            {"key": "client_name", "label": "Destinatario", "value": client_name, "required": True, "source": "operatore"},
-            {"key": "description", "label": "Prestazione", "value": description, "required": True, "source": "operatore"},
-            {"key": "net_eur", "label": "Imponibile", "value": f"€ {net:.2f}", "required": True, "source": "operatore"},
-            {"key": "vat", "label": "IVA", "value": vat_note or f"{vat_rate * 100:g}% · € {vat:.2f}", "required": True, "source": "operatore"},
-            {"key": "total", "label": "Totale", "value": f"€ {total:.2f}", "required": True, "source": "calcolo locale"},
-        ],
+        "fields": fields,
         "customer_workflow": {
             "search_first": True,
             "search_by": ["Codice", "Denominazione", "Codice fiscale"],
