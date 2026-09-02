@@ -1444,3 +1444,80 @@ async def test_owner_can_start_verified_mac_update(client: AsyncClient, monkeypa
     assert response.json()["state"] == "restarting"
     assert seen["current_app"] == Path("/Applications/Kreluna Director.app")
     assert seen["exit_scheduled"] is True
+
+
+@pytest.mark.asyncio
+async def test_structured_f24_form_creates_one_complete_task_without_ai_questions(client: AsyncClient):
+    owner = await login(client)
+    response = await client.post(
+        "/requests/structured",
+        headers=auth(owner),
+        json={
+            "capability": "f24_prepare",
+            "args": {
+                "client_name": "Cliente Prova Kreluna SRL",
+                "form_type": "ordinary",
+                "period": "agosto 2026",
+                "lines": [
+                    {
+                        "section": "erario",
+                        "tax_code": "1001",
+                        "reference_year": "2026",
+                        "debit_eur": 100,
+                    }
+                ],
+            },
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "structured-form"
+    assert len(payload["tasks"]) == 1
+    task = payload["tasks"][0]
+    assert task["capability"] == "f24_prepare"
+    assert task["args"]["client_name"] == "Cliente Prova Kreluna SRL"
+    assert task["args"]["lines"][0]["tax_code"] == "1001"
+
+
+@pytest.mark.asyncio
+async def test_structured_form_keeps_incomplete_f24_as_safe_worksheet(client: AsyncClient):
+    owner = await login(client)
+    response = await client.post(
+        "/requests/structured",
+        headers=auth(owner),
+        json={
+            "capability": "f24_prepare",
+            "args": {"client_name": "Cliente Prova", "form_type": "ordinary", "lines": []},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["tasks"][0]["args"]["lines"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("capability", "args"),
+    [
+        ("contabilita_prepare", {"client_name": "Cliente Prova", "operation": "invoice_import", "period": "agosto 2026"}),
+        ("camera_prepare", {"client_name": "Cliente Prova", "practice_type": "variazione sede"}),
+        ("contratti_prepare", {"client_name": "Cliente Prova", "contract_type": "locazione"}),
+        ("durc_prepare", {"client_name": "Cliente Prova", "request_type": "regularity_certificate"}),
+        ("visure_prepare", {"client_name": "Cliente Prova", "visura_type": "ordinary"}),
+    ],
+)
+async def test_each_structured_studio_form_creates_exactly_one_task(
+    client: AsyncClient,
+    capability: str,
+    args: dict,
+):
+    owner = await login(client)
+    response = await client.post(
+        "/requests/structured",
+        headers=auth(owner),
+        json={"capability": capability, "args": args},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "structured-form"
+    assert len(payload["tasks"]) == 1
+    assert payload["tasks"][0]["capability"] == capability

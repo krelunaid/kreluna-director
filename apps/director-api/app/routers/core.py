@@ -164,6 +164,13 @@ async def restart_remote_link(
 
 def _schedule_process_exit(delay: float = 1.5) -> None:
     def stop() -> None:
+        if sys.platform == "darwin" and os.environ.get("KRELUNA_DESKTOP_APP") == "1":
+            try:
+                from native_window import terminate_native_window
+
+                terminate_native_window()
+            except (ImportError, OSError):
+                pass
         os._exit(0)
 
     timer = threading.Timer(delay, stop)

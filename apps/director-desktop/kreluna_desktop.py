@@ -405,6 +405,12 @@ def main() -> int:
             if health is None or health.get("service") != "director-api":
                 notify("La porta 8080 è già usata da un altro programma. Chiudilo e riapri Kreluna.", dialog=True)
                 return 1
+            if os.environ.get("KRELUNA_DESKTOP_APP", "") == "1" and sys.platform == "darwin":
+                from native_window import activate_existing_mac_window
+
+                if activate_existing_mac_window(url):
+                    notify("Kreluna Director è già aperto.")
+                    return 0
             notify("Kreluna Director è già aperto.")
             try:
                 open_window(url)
