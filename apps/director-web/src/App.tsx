@@ -210,6 +210,11 @@ function workDraftFor(task: Task): WorkDraftPreview | null {
   return draft as WorkDraftPreview;
 }
 
+function invoiceDemoFor(task: Task): WorkDraftPreview | null {
+  if (task.capability !== "invoice_prepare_demo") return null;
+  return workDraftFor(task);
+}
+
 function euro(value: number): string {
   return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value || 0);
 }
@@ -267,6 +272,7 @@ export default function App() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [f24Preview, setF24Preview] = useState<Task | null>(null);
   const [workPreview, setWorkPreview] = useState<Task | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<Task | null>(null);
   const [orb, setOrb] = useState<"listen" | "think" | "talk">("listen");
   const [activeNav, setActiveNav] = useState<NavSection>("dashboard");
   const [requestFilter, setRequestFilter] = useState<RequestFilter>("all");
@@ -322,6 +328,7 @@ export default function App() {
   const talkTimer = useRef<number>(0);
   const vaultLockTimer = useRef<number>(0);
   const refreshInFlight = useRef<Promise<void> | null>(null);
+  const invoiceDemoRequestedAt = useRef(0);
 
   function refresh(): Promise<void> {
     if (refreshInFlight.current) return refreshInFlight.current;
@@ -408,6 +415,18 @@ export default function App() {
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [chat, busy]);
 
   useEffect(() => {
+    if (!invoiceDemoRequestedAt.current) return;
+    const requestedAt = invoiceDemoRequestedAt.current;
+    const completed = tasks.find((task) => task.capability === "invoice_prepare_demo"
+      && task.status === "completed"
+      && Date.parse(task.created_at || "") >= requestedAt - 2_000
+      && invoiceDemoFor(task));
+    if (!completed) return;
+    invoiceDemoRequestedAt.current = 0;
+    setInvoicePreview(completed);
+  }, [tasks]);
+
+  useEffect(() => {
     if (!ready || !["contracts", "documents"].includes(activeNav)) return;
     void loadLibrary();
   }, [ready, activeNav]);
@@ -453,6 +472,7 @@ export default function App() {
     const value = invoiceChatDraft;
     if (!value?.client_name || !value.description || value.net_eur == null) return;
     const vat = (value.vat_rate ?? 0.22) * 100;
+    invoiceDemoRequestedAt.current = Date.now();
     await api.resetChat().catch(() => undefined);
     await send(
       `Prepara una fattura demo per ${value.client_name}, ${value.description}, `
@@ -1026,10 +1046,11 @@ export default function App() {
     return <div className="workspace-list">{rows.map((task) => {
       const f24 = f24DraftFor(task);
       const work = workDraftFor(task);
+      const invoice = invoiceDemoFor(task);
       return <article className={`workspace-row ${task.status}`} key={task.id}>
         <span className={`workspace-row-icon ${task.status}`}>{task.status === "failed" || task.error_state === "active" ? "△" : "▣"}</span>
         <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{f24 ? `${f24.form_label} · saldo ${euro(f24.totals.balance_eur)} · ${f24.ready_for_review ? "validato" : "da completare"}` : work ? `${work.title} · ${work.program} · ${work.ready_for_review ? "validata" : "da completare"}` : `${task.capability.replace(/_/g, " ")} · rischio ${task.risk}`}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
-        <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : work ? <button onClick={() => setWorkPreview(task)}>Apri scheda</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
+        <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : invoice ? <button onClick={() => setInvoicePreview(task)}>Apri demo</button> : work ? <button onClick={() => setWorkPreview(task)}>Apri scheda</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
       </article>;
     })}</div>;
   }
@@ -1262,6 +1283,7 @@ export default function App() {
       <div className="library-dialog-actions"><button onClick={closeLibraryPreview}>Chiudi</button><button onClick={() => void downloadLibraryItem(libraryPreview.item)}>Scarica originale</button>{libraryPreview.item.editable ? <button className="primary" onClick={() => { const item = libraryPreview.item; closeLibraryPreview(); void editLibraryItem(item); }}>Modifica</button> : null}</div>
     </div></div> : null}
     {f24Preview && f24DraftFor(f24Preview) ? <F24PreviewDialog task={f24Preview} onClose={() => setF24Preview(null)} /> : null}
+    {invoicePreview && invoiceDemoFor(invoicePreview) ? <InvoiceDemoDialog task={invoicePreview} onClose={() => setInvoicePreview(null)} /> : null}
     {workPreview && workDraftFor(workPreview) ? <WorkPreviewDialog task={workPreview} onClose={() => setWorkPreview(null)} /> : null}
     <button className="global-stop" onClick={() => setConfirmKill(true)} title="Ferma tutti gli Agent">■</button>
     {updateStatus?.available && !updateOpen ? <button className="update-note" onClick={() => setUpdateOpen(true)}>↑ Kreluna {updateStatus.latest_version} disponibile</button> : null}
@@ -1358,6 +1380,31 @@ function StructuredRequestCard({ draft, busy, onChange, onSubmit }: { draft: Str
     <button type="button" disabled={!ready || busy} onClick={onSubmit}>{busy ? "Preparazione…" : `Prepara ${STRUCTURED_TITLES[draft.kind]}`}</button>
     <small>Una sola scheda · nessun invio, pagamento, firma o download automatico</small>
   </section>;
+}
+
+function InvoiceDemoDialog({ task, onClose }: { task: Task; onClose: () => void }) {
+  const draft = invoiceDemoFor(task);
+  if (!draft) return null;
+  const fields = Object.fromEntries(draft.fields.map((field) => [field.key, field.value]));
+  const client = String(fields.client_name || draft.client_name);
+  return <div className="f24-dialog invoice-demo-dialog" role="dialog" aria-modal="true" aria-labelledby="invoice-demo-title"><div className="invoice-demo-window">
+    <header><div><strong>Webdesk / Agenzia delle Entrate</strong><span>AMBIENTE DIMOSTRATIVO KRELUNA</span></div><button type="button" aria-label="Chiudi demo" onClick={onClose}>×</button></header>
+    <div className="invoice-demo-toolbar"><span>Clienti</span><b>›</b><span>Ricerca cliente</span><b>›</b><strong>Nuova fattura</strong></div>
+    <section className="invoice-demo-customer"><label>Ricerca cliente<input value={client} readOnly /></label><div><span>1 risultato trovato</span><strong>{client}</strong><button type="button">Selezionato ✓</button></div><small>La demo cerca prima il cliente; se non esiste mostra “Crea nuovo cliente”.</small></section>
+    <section className="invoice-demo-form">
+      <h2 id="invoice-demo-title">Nuova fattura elettronica · bozza</h2>
+      <div className="invoice-demo-fields">
+        <label>Azienda emittente<input value={String(fields.account_name || "Da configurare nello studio")} readOnly /></label>
+        <label>Cliente destinatario<input value={client} readOnly /></label>
+        <label className="wide">Prestazione<input value={String(fields.description || "")} readOnly /></label>
+        <label>Imponibile<input value={String(fields.net_eur || "")} readOnly /></label>
+        <label>IVA<input value={String(fields.vat || "")} readOnly /></label>
+        <label>Totale<input value={String(fields.total || "")} readOnly /></label>
+      </div>
+      <div className="invoice-demo-actions"><button type="button" className="save">Bozza salvata ✓</button><button type="button" disabled>Emetti / invia (bloccato)</button></div>
+    </section>
+    <footer><span>DEMO LOCALE: nessun dato inviato ad Agenzia delle Entrate o IPSOA</span><button type="button" onClick={onClose}>Chiudi demo</button></footer>
+  </div></div>;
 }
 
 function EvidenceStrip({ ids, onOpen }: { ids: string[]; onOpen: (src: string) => void }) {
