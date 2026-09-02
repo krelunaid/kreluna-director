@@ -930,6 +930,31 @@ async def test_spoken_invoice_keeps_issuer_recipient_and_tax_regime(client: Asyn
 
 
 @pytest.mark.asyncio
+async def test_incomplete_invoice_returns_the_structured_chat_draft(client: AsyncClient, planned_by_test_model):
+    token = await login(client)
+    response = await client.post(
+        "/chat",
+        headers=auth(token),
+        json={"message": "mi fai una fattura per Mario Rossi"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["pending"] == {
+        "capability": "invoice_prepare_demo",
+        "account_name": "",
+        "client_name": "Mario Rossi",
+        "description": "",
+        "net_eur": None,
+        "vat_rate": 0.22,
+        "vat_note": "",
+    }
+    reset = await client.post("/chat/reset", headers=auth(token))
+    assert reset.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_invoice_demo_and_cross_tenant(client: AsyncClient):
     token = await login(client)
     prepared = await client.post(
@@ -1089,6 +1114,53 @@ async def test_owner_saves_grok_key_encrypted_without_returning_it(
         assert stored.api_key_ciphertext.startswith("v1.")
         assert secret not in stored.api_key_ciphertext
 
+
+@pytest.mark.asyncio
+async def test_owner_activates_managed_ai_with_a_revocable_customer_code(
+    client: AsyncClient,
+    monkeypatch,
+    tmp_path,
+):
+    activation_code = "kreluna_live_" + "C" * 43
+    monkeypatch.setenv("KRELUNA_SUPPORT_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "kreluna_managed_ai_token", "")
+    monkeypatch.setattr(settings, "kreluna_grok_api_key", "")
+
+    async def healthy(config, **_kwargs):
+        assert config.managed is True
+        assert config.api_key == activation_code
+        return {
+            "provider": "grok",
+            "label": "IA Kreluna",
+            "model": "grok-4.6",
+            "configured": True,
+            "connected": True,
+            "status": "connected",
+            "detail": "Provider e modello raggiungibili",
+            "managed": True,
+            "configurable": False,
+        }
+
+    monkeypatch.setattr("app.routers.core.check_ai_health", healthy)
+    token = await login(client)
+    activated = await client.post(
+        "/ai/activate",
+        headers=auth(token),
+        json={"activation_code": activation_code},
+    )
+    assert activated.status_code == 200
+    assert activated.json()["connected"] is True
+    assert activation_code not in activated.text
+    assert (tmp_path / "managed_ai.token").read_text(encoding="utf-8").strip() == activation_code
+    assert (tmp_path / "managed_ai.token").stat().st_mode & 0o777 == 0o600
+
+    viewer = await login(client, "viewer@studio.demo")
+    forbidden = await client.post(
+        "/ai/activate",
+        headers=auth(viewer),
+        json={"activation_code": activation_code},
+    )
+    assert forbidden.status_code == 403
 
 @pytest.mark.asyncio
 async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient, planned_by_test_model):

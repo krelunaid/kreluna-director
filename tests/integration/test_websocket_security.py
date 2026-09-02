@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 import pytest
 from app.main import app
 from fastapi.testclient import TestClient
@@ -120,4 +122,12 @@ def test_websockets_require_device_proof_and_dashboard_session():
         assert denied.value.code == 4401
 
         with client.websocket_connect(f"/ws/dashboard?token={token}") as dashboard:
+            assert dashboard.receive_json() == {"type": "hello", "service": "director"}
+
+        encoded = base64.urlsafe_b64encode(token.encode()).decode().rstrip("=")
+        with client.websocket_connect(
+            "/ws/dashboard",
+            subprotocols=["kreluna-dashboard", f"kreluna-session.{encoded}"],
+        ) as dashboard:
+            assert dashboard.accepted_subprotocol == "kreluna-dashboard"
             assert dashboard.receive_json() == {"type": "hello", "service": "director"}

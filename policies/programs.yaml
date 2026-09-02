@@ -67,12 +67,32 @@ portals:
     # L'Agent permette di impostare il percorso/indirizzo senza modificare il codice.
     # Finché manca, usa la prova locale visibile e non finge di lavorare sul sito vero.
     configured: false
-    url: https://www.agenziaentrate.gov.it
+    # Non inserire qui un indirizzo generico: va impostato il percorso Webdesk
+    # effettivo con KRELUNA_FATTURE_TARGET o KRELUNA_FATTURE_TARGET_FILE.
+    url: https://webdesk.invalid
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
     username_field: "input[type=email], input[name*=user], input[name*=login]"
     password_field: "input[type=password]"
-    # Dopo aver aperto la pagina vera, questi selettori vengono mappati senza
-    # includere mai il bottone finale di invio.
+    # I nomi descrivono le schermate IPSOA viste nel manuale. I valori restano
+    # vuoti finche l'Agent non impara i selettori dalla pagina vera: non vengono
+    # mai indovinati da una fotografia.
+    customer_search_fields:
+      filter_type: ""
+      query: ""
+      membership_status: ""
+      result_rows: ""
+      access_button: ""
+    customer_create_fields:
+      customer_type: ""
+      tax_code: ""
+      vat_number: ""
+      business_name: ""
+      first_name: ""
+      last_name: ""
+      legal_address: ""
+      recipient_code: ""
+      pec: ""
+      save_button: ""  # solo arresto/controllo: mai clic automatico
     invoice_fields: {}
     login_note: Utenza cliente con smart card o SPID. Lo fai tu a mano.
 

@@ -12,3 +12,8 @@ Solo Mac con chip Apple (M1, M2, M3, M4). Niente Intel.
 Al primo avvio Kreluna mostra le credenziali personali una sola volta: conservale.
 Non serve Python.
 Kreluna si apre in una finestra propria: Google Chrome e Safari non servono.
+
+PER CANCELLARE TUTTO
+Apri Disinstalla Kreluna.command e conferma. Il programma, il database, i documenti,
+gli accessi cifrati e la configurazione IA vengono spostati nel Cestino.
+Gli Agent restano separati.

@@ -49,6 +49,47 @@ def test_a_bare_number_is_the_amount():
     assert plan.tasks[0].args["description"] == "Consulenza"
 
 
+def test_customer_work_and_amount_can_arrive_in_separate_messages():
+    plan = ask_then_answer(
+        "mi fai una fattura per Mario Rossi con IVA al 22%",
+        "vendita piante",
+        "100 euro",
+    )
+
+    assert plan.ok
+    assert plan.tasks[0].args["client_name"] == "Mario Rossi"
+    assert plan.tasks[0].args["description"] == "Vendita piante"
+    assert plan.tasks[0].args["net_eur"] == 100
+
+
+def test_a_short_typo_is_kept_as_the_invoice_description():
+    first = plan_deterministic("mi fai una fattura per Mario Rossi")
+    answered = complete_pending(first.pending, "consukenza")
+
+    assert answered is not None and not answered.ok
+    assert answered.pending["description"] == "Consukenza"
+    assert "importo" in answered.summary
+
+
+def test_a_vat_only_reply_is_not_mistaken_for_the_work():
+    first = plan_deterministic("mi fai una fattura per Mario Rossi")
+    answered = complete_pending(first.pending, "IVA 10%")
+
+    assert answered is not None and not answered.ok
+    assert not answered.pending["description"]
+    assert answered.pending["vat_rate"] == 0.1
+
+
+def test_repeating_client_with_reversed_name_is_not_the_work():
+    first = plan_deterministic("mi fai una fattura per Andrea Gadducci")
+    answered = complete_pending(first.pending, "Gadducci Andrea")
+
+    assert answered is not None and not answered.ok
+    assert answered.pending["client_name"] == "Andrea Gadducci"
+    assert not answered.pending["description"]
+    assert "lavoro" in answered.summary
+
+
 def test_the_client_can_arrive_last():
     first = plan_deterministic("fattura di 5000 euro di manodopera")
     assert not first.ok and first.pending

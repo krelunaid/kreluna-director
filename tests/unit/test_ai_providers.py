@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 from app.config import Settings, settings
-from app.services.ai import check_ai_health
+from app.services.ai import check_ai_health, managed_license_config, persist_managed_license
 from app.services.planning import plan_message
 
 
@@ -21,6 +21,9 @@ def test_new_install_defaults_to_grok_46(monkeypatch):
     grok = configured.ai_provider_config()
     assert grok.provider == "grok"
     assert grok.model == "grok-4.6"
+    assert grok.label == "IA Kreluna"
+    assert grok.configurable is True
+    assert grok.managed is False
 
 
 def test_packaged_install_uses_revocable_kreluna_license_instead_of_xai_key():
@@ -35,6 +38,31 @@ def test_packaged_install_uses_revocable_kreluna_license_instead_of_xai_key():
     assert grok.api_key == token
     assert grok.base_url == "https://kreluna-ai-gateway.krelunaid.workers.dev/v1"
     assert "api.x.ai" not in grok.base_url
+
+
+def test_customer_activation_is_saved_outside_the_app_with_private_permissions(
+    tmp_path, monkeypatch
+):
+    token = "kreluna_live_" + "B" * 43
+    monkeypatch.setenv("KRELUNA_SUPPORT_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "kreluna_managed_ai_token", "")
+    monkeypatch.setattr(settings, "kreluna_grok_api_key", "direct-key-to-replace")
+
+    config = managed_license_config(token)
+    destination = persist_managed_license(token)
+
+    assert config.managed is True
+    assert config.base_url == "https://kreluna-ai-gateway.krelunaid.workers.dev/v1"
+    assert destination == tmp_path / "managed_ai.token"
+    assert destination.read_text(encoding="utf-8").strip() == token
+    assert destination.stat().st_mode & 0o777 == 0o600
+    assert settings.kreluna_managed_ai_token == token
+    assert settings.kreluna_grok_api_key == ""
+
+
+def test_customer_activation_rejects_upstream_api_keys():
+    with pytest.raises(ValueError, match="Codice di attivazione"):
+        managed_license_config("xai-an-upstream-key-must-not-be-accepted")
 
 
 def test_provider_configs_keep_credentials_and_models_separate():

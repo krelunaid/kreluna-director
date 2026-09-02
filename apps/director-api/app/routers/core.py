@@ -24,6 +24,8 @@ from app.security import hash_password, issue_session, password_needs_rehash, ve
 from app.services.agents import compose_agent_rows
 from app.services.ai import (
     check_ai_health,
+    managed_license_config,
+    persist_managed_license,
     provider_config,
     save_provider_configuration,
     save_selected_provider,
@@ -72,6 +74,10 @@ class AIConfigurationBody(BaseModel):
     provider: str
     model: str = Field(default="", max_length=160)
     api_key: str | None = Field(default=None, max_length=512)
+
+
+class AIActivationBody(BaseModel):
+    activation_code: str = Field(min_length=20, max_length=100)
 
 
 class RemoteLinkBody(BaseModel):
@@ -171,28 +177,43 @@ async def install_update(
 ) -> dict:
     if actor.role not in {"studio_owner", "platform_admin"}:
         raise HTTPException(status_code=403, detail="Solo il titolare può installare aggiornamenti")
-    if sys.platform != "darwin" or os.environ.get("KRELUNA_DESKTOP_APP") != "1":
+    if sys.platform not in {"darwin", "win32"} or os.environ.get("KRELUNA_DESKTOP_APP") != "1":
         raise HTTPException(
             status_code=409,
-            detail="L'installazione automatica è disponibile nell'app Kreluna per Mac.",
+            detail="L'installazione automatica è disponibile nell'app Kreluna per Mac e Windows.",
         )
-
-    from kreluna_shared.macos_update import MacUpdateError, launch_macos_update, stage_macos_update
 
     status = await latest_update_status(force=True)
-    app_bundle = Path(os.environ.get("KRELUNA_APP_BUNDLE") or "")
-    support_dir = Path(
-        os.environ.get("KRELUNA_SUPPORT_DIR")
-        or (Path.home() / "Library" / "Application Support" / "KrelunaDirector")
-    )
     try:
-        staged = await asyncio.to_thread(
-            stage_macos_update,
-            status,
-            current_app=app_bundle,
-            support_dir=support_dir,
-        )
-    except MacUpdateError as exc:
+        if sys.platform == "darwin":
+            from kreluna_shared.macos_update import launch_macos_update, stage_macos_update
+
+            support_dir = Path(
+                os.environ.get("KRELUNA_SUPPORT_DIR")
+                or (Path.home() / "Library" / "Application Support" / "KrelunaDirector")
+            )
+            staged = await asyncio.to_thread(
+                stage_macos_update,
+                status,
+                current_app=Path(os.environ.get("KRELUNA_APP_BUNDLE") or ""),
+                support_dir=support_dir,
+            )
+            launch_update = launch_macos_update
+        else:
+            from kreluna_shared.windows_update import launch_windows_update, stage_windows_update
+
+            support_dir = Path(
+                os.environ.get("KRELUNA_SUPPORT_DIR")
+                or (Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "KrelunaDirector")
+            )
+            staged = await asyncio.to_thread(
+                stage_windows_update,
+                status,
+                current_app=Path(os.environ.get("KRELUNA_APP_ROOT") or ""),
+                support_dir=support_dir,
+            )
+            launch_update = launch_windows_update
+    except (RuntimeError, OSError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
@@ -210,7 +231,7 @@ async def install_update(
     )
     await session.commit()
     try:
-        launch_macos_update(staged, parent_pid=os.getpid())
+        launch_update(staged, parent_pid=os.getpid())
     except Exception as exc:
         raise HTTPException(
             status_code=502,
@@ -327,6 +348,43 @@ async def configure_ai_provider(
     )
     await session.commit()
     return await check_ai_health(config, force=True)
+
+
+@router.post("/ai/activate")
+async def activate_managed_ai(
+    body: AIActivationBody,
+    actor: Annotated[Actor, Depends(get_actor)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    if actor.role not in {"studio_owner", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="Solo il titolare può attivare l'IA")
+    try:
+        config = managed_license_config(body.activation_code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    health = await check_ai_health(config, force=True)
+    if not health["connected"]:
+        raise HTTPException(status_code=400, detail=health["detail"])
+    try:
+        persist_managed_license(config.api_key)
+        await save_selected_provider(
+            session,
+            tenant_id=actor.tenant_id,
+            provider="grok",
+            actor_id=actor.user_id,
+        )
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await write_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        actor=actor.user_id,
+        action="ai.license.activate",
+        result="ok",
+        detail="IA Kreluna",
+    )
+    await session.commit()
+    return health
 
 
 @router.post("/auth/login")

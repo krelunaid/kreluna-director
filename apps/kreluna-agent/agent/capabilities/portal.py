@@ -130,15 +130,32 @@ def prepare_invoice_portal(
     evidence = [_evidence(mac_browser.screenshot(run), "fatture-aperto", spec.key)]
     required = {"client_name", "description", "net_eur"}
     if not required.issubset(spec.invoice_fields):
+        customer_search_ready = all(
+            spec.customer_search_fields.get(key)
+            for key in ("filter_type", "query", "result_rows", "access_button")
+        )
+        customer_create_ready = all(
+            spec.customer_create_fields.get(key)
+            for key in ("customer_type", "tax_code", "business_name", "legal_address", "recipient_code")
+        )
+        missing_pages = []
+        if not customer_search_ready:
+            missing_pages.append("ricerca cliente in Servizi SMART")
+        if not customer_create_ready:
+            missing_pages.append("Clienti > Crea nuovo")
+        missing_pages.append("Fatture > Crea nuovo")
         return {
             "configured": True,
             "filled": False,
             "sent": False,
             "program": spec.url,
             "message": (
-                "Ho aperto il percorso fatture. Ora va mostrata all'Agent la pagina Nuova fattura "
-                "per associare cliente, prestazione e imponibile."
+                "Ho aperto il percorso fatture. Prima della compilazione cerchero il cliente e, "
+                "solo se manca, preparero la sua anagrafica fermandomi prima di Salva. "
+                "Mostra all'Agent queste pagine: " + "; ".join(missing_pages) + "."
             ),
+            "customer_search_ready": customer_search_ready,
+            "customer_create_ready": customer_create_ready,
             "evidence": evidence,
         }
 

@@ -61,11 +61,24 @@ async def plan_message(
 ) -> PlanResult:
     plan = plan_deterministic(message)
     resolved = config or settings.ai_provider_config(provider)
-    # Solo i blocchi di sicurezza e il fermo d'emergenza non raggiungono il modello.
-    # Tutto il resto passa dall'IA e viene poi ricontrollato dalla policy locale.
+    # I blocchi di sicurezza e il fermo d'emergenza non raggiungono mai il modello.
     if plan.denied or plan.source == "deterministic-kill":
         return plan
     if not resolved.configured:
+        # La demo e le installazioni senza provider restano operative per i
+        # comandi locali che il planner ha già compreso senza inventare dati.
+        # Una frase sconosciuta continua invece a fermarsi esplicitamente: non
+        # fingiamo che l'IA abbia capito e non creiamo task ambigui.
+        if plan.ok or plan.pending or plan.source == "deterministic-help":
+            return plan.model_copy(
+                update={
+                    "source": "deterministic-offline",
+                    "diagnostic": {
+                        "code": "local_planner",
+                        "provider": resolved.provider,
+                    },
+                }
+            )
         return PlanResult(
             ok=False,
             summary=(

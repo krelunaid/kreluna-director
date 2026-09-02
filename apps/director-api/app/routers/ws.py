@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import binascii
 import json
 import secrets
@@ -24,6 +25,16 @@ def _bearer_from_websocket(ws: WebSocket) -> str:
     authorization = ws.headers.get("authorization", "")
     if authorization.lower().startswith("bearer "):
         return authorization.split(" ", 1)[1].strip()
+    for protocol in ws.headers.get("sec-websocket-protocol", "").split(","):
+        value = protocol.strip()
+        if not value.startswith("kreluna-session."):
+            continue
+        encoded = value.removeprefix("kreluna-session.")
+        try:
+            padding = "=" * (-len(encoded) % 4)
+            return base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+        except (ValueError, UnicodeDecodeError, binascii.Error):
+            return ""
     return ws.query_params.get("token", "").strip()
 
 
@@ -186,7 +197,11 @@ async def dashboard_socket(ws: WebSocket) -> None:
     if tenant_id is None:
         await ws.close(code=4401)
         return
-    await ws.accept()
+    offered = {
+        item.strip() for item in ws.headers.get("sec-websocket-protocol", "").split(",")
+    }
+    subprotocol = "kreluna-dashboard" if "kreluna-dashboard" in offered else None
+    await ws.accept(subprotocol=subprotocol)
     hub.register_dashboard(tenant_id, ws)
     try:
         await ws.send_json({"type": "hello", "service": "director"})

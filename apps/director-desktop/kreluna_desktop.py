@@ -190,6 +190,8 @@ def prepare_env() -> None:
     os.environ.setdefault("DIRECTOR_SESSION_SECRET", _local_secret("session.key"))
     os.environ.setdefault("DIRECTOR_EVIDENCE_KEY", _local_secret("evidence.key"))
     os.environ.setdefault("DIRECTOR_CREDENTIAL_KEY", _local_secret("credential.key"))
+    os.environ.setdefault("KRELUNA_SUPPORT_DIR", str(SUPPORT))
+    os.environ.setdefault("KRELUNA_APP_ROOT", str(ROOT))
     remote_dir = SUPPORT / "remote"
     os.environ.setdefault("DIRECTOR_REMOTE_DIR", str(remote_dir))
     remote_config = remote_dir / "remote-link.json"
@@ -211,7 +213,7 @@ def prepare_env() -> None:
         pass
     os.environ.setdefault("DIRECTOR_BOOTSTRAP_EMAIL", owner["email"])
     os.environ.setdefault("DIRECTOR_BOOTSTRAP_PASSWORD", owner["password"])
-    os.environ.setdefault("DIRECTOR_BOOTSTRAP_NAME", "Titolare studio")
+    os.environ.setdefault("DIRECTOR_BOOTSTRAP_NAME", "Andrea Gadducci")
     managed_token = _managed_ai_token()
     if managed_token:
         os.environ.setdefault("KRELUNA_MANAGED_AI_TOKEN", managed_token)

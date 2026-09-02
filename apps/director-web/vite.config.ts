@@ -21,6 +21,7 @@ export default defineConfig({
       "/library": "http://127.0.0.1:8080",
       "/audit": "http://127.0.0.1:8080",
       "/overview": "http://127.0.0.1:8080",
+      "/ai": "http://127.0.0.1:8080",
       "/kill-switch": "http://127.0.0.1:8080",
       "/policy": "http://127.0.0.1:8080",
       "/ws": {

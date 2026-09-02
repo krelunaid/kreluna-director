@@ -196,6 +196,7 @@ async def chat(
             "denied": plan.denied,
             "deny_reason": plan.deny_reason,
             "tasks": [],
+            "pending": plan.pending,
             "source": plan.source,
             "diagnostic": plan.diagnostic,
         }

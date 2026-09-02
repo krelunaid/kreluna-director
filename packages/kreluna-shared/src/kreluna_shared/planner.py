@@ -277,6 +277,31 @@ def _amount_in_reply(text: str) -> float | None:
     return None
 
 
+def _short_description_reply(text: str) -> str:
+    """Accetta una risposta breve come lavoro quando il cliente e gia noto."""
+
+    clean = " ".join(text.strip(" ,.;:-").split())
+    lowered = clean.lower()
+    if not clean or len(clean) > 80 or _amount_in_reply(clean) is not None:
+        return ""
+    if re.search(r"\b(?:iva|euro|eur|cliente|fattura|importo|imponibile)\b|€|\d", lowered):
+        return ""
+    words = re.findall(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'/-]*", clean)
+    if not 1 <= len(words) <= 8:
+        return ""
+    return clean[:1].upper() + clean[1:]
+
+
+def _same_entity_words(left: str, right: str) -> bool:
+    """Riconosce lo stesso nome anche se cognome e nome sono invertiti."""
+
+    def words(value: str) -> list[str]:
+        return sorted(re.findall(r"[a-zà-ÿ0-9]+", value.lower()))
+
+    left_words = words(left)
+    return bool(left_words) and left_words == words(right)
+
+
 LIVE_PORTALS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("f24-ipsoa", "F24 su IPSOA", ("f24", "delega f24", "deleghe f24")),
     ("visure-cgn", "Visure su CGN", ("visura", "visure")),
@@ -850,7 +875,17 @@ def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
     description = pending.get("description") or ""
     if not description:
         found = _description(raw, default="")
-        if found and not (client and (found.lower() in client.lower() or client.lower() in found.lower())):
+        if not found and client:
+            found = _short_description_reply(raw)
+        repeats_client = bool(
+            client
+            and (
+                found.lower() in client.lower()
+                or client.lower() in found.lower()
+                or _same_entity_words(found, client)
+            )
+        )
+        if found and not repeats_client:
             description = found
     pending_rate = pending.get("vat_rate")
     vat_rate = float(pending_rate) if pending_rate is not None else 0.22

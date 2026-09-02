@@ -52,7 +52,7 @@ async def seed_if_empty(session: AsyncSession) -> None:
                     id=DEMO_USER_ID,
                     tenant_id=DEMO_TENANT_ID,
                     email="andrea@studio.demo",
-                    name="Andrea Rossi",
+                    name="Andrea Gadducci",
                     role="studio_owner",
                     password_hash=hash_password("demo"),
                 ),

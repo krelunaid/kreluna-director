@@ -1,4 +1,4 @@
-# Grok incluso: gateway Kreluna
+# IA Kreluna: gateway gestito
 
 Il gateway consente di vendere Kreluna Director con Grok già disponibile senza
 distribuire la chiave xAI ai clienti. La chiave upstream resta un segreto del
@@ -47,14 +47,29 @@ del Mac del gestore.
 1. Creare una licenza con identificativo cliente, piano e quote.
 2. Consegnare il token restituito una sola volta all'installazione del cliente.
 3. Salvare il token come `managed_ai.token` nella cartella Kreluna del cliente.
-4. Avviare l'app e verificare **Impostazioni → Grok incluso**.
+4. Il cliente apre **Impostazioni → IA Kreluna**, incolla il codice e preme
+   **Attiva IA**. L'app lo verifica online e lo conserva fuori dal programma
+   con permessi locali privati.
 5. In caso di cessazione o compromissione, revocare la singola licenza senza
    ruotare la chiave xAI e senza interferire con gli altri clienti.
 
-Non usare una licenza comune in tutti gli installer. Per una distribuzione su
-larga scala il passaggio 2 deve essere automatizzato da un servizio di
-attivazione autenticato; l'endpoint amministrativo non deve mai essere esposto
-al client.
+Non usare una licenza comune in tutti gli installer e non esporre mai
+l'endpoint amministrativo al client. Il codice cliente accede soltanto agli
+endpoint IA e può essere revocato senza cambiare gli installer.
+
+Il venditore può creare, controllare e revocare le licenze con
+`scripts/cloudflare/customer-license.py`. Lo script legge la credenziale
+amministrativa da `KRELUNA_GATEWAY_ADMIN_TOKEN` oppure la chiede senza mostrarla:
+
+```bash
+python3 scripts/cloudflare/customer-license.py create studio-rossi "Studio Rossi"
+python3 scripts/cloudflare/customer-license.py status ID_LICENZA
+python3 scripts/cloudflare/customer-license.py revoke ID_LICENZA
+```
+
+Conservare l'ID licenza nella scheda commerciale del cliente. Il codice di
+attivazione viene restituito una sola volta e va consegnato con un canale
+riservato.
 
 ## Verifiche prima della pubblicazione
 
