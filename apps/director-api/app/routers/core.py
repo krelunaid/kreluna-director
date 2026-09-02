@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from kreluna_shared.crypto import b64d, sha256_hex
+from kreluna_shared.pairing import create_pairing_code
 from kreluna_shared.update import APP_VERSION, manifest_payload, sign_manifest
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -610,13 +611,20 @@ async def create_agent_enrollment(
     )
     await session.commit()
     remote = remote_tunnel.status()
+    director_url = remote["public_url"] or settings.director_public_url
     return {
         "agent_id": slot.role,
         "enrollment_code": raw,
         "expires_at": record.expires_at.isoformat() if record.expires_at else None,
         "single_use": True,
-        "director_url": remote["public_url"] or settings.director_public_url,
+        "director_url": director_url,
         "remote_ready": remote["connected"],
+        "connection_code": create_pairing_code(
+            director_url=director_url,
+            role=slot.role,
+            display_name=slot.display_name or slot.role.upper(),
+            enrollment_code=raw,
+        ),
     }
 
 

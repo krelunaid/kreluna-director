@@ -52,7 +52,20 @@ for role, display in roles:
         ),
         encoding="ascii",
     )
-print("installer bat:", len(roles))
+generic = out / "Installa Kreluna Agent.bat"
+generic.write_text(
+    "\r\n".join(
+        [
+            "@echo off",
+            "title Installa Kreluna Agent",
+            'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Installa-Agent.ps1"',
+            "if errorlevel 1 pause",
+            "",
+        ]
+    ),
+    encoding="ascii",
+)
+print("installer bat:", len(roles) + 1)
 PY
 
 (

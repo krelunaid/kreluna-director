@@ -32,10 +32,15 @@ insieme a Kreluna, non autonomamente.
 ## Collegare un PC
 
 1. In **PC & Feature** premere **Installa Agent** sul ruolo desiderato.
-2. Director mostra due valori: indirizzo HTTPS e codice monouso.
-3. Sul PC aprire l’installer Agent, inserire l’indirizzo e poi il codice.
+2. Director mostra un solo **Codice di collegamento** e permette di copiarlo soltanto
+   quando il collegamento remoto è verificato.
+3. Sul PC aprire Kreluna Agent e incollare una volta il Codice di collegamento.
 4. L’Agent genera localmente una chiave Ed25519 e riscatta il codice una sola volta.
 5. La WebSocket richiede una challenge firmata prima di segnare il PC come online.
+
+Il Codice di collegamento contiene già indirizzo HTTPS, ruolo del PC e codice di
+attivazione. È monouso, scade e va trattato come una password temporanea: non deve essere
+pubblicato o inoltrato a persone diverse da chi installa quel PC.
 
 Il pallino diventa verde soltanto quando la WebSocket autenticata è nel registry del tenant e
 i battiti del PC sono recenti. Un interruttore acceso senza connessione non è “online”.

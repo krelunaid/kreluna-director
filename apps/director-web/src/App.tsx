@@ -247,6 +247,7 @@ export default function App() {
     expiresAt: string;
     directorUrl: string;
     remoteReady: boolean;
+    connectionCode: string;
   } | null>(null);
   const [enrollmentError, setEnrollmentError] = useState("");
   const [vaultOpen, setVaultOpen] = useState(false);
@@ -469,6 +470,7 @@ export default function App() {
           expiresAt: issued.expires_at,
           directorUrl: issued.director_url,
           remoteReady: issued.remote_ready,
+          connectionCode: issued.connection_code,
         });
       } else if (agent.killed || agent.paused) await api.resume(agent.device_id);
       else await api.pause(agent.device_id);
@@ -1105,7 +1107,7 @@ export default function App() {
     {confirmKill ? <div className="kill-confirm" role="dialog" aria-modal="true" aria-label="Conferma stop"><div><h2>Fermare tutti gli Agent?</h2><p>I lavori in corso torneranno in attesa.</p><button onClick={() => setConfirmKill(false)}>Annulla</button><button className="danger" onClick={async () => { await api.kill(); setConfirmKill(false); await refresh(); }}>Conferma stop</button></div></div> : null}
     {enrollment || enrollmentError ? <div className="enrollment-dialog" role="dialog" aria-modal="true" aria-labelledby="enrollment-title"><div className="enrollment-card">
       <span>INSTALLAZIONE AGENT</span><h2 id="enrollment-title">{enrollment?.displayName || "Codice non disponibile"}</h2>
-      {enrollment ? <><p>Nel PC da collegare inserisci prima l’indirizzo del Director e poi il codice monouso. Il codice scade alle {new Date(enrollment.expiresAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}.</p><small>INDIRIZZO DIRECTOR</small><code>{enrollment.directorUrl}</code><small>CODICE MONOUSO</small><code>{enrollment.code}</code>{!enrollment.remoteReady ? <div className="enrollment-error">Il collegamento Internet non è ancora verificato. Apri Impostazioni → PC remoti prima di installare l’Agent fuori da questo Mac.</div> : null}<button className="primary" onClick={() => void navigator.clipboard.writeText(`Indirizzo Director: ${enrollment.directorUrl}\nCodice: ${enrollment.code}`)}>Copia dati di collegamento</button></> : null}
+      {enrollment ? <><p>Sull’altro PC installa Kreluna Agent, aprilo e incolla questo unico codice. Contiene già lavoro, indirizzo e autorizzazione; scade alle {new Date(enrollment.expiresAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}.</p><small>CODICE DI COLLEGAMENTO</small><code>{enrollment.connectionCode}</code>{!enrollment.remoteReady ? <div className="enrollment-error">Prima di usarlo su un altro PC attiva Impostazioni → PC remoti: il collegamento Internet non è ancora verificato.</div> : null}<button className="primary" disabled={!enrollment.remoteReady} onClick={() => void navigator.clipboard.writeText(enrollment.connectionCode)}>{enrollment.remoteReady ? "Copia collegamento" : "Collegamento Internet da attivare"}</button></> : null}
       {enrollmentError ? <div className="enrollment-error" role="alert">{enrollmentError}</div> : null}
       <button onClick={() => { setEnrollment(null); setEnrollmentError(""); }}>Chiudi</button>
       <small>Il Director conserva soltanto l’impronta del codice. Per reinstallare un PC già collegato occorre prima revocarlo.</small>

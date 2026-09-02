@@ -4,14 +4,15 @@ KRELUNA AGENTI — UN PROGRAMMA PER OGNI PC
 Il Director (cervello) sta su UN computer o sul link web.
 Ogni altro PC dello studio ha UN Agent, diverso.
 
-1. Apri director.url con il Blocco note.
-   Scrivi l'indirizzo del Director, una riga sola.
-   Esempio: http://192.168.1.10:8080
+1. Nel Director premi l'interruttore della scheda "Da installare" del lavoro
+   e premi "Copia collegamento". Il codice dura 20 minuti.
 
-2. Nel Director premi l'interruttore della scheda "Da installare" del lavoro.
-   Copia il codice monouso mostrato: dura 20 minuti.
+2. Sul PC da collegare fai doppio clic su "Installa Kreluna Agent.bat".
 
-3. Sul PC giusto fai DOPPIO CLIC su UN file solo:
+3. Incolla l'unico Codice di collegamento quando richiesto. Contiene già
+   indirizzo del Director, lavoro del PC e autorizzazione monouso.
+
+In alternativa restano disponibili gli installer specifici:
    - Installa PC-FATTURE.bat      → Webdesk / sito AdE
    - Installa PC-F24.bat          → IPSOA, poi Telematico
    - Installa PC-CONTABILITA.bat  → scarico AdE, carico IPSOA
@@ -20,9 +21,7 @@ Ogni altro PC dello studio ha UN Agent, diverso.
    - Installa PC-DURC.bat         → sito INPS
    - Installa PC-VISURE.bat       → sito CGN
 
-4. Incolla il codice monouso quando l'installer lo chiede.
-
-5. Se Windows avvisa: Altre informazioni → Esegui comunque.
+4. Se Windows avvisa: Altre informazioni → Esegui comunque.
 
 Sul desktop compare "Kreluna Agent …". Lascialo acceso.
 In dashboard Kreluna quel PC diventa online.

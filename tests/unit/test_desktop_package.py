@@ -92,3 +92,15 @@ def test_release_publishes_director_and_agents_for_mac_and_windows() -> None:
         "Kreluna-Agenti-Windows.zip",
     ):
         assert asset in workflow
+
+
+def test_agent_installers_accept_one_paste_connection_code() -> None:
+    mac = (ROOT / "apps" / "kreluna-agent" / "agent" / "mac_boot.py").read_text()
+    windows = (ROOT / "packaging" / "windows-agent" / "Installa-Agent.ps1").read_text()
+    build = (ROOT / "scripts" / "windows" / "build-agent-zip.sh").read_text()
+
+    assert "parse_pairing_code" in mac
+    assert "Incolla il Codice di collegamento" in mac
+    assert "KRELUNA-COLLEGA-1." in windows
+    assert "Incolla il Codice di collegamento" in windows
+    assert "Installa Kreluna Agent.bat" in build

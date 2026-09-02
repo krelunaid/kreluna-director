@@ -1,6 +1,7 @@
 # Installa UN Agent Kreluna su questo PC. Non è il Director: è il braccio.
 param(
-  [Parameter(Mandatory = $true)][string]$Role,
+  [string]$ConnectionCode = "",
+  [string]$Role = "",
   [string]$DisplayName = "",
   [string]$DirectorUrl = "",
   [string]$EnrollCode = "",
@@ -14,14 +15,43 @@ if (-not (Test-Path (Join-Path $Source "apps\kreluna-agent\agent\main.py"))) {
   throw "Apri lo zip Kreluna-Agenti-Windows e lancia Installa da li."
 }
 
-$UrlFile = Join-Path $Here "director.url"
-if (-not (Test-Path $UrlFile)) {
-  throw "Manca director.url. Scrivi dentro l'indirizzo del Director (es. http://192.168.1.10:8080)."
+$PairingPrefix = "KRELUNA-COLLEGA-1."
+if (-not $ConnectionCode -and (-not $Role -or -not $DirectorUrl -or -not $EnrollCode)) {
+  $ConnectionCode = (Read-Host "Incolla il Codice di collegamento copiato dal Director").Trim()
 }
-$DefaultDirectorUrl = (Get-Content $UrlFile -Raw).Trim().Split("`n")[0].Trim()
+if ($ConnectionCode) {
+  $CompactCode = $ConnectionCode -replace '\s', ''
+  if (-not $CompactCode.StartsWith($PairingPrefix) -or $CompactCode.Length -gt 1200) {
+    throw "Codice di collegamento Kreluna non valido."
+  }
+  try {
+    $Encoded = $CompactCode.Substring($PairingPrefix.Length).Replace('-', '+').Replace('_', '/')
+    switch ($Encoded.Length % 4) {
+      2 { $Encoded += "==" }
+      3 { $Encoded += "=" }
+      1 { throw "Codifica non valida" }
+    }
+    $Linked = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded)) | ConvertFrom-Json
+  } catch {
+    throw "Codice di collegamento Kreluna non leggibile."
+  }
+  if ($Linked.v -ne 1 -or -not $Linked.u -or -not $Linked.r -or -not $Linked.n -or -not $Linked.c) {
+    throw "Dati mancanti nel Codice di collegamento."
+  }
+  $DirectorUrl = [string]$Linked.u
+  $Role = [string]$Linked.r
+  $DisplayName = [string]$Linked.n
+  $EnrollCode = [string]$Linked.c
+}
+
+$UrlFile = Join-Path $Here "director.url"
+$DefaultDirectorUrl = if (Test-Path $UrlFile) { (Get-Content $UrlFile -Raw).Trim().Split("`n")[0].Trim() } else { "" }
 if (-not $DirectorUrl) {
   $TypedDirectorUrl = (Read-Host "Indirizzo Director mostrato in Impostazioni/PC remoti [$DefaultDirectorUrl]").Trim()
   $DirectorUrl = if ($TypedDirectorUrl) { $TypedDirectorUrl } else { $DefaultDirectorUrl }
+}
+if ($Role -notmatch '^pc-[a-z0-9-]{2,60}$') {
+  throw "Lavoro Agent non valido."
 }
 if (-not $DirectorUrl) {
   throw "director.url e' vuoto. Metti l'indirizzo del Director."
@@ -40,6 +70,7 @@ if (-not [string]::IsNullOrEmpty($DirectorUri.UserInfo) -or -not [string]::IsNul
 $DirectorUrl = $DirectorUrl.TrimEnd("/")
 
 if (-not $DisplayName) { $DisplayName = $Role.ToUpper() }
+if ($DisplayName.Length -gt 120) { throw "Nome Agent non valido." }
 if (-not $EnrollCode) {
   $EnrollCode = (Read-Host "Codice monouso generato dal Director").Trim()
 }
