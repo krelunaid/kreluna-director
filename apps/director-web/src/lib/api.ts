@@ -435,10 +435,13 @@ export const api = {
         vat_rate?: number | null;
         vat_note?: string | null;
         vat_treatment?: "standard" | "intent_declaration";
+        intent_lookup?: "automatic" | "manual";
+        intent_received_date?: string;
+        intent_receipt_protocol?: string;
         intent_protocol?: string;
         intent_progressive?: string;
         intent_year?: string;
-        lines?: Array<{ description: string; quantity: number; unit_net_eur: number | null; vat_rate: number }>;
+        lines?: Array<{ description: string; quantity: number; unit_net_eur: number | null; vat_rate: number; vat_treatment?: "standard" | "intent_declaration" }>;
       } | null;
       tasks: Task[];
     }>(

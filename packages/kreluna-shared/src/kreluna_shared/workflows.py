@@ -209,6 +209,9 @@ def build_invoice_draft(
     vat_rate: float,
     vat_note: str,
     vat_treatment: str = "standard",
+    intent_lookup: str = "automatic",
+    intent_received_date: str = "",
+    intent_receipt_protocol: str = "",
     intent_protocol: str = "",
     intent_progressive: str = "",
     intent_year: str = "",
@@ -249,7 +252,14 @@ def build_invoice_draft(
                 {
                     "key": f"line_{index}",
                     "label": f"Riga {index}",
-                    "value": f"{line['description']} · q.tà {line['quantity']:g} · € {line_net:.2f} · IVA {float(line['vat_rate']) * 100:g}%",
+                    "value": (
+                        f"{line['description']} · q.tà {line['quantity']:g} · € {line_net:.2f} · "
+                        + (
+                            "N3.5 · dichiarazione d'intento"
+                            if line.get("vat_treatment") == "intent_declaration"
+                            else f"IVA {float(line['vat_rate']) * 100:g}%"
+                        )
+                    ),
                     "required": True,
                     "source": "operatore",
                 }
@@ -261,13 +271,31 @@ def build_invoice_draft(
             ]
         )
     if vat_treatment == "intent_declaration":
-        fields.extend(
-            [
-                {"key": "intent_protocol", "label": "Protocollo dichiarazione", "value": intent_protocol, "required": True, "source": "operatore"},
-                {"key": "intent_progressive", "label": "Progressivo", "value": intent_progressive, "required": True, "source": "operatore"},
-                {"key": "intent_year", "label": "Anno dichiarazione", "value": intent_year, "required": True, "source": "operatore"},
-            ]
-        )
+        if intent_lookup == "automatic":
+            fields.append(
+                {
+                    "key": "intent_lookup",
+                    "label": "Dichiarazione d'intento",
+                    "value": "Ricerca automatica nell'anagrafica Webdesk",
+                    "required": True,
+                    "source": "PC-FATTURE",
+                }
+            )
+        elif intent_received_date and intent_receipt_protocol:
+            fields.extend(
+                [
+                    {"key": "intent_received_date", "label": "Data ricevuta telematica", "value": intent_received_date, "required": True, "source": "operatore"},
+                    {"key": "intent_receipt_protocol", "label": "Protocollo ricezione DI", "value": intent_receipt_protocol, "required": True, "source": "operatore"},
+                ]
+            )
+        else:
+            fields.extend(
+                [
+                    {"key": "intent_protocol", "label": "Protocollo dichiarazione", "value": intent_protocol, "required": True, "source": "operatore"},
+                    {"key": "intent_progressive", "label": "Progressivo", "value": intent_progressive, "required": True, "source": "operatore"},
+                    {"key": "intent_year", "label": "Anno dichiarazione", "value": intent_year, "required": True, "source": "operatore"},
+                ]
+            )
     fields.append({"key": "total", "label": "Totale", "value": f"€ {total:.2f}", "required": True, "source": "calcolo locale"})
     return {
         "kind": "operational_draft",
@@ -293,6 +321,15 @@ def build_invoice_draft(
             ],
             "stop_before": "Salva cliente",
         },
+        "intent_declaration_workflow": {
+            "lookup": intent_lookup,
+            "customer_path": ["Home", "Clienti", "Apri cliente", "Dichiarazione d'intento"],
+            "webdesk_fields": ["Data ricevuta telematica", "Protocollo di ricezione della DI"],
+            "missing_signal": "Nessuna dichiarazione presente",
+            "missing_action": "Fermati e chiedi i dati; non inventare e non salvare l'anagrafica",
+            "invoice_vat": "Art. 8 c.1 lett.c DPR 633/72 - N3.5",
+            "invoice_row_action": "Attiva DI soltanto sulle righe N3.5",
+        },
         "steps": [
             "Apri IPSOA, entra in Webdesk e scegli Servizi SMART",
             "Usa Fort Knox soltanto per l'accesso ordinario autorizzato",
@@ -301,6 +338,9 @@ def build_invoice_draft(
             "Se non esiste, apri Clienti > Crea nuovo e compila i dati anagrafici",
             "Ferma il lavoro prima di salvare un nuovo cliente e chiedi conferma",
             "Torna a Home > Fatture > Crea nuovo e precompila la fattura",
+            "Per le righe N3.5 leggi prima la dichiarazione nell'anagrafica del destinatario",
+            "Se Webdesk mostra Nessuna dichiarazione presente, fermati e chiedi i dati",
+            "Applica Art. 8 c.1 lett.c DPR 633/72 - N3.5 e DI soltanto alle righe interessate",
             "Ferma il lavoro prima di Salva, Emetti o Invia",
         ],
         "issues": [],

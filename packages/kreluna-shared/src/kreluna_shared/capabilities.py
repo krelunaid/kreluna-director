@@ -23,11 +23,18 @@ class InvoiceLineArgs(BaseModel):
     quantity: float = Field(default=1, gt=0, le=100_000)
     unit_net_eur: float = Field(gt=0, le=1_000_000)
     vat_rate: float = Field(default=0.22, ge=0, le=1)
+    vat_treatment: Literal["standard", "intent_declaration"] = "standard"
 
     @field_validator("description")
     @classmethod
     def strip_description(cls, value: str) -> str:
         return " ".join(value.split())
+
+    @model_validator(mode="after")
+    def normalize_vat(self) -> InvoiceLineArgs:
+        if self.vat_treatment == "intent_declaration":
+            self.vat_rate = 0
+        return self
 
 
 class InvoicePrepareArgs(BaseModel):
@@ -38,6 +45,9 @@ class InvoicePrepareArgs(BaseModel):
     vat_rate: float = Field(default=0.22, ge=0, le=1)
     vat_note: str = Field(default="", max_length=300)
     vat_treatment: Literal["standard", "intent_declaration"] = "standard"
+    intent_lookup: Literal["automatic", "manual"] = "automatic"
+    intent_received_date: str = Field(default="", pattern=r"^(?:\d{2}/\d{2}/\d{4})?$")
+    intent_receipt_protocol: str = Field(default="", max_length=60)
     intent_protocol: str = Field(default="", pattern=r"^(?:\d{17})?$")
     intent_progressive: str = Field(default="", pattern=r"^(?:\d{6})?$")
     intent_year: str = Field(default="", pattern=r"^(?:\d{4})?$")
@@ -56,25 +66,52 @@ class InvoicePrepareArgs(BaseModel):
         if not isinstance(value, dict):
             return value
         cleaned = dict(value)
+        vat_note = str(cleaned.get("vat_note") or "").lower()
+        if "dichiarazione" in vat_note and "intento" in vat_note:
+            cleaned["vat_treatment"] = "intent_declaration"
         # I vecchi task non avevano questi campi: stringhe vuote restano valide
         # per il trattamento IVA ordinario.
-        for key in ("intent_protocol", "intent_progressive", "intent_year"):
+        for key in (
+            "intent_received_date",
+            "intent_receipt_protocol",
+            "intent_protocol",
+            "intent_progressive",
+            "intent_year",
+        ):
             cleaned[key] = str(cleaned.get(key) or "").strip()
         return cleaned
 
     @model_validator(mode="after")
     def validate_intent_declaration(self) -> InvoicePrepareArgs:
-        if self.vat_treatment != "intent_declaration":
+        intent_lines = [line for line in self.lines if line.vat_treatment == "intent_declaration"]
+        if self.vat_treatment == "intent_declaration" and self.lines and not intent_lines:
+            # Le vecchie richieste indicavano la DI soltanto a livello di fattura.
+            for line in self.lines:
+                line.vat_treatment = "intent_declaration"
+                line.vat_rate = 0
+            intent_lines = list(self.lines)
+        if self.vat_treatment != "intent_declaration" and not intent_lines:
             return self
-        if not (self.intent_protocol and self.intent_progressive and self.intent_year):
-            raise ValueError("La dichiarazione d'intento richiede protocollo, progressivo e anno")
-        self.vat_rate = 0
-        self.vat_note = (
-            "N3.5 · Dichiarazione d'intento · "
-            f"protocollo {self.intent_protocol}-{self.intent_progressive} · anno {self.intent_year}"
-        )
-        for line in self.lines:
-            line.vat_rate = 0
+        self.vat_treatment = "intent_declaration"
+        if not self.lines or len(intent_lines) == len(self.lines):
+            self.vat_rate = 0
+        if self.intent_lookup == "automatic":
+            self.vat_note = "N3.5 · Dichiarazione d'intento · ricerca automatica in Webdesk"
+        elif self.intent_received_date and self.intent_receipt_protocol:
+            self.vat_note = (
+                "N3.5 · Dichiarazione d'intento · "
+                f"ricevuta il {self.intent_received_date} · protocollo {self.intent_receipt_protocol}"
+            )
+        elif self.intent_protocol and self.intent_progressive and self.intent_year:
+            # Compatibilita con le bozze create prima della mappatura reale di Webdesk.
+            self.vat_note = (
+                "N3.5 · Dichiarazione d'intento · "
+                f"protocollo {self.intent_protocol}-{self.intent_progressive} · anno {self.intent_year}"
+            )
+        else:
+            raise ValueError(
+                "La dichiarazione manuale richiede data ricevuta e protocollo Webdesk"
+            )
         return self
 
 

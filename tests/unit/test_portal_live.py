@@ -92,6 +92,10 @@ def test_fatture_portal_describes_customer_search_and_create_fields():
         "recipient_code",
     } <= set(target.customer_create_fields)
     assert target.customer_create_fields["save_button"] == ""
+    assert target.invoice_workflow["customer_search_mode"] == "sequential_keystrokes"
+    assert target.invoice_workflow["intent_missing_text"] == "Nessuna dichiarazione presente"
+    assert target.invoice_workflow["intent_is_per_line"] is True
+    assert "Salva" in target.invoice_workflow["stop_before"]
 
 
 def test_invoice_target_can_be_read_from_the_windows_installer_file(monkeypatch, tmp_path):
@@ -176,9 +180,14 @@ def test_unknown_portal_is_refused():
         open_portal(portal="portale-finto", supported=lambda: True)
 
 
-def test_unconfigured_invoice_placeholder_is_never_opened():
-    with pytest.raises(RuntimeError, match="link non configurato"):
-        open_portal(portal="fatture-webdesk", supported=lambda: True)
+def test_invoice_portal_uses_the_real_webdesk_login_without_submitting():
+    fake = FakeMac(page_url="https://app.webdesk.it/Apps/Login/View")
+    result, _ = run(fake, portal="fatture-webdesk")
+
+    assert result["url"] == "https://app.webdesk.it/Apps/Login/View"
+    assert result["sent"] is False
+    assert result["filled"] is False
+    assert "submit()" not in " ".join(fake.scripts).lower()
 
 
 def test_it_refuses_to_type_on_the_wrong_site():

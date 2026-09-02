@@ -149,6 +149,7 @@ def test_invoice_intent_declaration_is_structured_and_forces_zero_vat():
             "net_eur": 1000,
             "vat_rate": 0.22,
             "vat_treatment": "intent_declaration",
+            "intent_lookup": "manual",
             "intent_protocol": "12345678901234567",
             "intent_progressive": "000001",
             "intent_year": "2026",
@@ -164,7 +165,7 @@ def test_invoice_intent_declaration_is_structured_and_forces_zero_vat():
 
 
 def test_invoice_intent_declaration_requires_all_references():
-    with pytest.raises(ValueError, match="protocollo, progressivo e anno"):
+    with pytest.raises(ValueError, match="data ricevuta e protocollo Webdesk"):
         validate_capability_args(
             "invoice_prepare_demo",
             {
@@ -172,11 +173,54 @@ def test_invoice_intent_declaration_requires_all_references():
                 "description": "Consulenza",
                 "net_eur": 1000,
                 "vat_treatment": "intent_declaration",
+                "intent_lookup": "manual",
                 "intent_protocol": "",
                 "intent_progressive": "",
                 "intent_year": "",
             },
         )
+
+
+def test_invoice_intent_declaration_defaults_to_webdesk_lookup():
+    args = validate_capability_args(
+        "invoice_prepare_demo",
+        {
+            "client_name": "Giorgio Tesi",
+            "description": "Piante",
+            "net_eur": 1000,
+            "vat_treatment": "intent_declaration",
+        },
+    )
+
+    assert args["intent_lookup"] == "automatic"
+    assert args["vat_note"] == (
+        "N3.5 · Dichiarazione d'intento · ricerca automatica in Webdesk"
+    )
+
+
+def test_invoice_can_mix_ordinary_vat_and_intent_lines():
+    args = validate_capability_args(
+        "invoice_prepare_demo",
+        {
+            "client_name": "Giorgio Tesi",
+            "description": "Fornitura mista",
+            "net_eur": 2000,
+            "lines": [
+                {"description": "Vaso", "quantity": 1, "unit_net_eur": 1000, "vat_rate": 0.22},
+                {
+                    "description": "Piante",
+                    "quantity": 1,
+                    "unit_net_eur": 1000,
+                    "vat_rate": 0.22,
+                    "vat_treatment": "intent_declaration",
+                },
+            ],
+        },
+    )
+
+    assert args["vat_treatment"] == "intent_declaration"
+    assert args["lines"][0]["vat_rate"] == 0.22
+    assert args["lines"][1]["vat_rate"] == 0
 
 
 def test_grant_device_bound_and_replay():

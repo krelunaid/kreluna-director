@@ -64,12 +64,8 @@ portals:
   fatture-webdesk:
     role: pc-fatture
     name: Fatture — Webdesk
-    # L'Agent permette di impostare il percorso/indirizzo senza modificare il codice.
-    # Finché manca, usa la prova locale visibile e non finge di lavorare sul sito vero.
-    configured: false
-    # Non inserire qui un indirizzo generico: va impostato il percorso Webdesk
-    # effettivo con KRELUNA_FATTURE_TARGET o KRELUNA_FATTURE_TARGET_FILE.
-    url: https://webdesk.invalid
+    configured: true
+    url: https://app.webdesk.it/Apps/Login/View
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
     username_field: "input[type=email], input[name*=user], input[name*=login]"
     password_field: "input[type=password]"
@@ -94,7 +90,19 @@ portals:
       pec: ""
       save_button: ""  # solo arresto/controllo: mai clic automatico
     invoice_fields: {}
-    login_note: Utenza cliente con smart card o SPID. Lo fai tu a mano.
+    invoice_workflow:
+      app_name: Fattura SMART
+      new_invoice_path: [Home, Fatture, Crea nuovo]
+      customer_search_mode: sequential_keystrokes
+      customer_search_wait_ms: 1000
+      customer_match: exact_suggestion
+      customer_master_path: [Home, Clienti, Apri cliente, Dichiarazione d'intento]
+      intent_missing_text: Nessuna dichiarazione presente
+      intent_fields: [Data ricevuta telematica, Protocollo di ricezione della DI]
+      intent_vat_text: Art. 8 c.1 lett.c DPR 633/72 - N3.5
+      intent_is_per_line: true
+      stop_before: [Salva, Salva comunque, Emetti, Invia]
+    login_note: L'accesso a Webdesk lo completa la persona oppure usa Fort Knox con autorizzazione. Nessuna credenziale e' nel codice.
 
 settings:
   # Quanto aspetta che tu finisca il login, prima di rinunciare.
