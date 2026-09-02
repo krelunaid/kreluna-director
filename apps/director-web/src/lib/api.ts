@@ -414,6 +414,7 @@ export const api = {
       single_use: true;
       director_url: string;
       remote_ready: boolean;
+      connection_code: string;
     }>(`/agents/${agentId}/enrollment`, { method: "POST" }),
   tasks: () => request<{ tasks: Task[] }>("/tasks"),
   approvals: () => request<{ approvals: Approval[] }>("/approvals"),

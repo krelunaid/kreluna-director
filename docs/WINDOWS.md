@@ -36,17 +36,16 @@ e avvia `Installa.bat` dal nuovo ZIP.
 
 Non usare Installa.bat del Director. Usa lo zip **Kreluna-Agenti-Windows**.
 
-1. Apri `director.url` e metti l’IP del computer dove gira il Director
-2. Doppio clic su **un** installer, quello del PC:
-   - `Installa PC-FATTURE.bat`
-   - `Installa PC-PAGAMENTI.bat`
-   - `Installa PC-F24.bat`
-   - `Installa PC-CONTABILITA.bat`
-   - `Installa PC-DOCUMENTI.bat`
-   - `Installa PC-EMAIL.bat`
-3. Se Windows blocca: Altre informazioni → Esegui comunque
+1. Sul Director apri **PC & Feature**, scegli il tipo di lavoro e premi **Installa Agent**
+2. Premi **Copia collegamento**
+3. Sul nuovo PC fai doppio clic su **Installa Kreluna Agent.bat**
+4. Incolla il Codice di collegamento quando viene richiesto
+5. Se Windows blocca: **Altre informazioni** → **Esegui comunque**
 
-Sul desktop compare **Kreluna Agent …**. Lascialo acceso.
+Non occorre modificare file, conoscere l’indirizzo del Director o scegliere di nuovo il
+ruolo: il Codice di collegamento contiene già tutto. Sul desktop compare **Kreluna Agent**;
+lascialo acceso. Nel Director il pallino del PC diventa verde quando il collegamento è
+autenticato.
 
 ## Ricreare lo zip
 

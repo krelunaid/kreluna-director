@@ -27,6 +27,16 @@ Su macOS nuovo la finestra gialla ha solo **Sposta nel Cestino** e **Fine**. Non
 Quando compare il pallino rosso, premi **Aggiornamento → Installa ora**. Kreluna
 verifica il pacchetto ufficiale, sostituisce l'app e si riapre. I dati restano.
 
+## Agent su un altro Mac dello studio
+
+1. Sul Director apri **PC & Feature**, scegli il tipo di lavoro e premi **Installa Agent**
+2. Premi **Copia collegamento**
+3. Sul nuovo Mac trascina `Kreluna Agent.app` in **Applicazioni** e aprilo
+4. Incolla l'unico Codice di collegamento richiesto
+
+Il codice contiene già indirizzo e ruolo del PC. Il pallino del PC diventa verde nel
+Director appena l'Agent completa il collegamento autenticato.
+
 ## Disinstallazione completa
 
 Apri lo ZIP originale e fai doppio clic su **Disinstalla Kreluna.command**. Dopo una

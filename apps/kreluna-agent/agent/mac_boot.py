@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from kreluna_shared.agents import default_agents_path, load_live_agent_roles
+from kreluna_shared.pairing import parse_pairing_code
 
 
 def support_dir() -> Path:
@@ -159,59 +160,32 @@ def apply_config(data: dict[str, str]) -> None:
 
 def ask_osascript() -> dict[str, str] | None:
     roles = load_live_agent_roles(roles_yaml())
-    labels = [f"{role.display_name} — {role.job}" for role in roles]
-    listed = ", ".join(f'"{item}"' for item in labels)
-    script = f'''
-set picked to choose from list {{{listed}}} with prompt "Questo Mac quale lavoro fa? Un Agent, un ruolo." OK button name "Avanti" cancel button name "Annulla"
-if picked is false then return "CANCEL"
-return item 1 of picked
-'''
-    choose = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, check=False)
-    label = choose.stdout.strip()
-    if choose.returncode != 0 or label in {"", "CANCEL"}:
-        return None
-    found = next((item for item in roles if f"{item.display_name} — {item.job}" == label), None)
-    if found is None:
-        return None
-    url_script = f'''
-set answer to display dialog "Indirizzo del Director (cervello)" default answer "{default_director_url()}" buttons {{"Annulla", "Avvia"}} default button "Avvia"
-if button returned of answer is "Annulla" then return "CANCEL"
-return text returned of answer
-'''
-    typed = subprocess.run(["osascript", "-e", url_script], capture_output=True, text=True, check=False)
-    url = typed.stdout.strip()
-    if typed.returncode != 0 or url in {"", "CANCEL"}:
-        return None
-    try:
-        url = validated_director_url(url)
-    except ValueError as exc:
-        subprocess.run(
-            ["osascript", "-e", f'display dialog "{exc}" buttons {{"OK"}} default button "OK"'],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return None
     code_script = '''
-set answer to display dialog "Codice monouso dell'Agent (generato dal Director)" default answer "" buttons {"Annulla", "Continua"} default button "Continua" with title "Kreluna Agent"
+set answer to display dialog "Incolla il Codice di collegamento copiato dal Director" default answer "" buttons {"Annulla", "Collega"} default button "Collega" with title "Kreluna Agent"
 if button returned of answer is "Annulla" then return "CANCEL"
 return text returned of answer
 '''
     code_answer = subprocess.run(
         ["osascript", "-e", code_script], capture_output=True, text=True, check=False
     )
-    code = code_answer.stdout.strip()
-    if code_answer.returncode != 0 or code == "CANCEL":
+    pasted = code_answer.stdout.strip()
+    if code_answer.returncode != 0 or pasted == "CANCEL":
         return None
     try:
-        code = validated_enrollment_code(code)
+        linked = parse_pairing_code(pasted)
+        url = validated_director_url(linked["director_url"])
+        code = validated_enrollment_code(linked["enrollment_code"])
     except ValueError as exc:
+        message = _escape_applescript(str(exc))
         subprocess.run(
-            ["osascript", "-e", f'display dialog "{exc}" buttons {{"OK"}} default button "OK"'],
+            ["osascript", "-e", f'display dialog "{message}" buttons {{"OK"}} default button "OK"'],
             capture_output=True,
             text=True,
             check=False,
         )
+        return None
+    found = next((item for item in roles if item.role == linked["role"]), None)
+    if found is None:
         return None
     data = {
         "role": found.role,

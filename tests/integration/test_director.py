@@ -37,6 +37,7 @@ from kreluna_shared.crypto import (
     sha256_hex,
     sign_bytes,
 )
+from kreluna_shared.pairing import parse_pairing_code
 from kreluna_shared.planner import plan_deterministic
 from sqlalchemy import select
 
@@ -165,7 +166,12 @@ async def issue_agent_code(
     owner = await login(client)
     issued = await client.post(f"/agents/{role}/enrollment", headers=auth(owner))
     assert issued.status_code == 200, issued.text
-    return issued.json()["enrollment_code"]
+    payload = issued.json()
+    linked = parse_pairing_code(payload["connection_code"])
+    assert linked["role"] == role
+    assert linked["enrollment_code"] == payload["enrollment_code"]
+    assert linked["director_url"] == payload["director_url"]
+    return payload["enrollment_code"]
 
 
 async def enroll_test_agent(
