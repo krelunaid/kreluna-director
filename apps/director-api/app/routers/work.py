@@ -7,7 +7,13 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from kreluna_shared.agents import preferred_role
+from kreluna_shared.capabilities import (
+    APPROVAL_CAPABILITIES,
+    CAPABILITIES,
+    validate_capability_args,
+)
 from kreluna_shared.crypto import decrypt_bytes
+from kreluna_shared.models import PlannedTask, PlanResult, Risk
 from kreluna_shared.planner import apply_policy, complete_pending, continue_open_invoice
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -84,6 +90,30 @@ class ChatBody(BaseModel):
 
 class ApprovalDecision(BaseModel):
     note: str | None = None
+
+
+class StructuredRequestBody(BaseModel):
+    capability: Literal[
+        "invoice_prepare_demo",
+        "f24_prepare",
+        "contabilita_prepare",
+        "camera_prepare",
+        "contratti_prepare",
+        "durc_prepare",
+        "visure_prepare",
+    ]
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
+STRUCTURED_LABELS = {
+    "invoice_prepare_demo": "fattura",
+    "f24_prepare": "F24",
+    "contabilita_prepare": "contabilità",
+    "camera_prepare": "pratica camerale",
+    "contratti_prepare": "contratto",
+    "durc_prepare": "DURC",
+    "visure_prepare": "visura",
+}
 
 
 def _task_out(task: Task, evidence: list[Evidence] | None = None) -> dict[str, Any]:
@@ -230,6 +260,63 @@ async def chat(
 async def reset_chat(actor: Annotated[Actor, Depends(get_actor)]) -> dict:
     followups.forget_all(actor.user_id)
     return {"ok": True}
+
+
+@router.post("/requests/structured")
+async def create_structured_request(
+    body: StructuredRequestBody,
+    actor: Annotated[Actor, Depends(get_actor)],
+    policy: Annotated[Any, Depends(get_policy)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Accetta una scheda completa senza far reinterpretare i campi al modello IA."""
+
+    if actor.role == "viewer":
+        raise HTTPException(status_code=403, detail="Il visore può solo leggere")
+    try:
+        args = validate_capability_args(body.capability, body.args)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    label = STRUCTURED_LABELS[body.capability]
+    client_name = str(args.get("client_name") or "").strip()
+    planned = PlannedTask(
+        goal=f"Preparare {label}" + (f" per {client_name}" if client_name else ""),
+        capability=body.capability,
+        args=args,
+        risk=Risk(CAPABILITIES[body.capability].default_risk),
+        needs_approval=body.capability in APPROVAL_CAPABILITIES,
+    )
+    plan = apply_policy(
+        PlanResult(
+            ok=True,
+            summary=f"Scheda {label} completa: la mando al PC assegnato.",
+            tasks=[planned],
+            source="structured-form",
+        ),
+        policy,
+        actor.license_state,
+    )
+    if not plan.ok or not plan.tasks:
+        raise HTTPException(status_code=403, detail=plan.deny_reason or plan.summary)
+    task = await enqueue_planned(
+        session,
+        tenant_id=actor.tenant_id,
+        user_id=actor.user_id,
+        planned=plan.tasks[0],
+    )
+    dispatched = await dispatch_queued(session)
+    await session.commit()
+    await hub.broadcast_dashboard(
+        actor.tenant_id,
+        {"type": "tasks", "tenant_id": actor.tenant_id},
+    )
+    return {
+        "ok": True,
+        "summary": plan.summary + _waiting_pc_note([task]),
+        "source": plan.source,
+        "tasks": [_task_out(task)],
+        "dispatched": [item.id for item in dispatched],
+    }
 
 
 @router.get("/tasks")

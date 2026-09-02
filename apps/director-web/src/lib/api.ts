@@ -444,6 +444,11 @@ export const api = {
       },
     ),
   resetChat: () => request<{ ok: boolean }>("/chat/reset", { method: "POST" }),
+  structuredRequest: (capability: string, args: Record<string, unknown>) =>
+    request<{ ok: boolean; summary: string; source: string; tasks: Task[] }>("/requests/structured", {
+      method: "POST",
+      body: JSON.stringify({ capability, args }),
+    }),
   kill: () => request<{ ok: boolean; stopped_devices: number }>("/kill-switch", { method: "POST" }),
   cancelTask: (id: string) => request<{ ok: boolean; status: string }>(`/tasks/${id}/cancel`, { method: "POST" }),
   pause: (deviceId: string) => request<{ ok: boolean; requeued_tasks: number }>(`/agents/${deviceId}/pause`, { method: "POST" }),

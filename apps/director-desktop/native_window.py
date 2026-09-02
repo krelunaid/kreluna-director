@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+_native_window_process: subprocess.Popen | None = None
+
 
 def validated_local_url(value: str) -> str:
     """Keep the native shell bound to the local Director and nothing else."""
@@ -38,17 +40,65 @@ def mac_window_executable() -> Path:
 
 
 def run_native_window(url: str, *, storage_path: Path) -> None:
+    global _native_window_process
     local_url = validated_local_url(url)
     if sys.platform == "darwin":
         executable = mac_window_executable()
         if not executable.is_file():
             raise RuntimeError("La finestra nativa di Kreluna è mancante: reinstalla l'app")
-        subprocess.run([str(executable), local_url], check=True)
+        process = subprocess.Popen([str(executable), local_url])
+        _native_window_process = process
+        try:
+            if process.wait() != 0:
+                raise subprocess.CalledProcessError(process.returncode, process.args)
+        finally:
+            if _native_window_process is process:
+                _native_window_process = None
         return
     if sys.platform == "win32":
         _run_windows_window(local_url, storage_path=storage_path)
         return
     raise RuntimeError("La finestra nativa non è disponibile su questo sistema")
+
+
+def terminate_native_window() -> None:
+    """Chiude l'helper Mac appartenente a questo Director prima del riavvio."""
+
+    process = _native_window_process
+    if process is not None and process.poll() is None:
+        process.terminate()
+
+
+def activate_existing_mac_window(url: str) -> bool:
+    """Porta davanti la finestra già aperta senza crearne una seconda."""
+
+    if sys.platform != "darwin":
+        return False
+    local_url = validated_local_url(url)
+    executable = mac_window_executable()
+    if not executable.is_file():
+        return False
+    found = subprocess.run(
+        ["/usr/bin/pgrep", "-f", f"^{executable} {local_url}$"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    first = found.stdout.strip().splitlines()[:1]
+    if found.returncode != 0 or not first or not first[0].isdigit():
+        return False
+    script = (
+        "on run argv\n"
+        "tell application \"System Events\" to set frontmost of first process whose unix id is "
+        "(item 1 of argv as integer) to true\n"
+        "end run"
+    )
+    activated = subprocess.run(
+        ["/usr/bin/osascript", "-e", script, first[0]],
+        capture_output=True,
+        check=False,
+    )
+    return activated.returncode == 0
 
 
 def _run_windows_window(url: str, *, storage_path: Path) -> None:

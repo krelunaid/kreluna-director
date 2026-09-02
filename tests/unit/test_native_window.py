@@ -36,18 +36,54 @@ def test_macos_packaged_app_runs_its_native_helper(monkeypatch, tmp_path: Path) 
     helper.write_text("native")
     calls: list[list[str]] = []
 
+    class Process:
+        returncode = 0
+
+        def __init__(self, command):
+            self.args = command
+
+        def wait(self):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.returncode = -15
+
     monkeypatch.setattr(module.sys, "platform", "darwin")
     monkeypatch.setenv("KRELUNA_NATIVE_WINDOW", str(helper))
     monkeypatch.setattr(
         module.subprocess,
-        "run",
-        lambda command, check: calls.append(command)
-        or subprocess.CompletedProcess(command, returncode=0),
+        "Popen",
+        lambda command: calls.append(command) or Process(command),
     )
 
     module.run_native_window("http://127.0.0.1:8080/", storage_path=tmp_path / "storage")
 
     assert calls == [[str(helper), "http://127.0.0.1:8080/"]]
+
+
+def test_macos_existing_window_is_activated_instead_of_duplicated(monkeypatch, tmp_path: Path) -> None:
+    module = _load_native_window()
+    helper = tmp_path / "KrelunaWindow"
+    helper.write_text("native")
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(module.sys, "platform", "darwin")
+    monkeypatch.setenv("KRELUNA_NATIVE_WINDOW", str(helper))
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command[0] == "/usr/bin/pgrep":
+            return subprocess.CompletedProcess(command, returncode=0, stdout="1234\n")
+        return subprocess.CompletedProcess(command, returncode=0, stdout="")
+
+    monkeypatch.setattr(module.subprocess, "run", run)
+
+    assert module.activate_existing_mac_window("http://127.0.0.1:8080") is True
+    assert calls[0][:2] == ["/usr/bin/pgrep", "-f"]
+    assert calls[1][0] == "/usr/bin/osascript"
 
 
 def test_windows_packaged_app_uses_webview2_and_persistent_storage(

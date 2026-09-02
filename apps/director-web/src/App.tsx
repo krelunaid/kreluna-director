@@ -28,6 +28,26 @@ type InvoiceChatDraft = {
   vat_rate?: number | null;
   vat_note?: string | null;
 };
+type StructuredKind = "f24" | "contabilita" | "camerali" | "contratti" | "durc" | "visure";
+type StructuredDraft = {
+  kind: StructuredKind;
+  client_name: string;
+  notes: string;
+  form_type: "ordinary" | "simplified" | "elide" | "accise" | "public_entities";
+  section: "erario" | "inps" | "regioni" | "imu_locali" | "inail" | "altri_enti" | "elide" | "accise" | "public_entities";
+  tax_code: string;
+  reference_year: string;
+  amount_eur: number | null;
+  amount_side: "debit_eur" | "credit_eur";
+  entity_code: string;
+  province: string;
+  type_code: string;
+  identifying_elements: string;
+  operation: "invoice_import" | "ledger_import" | "reconciliation" | "other";
+  period: string;
+  detail: string;
+  visura_type: "ordinary" | "historical" | "protests" | "other";
+};
 type NavSection = "dashboard" | "agents" | "tasks" | "requests" | "errors" | "contracts" | "visure" | "vault" | "documents" | "settings";
 type RequestFilter = "all" | "active" | "errors" | "approvals";
 type LibraryCategory = "contract" | "document";
@@ -92,22 +112,32 @@ function chatSource(item: ChatItem): string {
   return "";
 }
 
-const SUGGESTIONS = [
-  { short: "Fattura Gadducci", full: "Fai la fattura ad Andrea Gadducci per 35-40 mila euro di manodopera" },
-  { short: "F24 IVA", full: "Prepara F24 ordinario IVA trimestrale secondo trimestre per Andrea Gadducci, anno 2026, debito 1.250 euro" },
-  { short: "Contabilità", full: "Scarica le fatture in IPSOA per Gadducci" },
-  { short: "Camerali", full: "Prepara la pratica camerale per Gadducci" },
-  { short: "Contratti", full: "Prepara una bozza di contratto per il cliente indicato, senza inviarla" },
-  { short: "DURC", full: "Prepara la richiesta DURC per Gadducci" },
-  { short: "Visure", full: "Prepara la visura per Gadducci" },
+const SUGGESTIONS: Array<{ short: string; full: string; form?: "fattura" | StructuredKind }> = [
+  { short: "Fattura", full: "Prepara una fattura", form: "fattura" },
+  { short: "F24", full: "Prepara un F24", form: "f24" },
+  { short: "Contabilità", full: "Prepara un lavoro di contabilità", form: "contabilita" },
+  { short: "Camerali", full: "Prepara una pratica camerale", form: "camerali" },
+  { short: "Contratti", full: "Prepara una bozza di contratto", form: "contratti" },
+  { short: "DURC", full: "Prepara una richiesta DURC", form: "durc" },
+  { short: "Visure", full: "Prepara una visura", form: "visure" },
   { short: "Visura vera su CGN", full: "Apri il sito CGN e fai la visura vera per Gadducci" },
   { short: "DURC vero su INPS", full: "Apri il sito INPS e prepara il DURC vero per Gadducci" },
   { short: "Fermo", full: "Ferma tutto" },
 ];
 
+function emptyStructuredDraft(kind: StructuredKind): StructuredDraft {
+  return {
+    kind, client_name: "", notes: "", form_type: "ordinary", section: "erario",
+    tax_code: "", reference_year: String(new Date().getFullYear()), amount_eur: null,
+    amount_side: "debit_eur", entity_code: "", province: "", type_code: "",
+    identifying_elements: "", operation: "invoice_import", period: "", detail: "",
+    visura_type: "ordinary",
+  };
+}
+
 const STARTER_REQUESTS = [
   { title: "Aprire il gestionale e compilare la fattura ad Andrea Gadducci", prompt: SUGGESTIONS[0].full, icon: "▣" },
-  { title: "Imparare la pagina di Fatture su Webdesk", prompt: SUGGESTIONS[2].full, icon: "⌘" },
+  { title: "Preparare un F24 in una sola scheda", prompt: SUGGESTIONS[1].full, icon: "⌘" },
   { title: "Impostare la visura per Bianchi", prompt: "Prepara la visura per Bianchi", icon: "◈" },
   { title: "Preparare visura per Bianchi", prompt: "Apri il sito CGN e prepara la visura per Bianchi", icon: "△" },
   { title: "Preparare la richiesta per il certificato dei contributi", prompt: SUGGESTIONS[5].full, icon: "♙" },
@@ -218,6 +248,7 @@ export default function App() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [chat, setChat] = useState<ChatItem[]>(INITIAL_CHAT);
   const [invoiceChatDraft, setInvoiceChatDraft] = useState<InvoiceChatDraft | null>(null);
+  const [structuredDraft, setStructuredDraft] = useState<StructuredDraft | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
@@ -429,9 +460,58 @@ export default function App() {
     );
   }
 
+  function openStructuredForm(kind: "fattura" | StructuredKind) {
+    if (kind === "fattura") {
+      setStructuredDraft(null);
+      setInvoiceChatDraft({ capability: "invoice_prepare_demo", client_name: "", description: "", net_eur: null, vat_rate: 0.22, vat_note: "" });
+    } else {
+      setInvoiceChatDraft(null);
+      setStructuredDraft(emptyStructuredDraft(kind));
+    }
+  }
+
+  async function submitStructuredDraft() {
+    const value = structuredDraft;
+    if (!value) return;
+    const capability = {
+      f24: "f24_prepare", contabilita: "contabilita_prepare", camerali: "camera_prepare",
+      contratti: "contratti_prepare", durc: "durc_prepare", visure: "visure_prepare",
+    }[value.kind];
+    let args: Record<string, unknown> = { client_name: value.client_name.trim(), notes: value.notes.trim(), use_saved_access: false };
+    if (value.kind === "f24") {
+      const extra = value.form_type === "accise"
+        ? { entity_code: value.entity_code.trim().toUpperCase(), province: value.province.trim().toUpperCase() }
+        : value.form_type === "elide"
+          ? { type_code: value.type_code.trim().toUpperCase(), identifying_elements: value.identifying_elements.trim().toUpperCase() }
+          : {};
+      args = {
+        client_name: value.client_name.trim(), form_type: value.form_type, period: value.period.trim(),
+        note: value.notes.trim(), use_saved_access: false,
+        lines: [{ section: value.section, tax_code: value.tax_code.trim().toUpperCase(), reference_year: value.reference_year, [value.amount_side]: value.amount_eur, ...extra }],
+      };
+    } else if (value.kind === "contabilita") args = { ...args, operation: value.operation, period: value.period.trim() };
+    else if (value.kind === "camerali") args = { ...args, practice_type: value.detail.trim() };
+    else if (value.kind === "contratti") args = { ...args, contract_type: value.detail.trim() };
+    else if (value.kind === "durc") args = { ...args, request_type: "regularity_certificate" };
+    else if (value.kind === "visure") args = { ...args, visura_type: value.visura_type };
+    setBusy(true); setOrb("think");
+    setChat((items) => [...items, { role: "user", text: `Scheda ${value.kind}: ${value.client_name}` }]);
+    try {
+      const result = await api.structuredRequest(capability, args);
+      setChat((items) => [...items, { role: "director", text: result.summary, source: result.source }]);
+      setStructuredDraft(null); setOrb("talk");
+      window.clearTimeout(talkTimer.current); talkTimer.current = window.setTimeout(() => setOrb("listen"), 4200);
+      await refresh().catch(() => undefined);
+    } catch (err) {
+      setChat((items) => [...items, { role: "director", text: err instanceof Error ? err.message : "Scheda non valida", deny: true }]);
+      setOrb("listen");
+    } finally { setBusy(false); }
+  }
+
   function newRequest() {
     setChat(INITIAL_CHAT);
     setInvoiceChatDraft(null);
+    setStructuredDraft(null);
     setDraft("");
     setOrb("listen");
     void api.resetChat().catch(() => undefined);
@@ -1085,8 +1165,8 @@ export default function App() {
           <section className="kreluna-panel" id="chat">
             <div className="kreluna-heading"><div className={`orb chat-orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div><h2>Kreluna</h2><span className={`ai-active ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "IA non disponibile"}</span></div>
             {!aiConnected ? <button className="ai-diagnostic" title={overview?.ai_detail || "Configurazione incompleta"} onClick={() => openAISettings()}><strong>{providerLabel}</strong>: {overview?.ai_detail || "servizio non disponibile"}. {aiManaged ? "Controlla la licenza." : "Configura ora."}</button> : null}
-            <div className="chat-log" ref={logRef}>{chat.map((item, index) => <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}><strong>{item.role === "user" ? "Tu" : `Kreluna${chatSource(item)}`}</strong><div>{item.text}</div></div>)}{invoiceChatDraft ? <InvoiceChatCard draft={invoiceChatDraft} busy={busy} onChange={setInvoiceChatDraft} onSubmit={() => void submitInvoiceChatDraft()} /> : null}{busy ? <div className="typing"><i /><i /><i /></div> : null}</div>
-            <div className="chips">{SUGGESTIONS.map((item) => <button key={item.full} className="chip" onClick={() => void send(item.full)} disabled={busy}>{item.short}</button>)}</div>
+            <div className="chat-log" ref={logRef}>{chat.map((item, index) => <div key={index} className={`msg ${item.role} ${item.deny ? "deny" : ""}`}><strong>{item.role === "user" ? "Tu" : `Kreluna${chatSource(item)}`}</strong><div>{item.text}</div></div>)}{invoiceChatDraft ? <InvoiceChatCard draft={invoiceChatDraft} busy={busy} onChange={setInvoiceChatDraft} onSubmit={() => void submitInvoiceChatDraft()} /> : null}{structuredDraft ? <StructuredRequestCard draft={structuredDraft} busy={busy} onChange={setStructuredDraft} onSubmit={() => void submitStructuredDraft()} /> : null}{busy ? <div className="typing"><i /><i /><i /></div> : null}</div>
+            <div className="chips">{SUGGESTIONS.map((item) => <button key={item.full} className="chip" onClick={() => item.form ? openStructuredForm(item.form) : void send(item.full)} disabled={busy}>{item.short}</button>)}</div>
             <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(draft); }}><span className="mic">♩</span><textarea value={draft} aria-label="Scrivi una richiesta a Kreluna" placeholder="Scrivi qui la tua richiesta…" onChange={(event) => setDraft(event.target.value)} /><button className="send-button" disabled={busy} aria-label="Invia">➤</button></form>
           </section>
 
@@ -1229,6 +1309,54 @@ function InvoiceChatCard({ draft, busy, onChange, onSubmit }: { draft: InvoiceCh
     </div>
     <button type="button" disabled={!ready || busy} onClick={onSubmit}>{busy ? "Preparazione…" : "Crea bozza fattura"}</button>
     <small>Cliente e prestazione restano campi separati · nessun invio automatico</small>
+  </section>;
+}
+
+const STRUCTURED_TITLES: Record<StructuredKind, string> = {
+  f24: "F24", contabilita: "CONTABILITÀ", camerali: "PRATICA CAMERALE",
+  contratti: "CONTRATTO", durc: "DURC", visure: "VISURA",
+};
+
+function StructuredRequestCard({ draft, busy, onChange, onSubmit }: { draft: StructuredDraft; busy: boolean; onChange: (value: StructuredDraft) => void; onSubmit: () => void }) {
+  const detailRequired = ["camerali", "contratti"].includes(draft.kind);
+  const specialF24Ready = draft.form_type !== "accise" || Boolean(draft.entity_code.trim() && /^[a-z]{2}$/i.test(draft.province));
+  const f24Ready = draft.kind !== "f24" || Boolean(draft.tax_code.trim().length === 4 && /^\d{4}$/.test(draft.reference_year) && draft.amount_eur && draft.amount_eur > 0 && specialF24Ready);
+  const ready = Boolean(draft.client_name.trim() && f24Ready && (!detailRequired || draft.detail.trim()));
+  const sectionOptions: Array<[StructuredDraft["section"], string]> = draft.form_type === "elide"
+    ? [["elide", "Elementi identificativi"]]
+    : draft.form_type === "accise"
+      ? [["accise", "Accise"]]
+      : draft.form_type === "public_entities"
+        ? [["public_entities", "Enti pubblici"]]
+        : [["erario", "Erario"], ["inps", "INPS"], ["regioni", "Regioni"], ["imu_locali", "IMU e tributi locali"], ["inail", "INAIL"], ["altri_enti", "Altri enti"]];
+  function changeF24Form(formType: StructuredDraft["form_type"]) {
+    const section = formType === "elide" ? "elide" : formType === "accise" ? "accise" : formType === "public_entities" ? "public_entities" : "erario";
+    onChange({ ...draft, form_type: formType, section, amount_side: formType === "elide" ? "debit_eur" : draft.amount_side });
+  }
+  return <section className="invoice-chat-card structured-request-card" aria-label={`Scheda ${STRUCTURED_TITLES[draft.kind]}`}>
+    <div><strong>{STRUCTURED_TITLES[draft.kind]} · SCHEDA UNICA</strong><span>Tutti i dati insieme</span></div>
+    <div className="invoice-chat-fields">
+      <label>Cliente<input value={draft.client_name} onChange={(event) => onChange({ ...draft, client_name: event.target.value })} placeholder="Nome o ragione sociale" /></label>
+      {draft.kind === "f24" ? <>
+        <label>Modello<select value={draft.form_type} onChange={(event) => changeF24Form(event.target.value as StructuredDraft["form_type"])}><option value="ordinary">F24 ordinario</option><option value="simplified">F24 semplificato</option><option value="elide">F24 ELIDE</option><option value="accise">F24 Accise</option><option value="public_entities">F24 Enti pubblici</option></select></label>
+        <label>Sezione<select value={draft.section} onChange={(event) => onChange({ ...draft, section: event.target.value as StructuredDraft["section"] })}>{sectionOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+        <label>Codice tributo<input maxLength={4} value={draft.tax_code} onChange={(event) => onChange({ ...draft, tax_code: event.target.value.replace(/[^a-z0-9]/gi, "").slice(0, 4) })} placeholder="es. 1001" /></label>
+        <label>Anno<input inputMode="numeric" maxLength={4} value={draft.reference_year} onChange={(event) => onChange({ ...draft, reference_year: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
+        <label>Tipo importo<select value={draft.amount_side} onChange={(event) => onChange({ ...draft, amount_side: event.target.value as StructuredDraft["amount_side"] })}><option value="debit_eur">A debito</option>{draft.form_type !== "elide" ? <option value="credit_eur">A credito</option> : null}</select></label>
+        <label>Importo (€)<input type="number" min="0.01" step="0.01" value={draft.amount_eur ?? ""} onChange={(event) => onChange({ ...draft, amount_eur: event.target.value === "" ? null : Number(event.target.value) })} placeholder="0,00" /></label>
+        <label>Periodo<input value={draft.period} onChange={(event) => onChange({ ...draft, period: event.target.value })} placeholder="es. agosto 2026" /></label>
+        {draft.form_type === "elide" ? <><label>Tipo codice<input maxLength={4} value={draft.type_code} onChange={(event) => onChange({ ...draft, type_code: event.target.value.replace(/[^a-z0-9]/gi, "").slice(0, 4) })} /></label><label>Elementi identificativi<input maxLength={17} value={draft.identifying_elements} onChange={(event) => onChange({ ...draft, identifying_elements: event.target.value.replace(/[^a-z0-9]/gi, "").slice(0, 17) })} /></label></> : null}
+        {draft.form_type === "accise" ? <><label>Codice ente<input maxLength={8} value={draft.entity_code} onChange={(event) => onChange({ ...draft, entity_code: event.target.value.replace(/[^a-z0-9]/gi, "").slice(0, 8) })} /></label><label>Provincia<input maxLength={2} value={draft.province} onChange={(event) => onChange({ ...draft, province: event.target.value.replace(/[^a-z]/gi, "").slice(0, 2) })} placeholder="es. RM" /></label></> : null}
+      </> : null}
+      {draft.kind === "contabilita" ? <><label>Operazione<select value={draft.operation} onChange={(event) => onChange({ ...draft, operation: event.target.value as StructuredDraft["operation"] })}><option value="invoice_import">Scarico e importazione fatture</option><option value="ledger_import">Importazione prima nota</option><option value="reconciliation">Riconciliazione contabile</option><option value="other">Altro</option></select></label><label>Periodo<input value={draft.period} onChange={(event) => onChange({ ...draft, period: event.target.value })} placeholder="es. agosto 2026" /></label></> : null}
+      {draft.kind === "camerali" ? <label>Tipo pratica<input value={draft.detail} onChange={(event) => onChange({ ...draft, detail: event.target.value })} placeholder="es. variazione sede" /></label> : null}
+      {draft.kind === "contratti" ? <label>Tipo contratto<input value={draft.detail} onChange={(event) => onChange({ ...draft, detail: event.target.value })} placeholder="es. locazione" /></label> : null}
+      {draft.kind === "visure" ? <label>Tipo visura<select value={draft.visura_type} onChange={(event) => onChange({ ...draft, visura_type: event.target.value as StructuredDraft["visura_type"] })}><option value="ordinary">Ordinaria</option><option value="historical">Storica</option><option value="protests">Protesti</option><option value="other">Altro</option></select></label> : null}
+      {draft.kind === "durc" ? <label>Richiesta<input value="Certificato di regolarità contributiva" readOnly /></label> : null}
+      <label className="structured-notes">Note<input value={draft.notes} onChange={(event) => onChange({ ...draft, notes: event.target.value })} placeholder="Informazioni aggiuntive (facoltative)" /></label>
+    </div>
+    <button type="button" disabled={!ready || busy} onClick={onSubmit}>{busy ? "Preparazione…" : `Prepara ${STRUCTURED_TITLES[draft.kind]}`}</button>
+    <small>Una sola scheda · nessun invio, pagamento, firma o download automatico</small>
   </section>;
 }
 
