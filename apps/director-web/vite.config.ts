@@ -13,6 +13,7 @@ export default defineConfig({
       "/auth": "http://127.0.0.1:8080",
       "/me": "http://127.0.0.1:8080",
       "/chat": "http://127.0.0.1:8080",
+      "/requests": "http://127.0.0.1:8080",
       "/tasks": "http://127.0.0.1:8080",
       "/agents": "http://127.0.0.1:8080",
       "/devices": "http://127.0.0.1:8080",
