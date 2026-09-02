@@ -240,6 +240,86 @@ def _evidence(png: bytes, step: str, portal_key: str) -> dict[str, Any]:
     }
 
 
+def _start_webdesk_invoice(
+    *,
+    run: mac_browser.Runner,
+    browser: str,
+    client_name: str,
+    settings: Any,
+    sleep: Callable[[float], None],
+    check: Callable[[], None],
+    stop: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    """Apre Nuova Fattura e seleziona il cliente, senza salvare nulla.
+
+    E' il primo tratto reale gia' osservato su Fattura SMART. Se la schermata
+    non e' esattamente quella attesa, si ferma invece di tentare coordinate.
+    """
+
+    waited = 0
+    text = mac_browser.page_text(run, browser)
+    while "FATTURA SMART" not in text.upper() and waited < settings.wait_for_login_seconds:
+        check()
+        sleep(settings.poll_seconds)
+        waited += settings.poll_seconds
+        text = mac_browser.page_text(run, browser)
+    if "FATTURA SMART" not in text.upper():
+        return stop(
+            "aspetto-login-webdesk",
+            "Webdesk è aperto. Completa il login e apri Fattura SMART, poi richiedi la fattura vera.",
+        )
+    if "Modifica cliente" in text or "Nuova Fattura" in text:
+        return stop(
+            "schermata-webdesk-occupata",
+            "Fattura SMART ha già una scheda di lavoro aperta. Chiudila o annullala tu: non la sovrascrivo.",
+        )
+    if not mac_browser.click_text_in_section(
+        run, browser, "Fatture", "+ Crea nuovo"
+    ):
+        return stop(
+            "nuova-fattura-non-trovata",
+            "Sono dentro Fattura SMART ma il riquadro Fatture è cambiato. Mi fermo senza scrivere.",
+        )
+    waited = 0
+    text = mac_browser.page_text(run, browser)
+    while "Nuova Fattura" not in text and waited < 20:
+        check()
+        sleep(1)
+        waited += 1
+        text = mac_browser.page_text(run, browser)
+    if "Nuova Fattura" not in text:
+        return stop(
+            "nuova-fattura-non-aperta",
+            "Ho richiesto una nuova fattura ma la scheda non è comparsa. Mi fermo senza compilare.",
+        )
+    if not mac_browser.fill_textbox_near_label(
+        run,
+        browser,
+        "Cliente",
+        client_name,
+        sequential=True,
+        pause=sleep,
+    ):
+        return stop(
+            "cliente-non-compilato",
+            "La casella Cliente non è riconoscibile. Non scrivo in un campo incerto.",
+        )
+    sleep(1)
+    if not mac_browser.click_unique_text_match(
+        run, browser, "Nuova Fattura", client_name
+    ):
+        return stop(
+            "cliente-non-univoco",
+            f'Ho cercato "{client_name}", ma non trovo un unico suggerimento esatto. Scegli tu il cliente.',
+            filled=True,
+        )
+    return stop(
+        "cliente-fattura-selezionato",
+        f'Ho aperto la fattura e selezionato "{client_name}". Non ho premuto Salva, Emetti o Invia.',
+        filled=True,
+    )
+
+
 def learn_portal(
     portal: str,
     *,
@@ -465,6 +545,24 @@ def open_portal(
             f"{spec.name}: accesso compilato da Fort Knox. Clicca tu per entrare; io non invio il modulo.",
             filled=True,
             capture=False,
+        )
+
+    if portal == "fatture-webdesk" and query:
+        where = mac_browser.current_url(run, browser)
+        host = (urlparse(where).hostname or "").lower()
+        if host not in {"app.webdesk.it", "sme.genya.it"}:
+            return stop(
+                "sito-sbagliato",
+                "La pagina davanti non è Webdesk o Fattura SMART. Non scrivo niente.",
+            )
+        return _start_webdesk_invoice(
+            run=run,
+            browser=browser,
+            client_name=query,
+            settings=settings,
+            sleep=sleep,
+            check=check,
+            stop=stop,
         )
 
     waited = 0

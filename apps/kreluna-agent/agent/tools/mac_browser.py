@@ -20,8 +20,14 @@ from urllib.parse import urlparse
 from agent.tools.screen_pointer import move_and_click
 
 JS_MISSING = "NON_TROVATO"
+JS_BLOCKED = "AZIONE_BLOCCATA"
 CHROME_FAMILY = ("Google Chrome", "Brave Browser", "Microsoft Edge", "Chromium", "Vivaldi")
 SAFARI = "Safari"
+
+# Questi comandi non devono mai essere premuti da una procedura di preparazione.
+# Il controllo e' anche dentro lo script JavaScript, cosi una configurazione
+# corrotta non puo' aggirarlo.
+FORBIDDEN_ACTION_TEXT = ("salva", "salva comunque", "emetti", "invia", "trasmetti", "paga")
 
 
 class MacControlError(RuntimeError):
@@ -231,6 +237,101 @@ def fill_field_script(browser: str, selector: str, text: str) -> str:
     )
 
 
+def _recursive_dom_helpers() -> str:
+    """JS condiviso per cercare anche negli iframe Webdesk accessibili."""
+
+    return (
+        "var docs=[];function walk(d){docs.push(d);var fs=d.querySelectorAll('iframe');"
+        "for(var i=0;i<fs.length;i++){try{if(fs[i].contentDocument)walk(fs[i].contentDocument);}"
+        "catch(_e){}}}walk(document);"
+        "function norm(v){return (v||'').replace(/\\s+/g,' ').trim().toLowerCase();}"
+        "function vis(e){if(!e)return false;var r=e.getBoundingClientRect();"
+        "var s=e.ownerDocument.defaultView.getComputedStyle(e);"
+        "return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';}"
+    )
+
+
+def page_text_script(browser: str) -> str:
+    return _js(
+        browser,
+        "(function(){" + _recursive_dom_helpers()
+        + "var out=[];for(var i=0;i<docs.length;i++){out.push(docs[i].body?docs[i].body.innerText:'');}"
+        "return out.join('\\n').slice(0,50000);})()",
+    )
+
+
+def click_text_in_section_script(browser: str, section: str, action: str, *, double: bool = False) -> str:
+    section_value = json.dumps(section)
+    action_value = json.dumps(action)
+    forbidden = json.dumps(list(FORBIDDEN_ACTION_TEXT))
+    event = "dblclick" if double else "click"
+    return _js(
+        browser,
+        "(function(){" + _recursive_dom_helpers()
+        + f"var section=norm({section_value}),action=norm({action_value}),deny={forbidden};"
+        "if(deny.some(function(x){return action===x||action.indexOf(x)>=0;}))"
+        f"return '{JS_BLOCKED}';"
+        "var tags='button,a,[role=button],input,div,span';var candidates=[],best=99;"
+        "for(var i=0;i<docs.length;i++){var all=docs[i].querySelectorAll(tags);"
+        "for(var j=0;j<all.length;j++){var e=all[j];if(!vis(e))continue;"
+        "var own=norm(e.innerText||e.value||e.getAttribute('aria-label'));"
+        "if(own!==action)continue;var p=e,ok=!section;"
+        "for(var depth=0;p&&depth<8;depth++,p=p.parentElement){"
+        "if(norm(p.innerText).indexOf(section)>=0){ok=true;break;}}"
+        "if(ok&&depth<best){best=depth;candidates=[e];}else if(ok&&depth===best)candidates.push(e);}}"
+        f"if(candidates.length!==1)return '{JS_MISSING}:'+candidates.length;"
+        f"candidates[0].dispatchEvent(new MouseEvent('{event}',{{bubbles:true,cancelable:true,view:candidates[0].ownerDocument.defaultView}}));"
+        "return 'CLICCATO';})()",
+    )
+
+
+def click_unique_text_match_script(browser: str, section: str, words: str) -> str:
+    """Clicca l'unico suggerimento che contiene tutte le parole cercate."""
+
+    section_value = json.dumps(section)
+    words_value = json.dumps(words)
+    return _js(
+        browser,
+        "(function(){" + _recursive_dom_helpers()
+        + f"var section=norm({section_value}),tokens=norm({words_value}).split(' ').filter(Boolean),found=[];"
+        "if(tokens.length<2)return 'NON_TROVATO:0';"
+        "for(var i=0;i<docs.length;i++){var all=docs[i].querySelectorAll('div,span,li,a,[role=option],[role=row]');"
+        "for(var j=0;j<all.length;j++){var e=all[j];if(!vis(e))continue;var own=norm(e.innerText);"
+        "if(!tokens.every(function(t){return own.indexOf(t)>=0;}))continue;"
+        "var p=e,inside=!section;for(var depth=0;p&&depth<10;depth++,p=p.parentElement){"
+        "if(norm(p.innerText).indexOf(section)>=0){inside=true;break;}}if(!inside)continue;"
+        "var childMatch=false;for(var k=0;k<e.children.length;k++){var ct=norm(e.children[k].innerText);"
+        "if(tokens.every(function(t){return ct.indexOf(t)>=0;})){childMatch=true;break;}}"
+        "if(!childMatch)found.push(e);}}"
+        f"if(found.length!==1)return '{JS_MISSING}:'+found.length;"
+        "found[0].dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:found[0].ownerDocument.defaultView}));"
+        "return 'CLICCATO';})()",
+    )
+
+
+def fill_textbox_near_label_script(browser: str, label: str, text: str) -> str:
+    label_value = json.dumps(label)
+    text_value = json.dumps(text)
+    return _js(
+        browser,
+        "(function(){" + _recursive_dom_helpers()
+        + f"var wanted=norm({label_value}),value={text_value},found=[];"
+        "for(var i=0;i<docs.length;i++){var d=docs[i];var labels=d.querySelectorAll('label,[aria-label]');"
+        "for(var j=0;j<labels.length;j++){var l=labels[j];var caption=norm(l.innerText||l.getAttribute('aria-label'));"
+        "if(caption.indexOf(wanted)<0)continue;var e=null;"
+        "if(l.htmlFor)e=d.getElementById(l.htmlFor);"
+        "if(!e)e=l.querySelector('input,textarea');"
+        "if(!e&&l.parentElement)e=l.parentElement.querySelector('input,textarea');"
+        "if(!e&&l.nextElementSibling)e=l.nextElementSibling.matches('input,textarea')?l.nextElementSibling:l.nextElementSibling.querySelector('input,textarea');"
+        "if(e&&vis(e)&&!e.disabled&&!e.readOnly)found.push(e);}}"
+        f"if(found.length!==1)return '{JS_MISSING}:'+found.length;"
+        "var e=found[0],w=e.ownerDocument.defaultView,proto=e.tagName==='TEXTAREA'?w.HTMLTextAreaElement.prototype:w.HTMLInputElement.prototype;"
+        "var setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(e,value);e.focus();"
+        "e.dispatchEvent(new w.InputEvent('input',{bubbles:true,inputType:'insertText',data:value.slice(-1)}));"
+        "e.dispatchEvent(new w.Event('change',{bubbles:true}));return 'SCRITTO';})()",
+    )
+
+
 def field_center_script(browser: str, selector: str) -> str:
     """Centro del campo sullo schermo, ricavato dalla pagina e non dal modello."""
 
@@ -287,6 +388,81 @@ def fill_field(runner: Runner, browser: str, selector: str, text: str) -> bool:
     except MacControlError as exc:
         raise _translate(exc) from exc
     return "SCRITTO" in answer
+
+
+def page_text(runner: Runner, browser: str) -> str:
+    """Testo visibile della pagina e degli iframe accessibili, senza modificarla."""
+
+    try:
+        return runner.osascript(page_text_script(browser))
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+
+
+def click_text_in_section(
+    runner: Runner,
+    browser: str,
+    section: str,
+    action: str,
+    *,
+    double: bool = False,
+) -> bool:
+    """Clicca solo un controllo testuale univoco e mai un'azione definitiva."""
+
+    clean = action.strip().lower()
+    if any(word in clean for word in FORBIDDEN_ACTION_TEXT):
+        raise RuntimeError("AZIONE_WEB_DESK_VIETATA")
+    try:
+        answer = runner.osascript(
+            click_text_in_section_script(browser, section, action, double=double)
+        )
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+    return "CLICCATO" in answer and JS_MISSING not in answer
+
+
+def click_unique_text_match(
+    runner: Runner,
+    browser: str,
+    section: str,
+    words: str,
+) -> bool:
+    """Seleziona un suggerimento solo quando la corrispondenza e' unica."""
+
+    try:
+        answer = runner.osascript(click_unique_text_match_script(browser, section, words))
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+    return "CLICCATO" in answer and JS_MISSING not in answer
+
+
+def fill_textbox_near_label(
+    runner: Runner,
+    browser: str,
+    label: str,
+    text: str,
+    *,
+    sequential: bool = False,
+    pause: Callable[[float], None] | None = None,
+) -> bool:
+    """Scrive in un campo identificato dalla sua etichetta, anche dentro iframe.
+
+    Webdesk aggiorna i suggerimenti a ogni tasto: in quel caso inviamo prefissi
+    progressivi con una piccola pausa, anziche' incollare il nome tutto insieme.
+    """
+
+    values = [text[:index] for index in range(1, len(text) + 1)] if sequential else [text]
+    sleeper = pause or (lambda _seconds: None)
+    for value in values:
+        try:
+            answer = runner.osascript(fill_textbox_near_label_script(browser, label, value))
+        except MacControlError as exc:
+            raise _translate(exc) from exc
+        if "SCRITTO" not in answer:
+            return False
+        if sequential:
+            sleeper(0.08)
+    return True
 
 
 def field_center(runner: Runner, browser: str, selector: str) -> dict[str, int] | None:

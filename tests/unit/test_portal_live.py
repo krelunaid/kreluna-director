@@ -139,6 +139,122 @@ def test_never_presses_enter_or_submits():
         assert forbidden not in joined
 
 
+def test_webdesk_helpers_search_inside_iframes_and_refuse_final_actions():
+    click_script = mac_browser.click_text_in_section_script(
+        "Google Chrome", "Fatture", "+ Crea nuovo"
+    )
+    fill_script = mac_browser.fill_textbox_near_label_script(
+        "Google Chrome", "Cliente", "Giorgio Tesi"
+    )
+
+    assert "contentDocument" in click_script
+    assert "candidates.length!==1" in click_script
+    assert "MouseEvent('click'" in click_script
+    assert "contentDocument" in fill_script
+    assert "InputEvent('input'" in fill_script
+    assert "Giorgio Tesi" in fill_script
+
+    fake = FakeMac()
+    with pytest.raises(RuntimeError, match="AZIONE_WEB_DESK_VIETATA"):
+        mac_browser.click_text_in_section(fake, "Google Chrome", "Fattura", "Salva")
+    assert fake.scripts == []
+
+    suggestion_script = mac_browser.click_unique_text_match_script(
+        "Google Chrome", "Nuova Fattura", "Giorgio Tesi"
+    )
+    assert "tokens.every" in suggestion_script
+    assert "found.length!==1" in suggestion_script
+
+
+def test_webdesk_customer_name_is_written_one_character_at_a_time():
+    class SequentialMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            return "SCRITTO"
+
+    fake = SequentialMac()
+    pauses: list[float] = []
+
+    assert mac_browser.fill_textbox_near_label(
+        fake,
+        "Google Chrome",
+        "Cliente",
+        "Tesi",
+        sequential=True,
+        pause=pauses.append,
+    )
+    assert len(fake.scripts) == 4
+    assert len(pauses) == 4
+    assert "Tesi" in fake.scripts[-1]
+
+
+def test_real_webdesk_path_opens_invoice_and_selects_exact_customer():
+    class WebdeskMac(FakeMac):
+        def __init__(self):
+            super().__init__(page_url="https://sme.genya.it/Elements/Factory/Screens/MainSmartInvoice/MainSmartInvoice.html")
+            self.page_reads = 0
+
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            if script.strip().startswith("id of application"):
+                return "com.google.chrome"
+            if "return URL of" in script:
+                return self.page_url or ""
+            if "out.join" in script:
+                self.page_reads += 1
+                return "FATTURA SMART Home Fatture + Crea nuovo" if self.page_reads == 1 else "FATTURA SMART Nuova Fattura Cliente"
+            if "MouseEvent" in script:
+                return "CLICCATO"
+            if "InputEvent" in script:
+                return "SCRITTO"
+            return "APERTO"
+
+    fake = WebdeskMac()
+    result = open_portal(
+        portal="fatture-webdesk",
+        query="SOCIETA' AGRICOLA GIORGIO TESI VIVAI S.S.",
+        runner=fake,
+        supported=lambda: True,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["filled"] is True
+    assert result["sent"] is False
+    assert "selezionato" in result["message"]
+    scripts = " ".join(fake.scripts)
+    assert "Nuova Fattura" in scripts
+    assert "SOCIETA' AGRICOLA GIORGIO TESI VIVAI S.S." in scripts
+    assert "submit()" not in scripts
+    assert "form.submit" not in scripts
+
+
+def test_webdesk_does_not_overwrite_an_open_customer_editor():
+    class BusyWebdeskMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            if script.strip().startswith("id of application"):
+                return "com.google.chrome"
+            if "return URL of" in script:
+                return "https://sme.genya.it/Elements/Factory/Screens/MainSmartInvoice/MainSmartInvoice.html"
+            if "out.join" in script:
+                return "FATTURA SMART Modifica cliente Salva comunque"
+            return "APERTO"
+
+    fake = BusyWebdeskMac()
+    result = open_portal(
+        portal="fatture-webdesk",
+        query="Giorgio Tesi",
+        runner=fake,
+        supported=lambda: True,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["filled"] is False
+    assert result["sent"] is False
+    assert "sovrascrivo" in result["message"]
+    assert "MouseEvent" not in " ".join(fake.scripts)
+
+
 def test_waits_for_the_human_login_then_gives_up_politely():
     fake = FakeMac(field_after=10_000)
     result, naps = run(fake, portal="durc-inps", query="Bianchi Laura")
