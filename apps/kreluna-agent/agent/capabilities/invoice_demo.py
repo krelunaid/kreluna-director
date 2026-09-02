@@ -23,6 +23,11 @@ async def prepare(
     net_eur: float,
     vat_rate: float = 0.22,
     vat_note: str = "",
+    vat_treatment: str = "standard",
+    intent_protocol: str = "",
+    intent_progressive: str = "",
+    intent_year: str = "",
+    lines: list[dict[str, Any]] | None = None,
     cancel_check: Callable[[], None] | None = None,
     register_process: Callable[[subprocess.Popen], None] | None = None,
 ) -> dict[str, Any]:
@@ -31,6 +36,13 @@ async def prepare(
     # Questa capability e' dichiarata demo-only: deve sempre mostrare la
     # finestra locale controllata. Un portale configurato in Fort Knox non
     # deve trasformare silenziosamente una prova in lavoro sul sito reale.
+    detail_lines = lines or []
+    if detail_lines:
+        net_eur = round(sum(float(line["quantity"]) * float(line["unit_net_eur"]) for line in detail_lines), 2)
+        vat_eur = round(sum(float(line["quantity"]) * float(line["unit_net_eur"]) * float(line["vat_rate"]) for line in detail_lines), 2)
+        description = " · ".join(str(line["description"]) for line in detail_lines)
+    else:
+        vat_eur = round(net_eur * vat_rate, 2)
     evidence = fill_invoice_on_pc(
         account_name=account_name or "",
         client_name=client_name,
@@ -38,6 +50,7 @@ async def prepare(
         net_eur=net_eur,
         vat_rate=vat_rate,
         vat_note=vat_note,
+        lines=detail_lines,
         status="draft",
         cancel_check=check,
         register_process=register_process,
@@ -57,6 +70,7 @@ async def prepare(
                 "net_eur": net_eur,
                 "vat_rate": vat_rate,
                 "vat_note": vat_note,
+                "vat_eur": vat_eur,
             },
         ),
         timeout=15,
@@ -70,6 +84,11 @@ async def prepare(
         net_eur=net_eur,
         vat_rate=vat_rate,
         vat_note=vat_note,
+        vat_treatment=vat_treatment,
+        intent_protocol=intent_protocol,
+        intent_progressive=intent_progressive,
+        intent_year=intent_year,
+        lines=detail_lines,
     )
     if evidence:
         evidence[-1]["metadata"]["draft_id"] = data["observed"]["draft_id"]

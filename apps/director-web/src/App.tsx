@@ -19,6 +19,7 @@ import {
 } from "./lib/api";
 
 type ChatItem = { role: "user" | "director"; text: string; deny?: boolean; source?: string };
+type InvoiceLineDraft = { description: string; quantity: number; unit_net_eur: number | null; vat_rate: number };
 type InvoiceChatDraft = {
   capability: string;
   account_name?: string | null;
@@ -27,6 +28,11 @@ type InvoiceChatDraft = {
   net_eur?: number | null;
   vat_rate?: number | null;
   vat_note?: string | null;
+  vat_treatment?: "standard" | "intent_declaration";
+  intent_protocol?: string;
+  intent_progressive?: string;
+  intent_year?: string;
+  lines?: InvoiceLineDraft[];
 };
 type StructuredKind = "f24" | "contabilita" | "camerali" | "contratti" | "durc" | "visure";
 type StructuredDraft = {
@@ -470,20 +476,34 @@ export default function App() {
 
   async function submitInvoiceChatDraft() {
     const value = invoiceChatDraft;
-    if (!value?.client_name || !value.description || value.net_eur == null) return;
-    const vat = (value.vat_rate ?? 0.22) * 100;
-    invoiceDemoRequestedAt.current = Date.now();
-    await api.resetChat().catch(() => undefined);
-    await send(
-      `Prepara una fattura demo per ${value.client_name}, ${value.description}, `
-      + `imponibile ${value.net_eur} euro, IVA ${vat}%`,
-    );
+    if (!value?.client_name) return;
+    const intent = value.vat_treatment === "intent_declaration" || /d['’ ]?intento/i.test(value.vat_note || "");
+    const lines: InvoiceLineDraft[] = value.lines?.length ? value.lines : [{ description: value.description || "", quantity: 1, unit_net_eur: value.net_eur ?? null, vat_rate: value.vat_rate ?? 0.22 }];
+    const normalizedLines = lines.map((line) => ({ ...line, unit_net_eur: line.unit_net_eur as number, vat_rate: intent ? 0 : line.vat_rate }));
+    const netTotal = normalizedLines.reduce((sum, line) => sum + line.quantity * line.unit_net_eur, 0);
+    setBusy(true); setOrb("think"); invoiceDemoRequestedAt.current = Date.now();
+    try {
+      const args = {
+        account_name: value.account_name?.trim() || null,
+        client_name: value.client_name.trim(), description: normalizedLines.map((line) => line.description.trim()).join(" · "), net_eur: netTotal,
+        vat_rate: intent ? 0 : value.vat_rate ?? 0.22,
+        vat_note: value.vat_note || "", vat_treatment: intent ? "intent_declaration" : "standard",
+        intent_protocol: value.intent_protocol || "", intent_progressive: value.intent_progressive || "", intent_year: value.intent_year || "",
+        lines: normalizedLines,
+      };
+      const result = await api.structuredRequest("invoice_prepare_demo", args);
+      setChat((items) => [...items, { role: "director", text: result.summary, source: result.source }]);
+      setInvoiceChatDraft(null); setOrb("talk");
+      await refresh().catch(() => undefined);
+    } catch (err) {
+      setChat((items) => [...items, { role: "director", text: err instanceof Error ? err.message : "Errore Director", deny: true }]); setOrb("listen");
+    } finally { setBusy(false); }
   }
 
   function openStructuredForm(kind: "fattura" | StructuredKind) {
     if (kind === "fattura") {
       setStructuredDraft(null);
-      setInvoiceChatDraft({ capability: "invoice_prepare_demo", client_name: "", description: "", net_eur: null, vat_rate: 0.22, vat_note: "" });
+      setInvoiceChatDraft({ capability: "invoice_prepare_demo", account_name: "", client_name: "", description: "", net_eur: null, vat_rate: 0.22, vat_note: "", vat_treatment: "standard", intent_protocol: "", intent_progressive: "", intent_year: "", lines: [{ description: "", quantity: 1, unit_net_eur: null, vat_rate: 0.22 }] });
     } else {
       setInvoiceChatDraft(null);
       setStructuredDraft(emptyStructuredDraft(kind));
@@ -1320,17 +1340,38 @@ function Metric({ icon, label, value, note, tone }: { icon: string; label: strin
 }
 
 function InvoiceChatCard({ draft, busy, onChange, onSubmit }: { draft: InvoiceChatDraft; busy: boolean; onChange: (value: InvoiceChatDraft) => void; onSubmit: () => void }) {
-  const ready = Boolean(draft.client_name?.trim() && draft.description?.trim() && draft.net_eur != null && draft.net_eur > 0);
+  const intent = draft.vat_treatment === "intent_declaration" || /d['’ ]?intento/i.test(draft.vat_note || "");
+  const lines = draft.lines?.length ? draft.lines : [{ description: draft.description || "", quantity: 1, unit_net_eur: draft.net_eur ?? null, vat_rate: draft.vat_rate ?? 0.22 }];
+  const intentReady = !intent || Boolean(/^\d{17}$/.test(draft.intent_protocol || "") && /^\d{6}$/.test(draft.intent_progressive || "") && /^\d{4}$/.test(draft.intent_year || ""));
+  const linesReady = lines.length > 0 && lines.every((line) => line.description.trim().length >= 2 && line.quantity > 0 && line.unit_net_eur != null && line.unit_net_eur > 0);
+  const ready = Boolean(draft.client_name?.trim() && linesReady && intentReady);
+  const updateLine = (index: number, next: Partial<InvoiceLineDraft>) => onChange({ ...draft, lines: lines.map((line, itemIndex) => itemIndex === index ? { ...line, ...next } : line) });
+  const removeLine = (index: number) => onChange({ ...draft, lines: lines.filter((_line, itemIndex) => itemIndex !== index) });
   return <section className="invoice-chat-card editable" aria-label="Dati della fattura in preparazione">
-    <div><strong>FATTURA IN PREPARAZIONE</strong><span>Si completa con i messaggi della chat</span></div>
+    <div><strong>FATTURA IN PREPARAZIONE</strong><span>Emittente e destinatario restano separati</span></div>
     <div className="invoice-chat-fields">
-      <label>Cliente<input value={draft.client_name || ""} onChange={(event) => onChange({ ...draft, client_name: event.target.value })} placeholder="Nome o ragione sociale" /></label>
-      <label>Prestazione<input value={draft.description || ""} onChange={(event) => onChange({ ...draft, description: event.target.value })} placeholder="Descrizione del lavoro" /></label>
-      <label>Imponibile (€)<input type="number" min="0.01" step="0.01" value={draft.net_eur ?? ""} onChange={(event) => onChange({ ...draft, net_eur: event.target.value === "" ? null : Number(event.target.value) })} placeholder="0,00" /></label>
-      <label>IVA (%)<input type="number" min="0" max="100" step="0.01" value={(draft.vat_rate ?? 0.22) * 100} onChange={(event) => onChange({ ...draft, vat_rate: Number(event.target.value) / 100, vat_note: "" })} /></label>
+      <label>Emittente / cliente dello studio (facoltativo)<input value={draft.account_name || ""} onChange={(event) => onChange({ ...draft, account_name: event.target.value })} placeholder="es. Andrea Gadducci" /></label>
+      <label>Destinatario fattura<input value={draft.client_name || ""} onChange={(event) => onChange({ ...draft, client_name: event.target.value })} placeholder="es. Tesi Giorgio" /></label>
+      <label>Trattamento IVA<select value={intent ? "intent_declaration" : "standard"} onChange={(event) => onChange({ ...draft, vat_treatment: event.target.value as InvoiceChatDraft["vat_treatment"], vat_rate: event.target.value === "intent_declaration" ? 0 : 0.22, vat_note: event.target.value === "intent_declaration" ? "Dichiarazione d'intento" : "" })}><option value="standard">IVA ordinaria</option><option value="intent_declaration">Dichiarazione d’intento · N3.5</option></select></label>
+      {intent ? <>
+        <label>Protocollo (17 cifre)<input inputMode="numeric" maxLength={17} value={draft.intent_protocol || ""} onChange={(event) => onChange({ ...draft, intent_protocol: event.target.value.replace(/\D/g, "").slice(0, 17), vat_treatment: "intent_declaration" })} /></label>
+        <label>Progressivo (6 cifre)<input inputMode="numeric" maxLength={6} value={draft.intent_progressive || ""} onChange={(event) => onChange({ ...draft, intent_progressive: event.target.value.replace(/\D/g, "").slice(0, 6), vat_treatment: "intent_declaration" })} /></label>
+        <label>Anno (4 cifre)<input inputMode="numeric" maxLength={4} value={draft.intent_year || ""} onChange={(event) => onChange({ ...draft, intent_year: event.target.value.replace(/\D/g, "").slice(0, 4), vat_treatment: "intent_declaration" })} /></label>
+      </> : null}
+    </div>
+    <div className="invoice-lines-heading"><strong>RIGHE FATTURA</strong><span>Ogni riga può avere un’IVA diversa</span></div>
+    <div className="invoice-lines">
+      {lines.map((line, index) => <div className="invoice-line" key={index}>
+        <label>Descrizione<input value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} placeholder="Prodotto o prestazione" /></label>
+        <label>Quantità<input type="number" min="0.01" step="0.01" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} /></label>
+        <label>Prezzo unitario (€)<input type="number" min="0.01" step="0.01" value={line.unit_net_eur ?? ""} onChange={(event) => updateLine(index, { unit_net_eur: event.target.value === "" ? null : Number(event.target.value) })} /></label>
+        {!intent ? <label>IVA (%)<select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}><option value={0.22}>22%</option><option value={0.1}>10%</option><option value={0.05}>5%</option><option value={0.04}>4%</option><option value={0}>0%</option></select></label> : <label>IVA<select disabled value={0}><option value={0}>N3.5 · 0%</option></select></label>}
+        {lines.length > 1 ? <button type="button" className="remove-line" onClick={() => removeLine(index)} aria-label={`Rimuovi riga ${index + 1}`}>×</button> : null}
+      </div>)}
+      <button type="button" className="add-line" onClick={() => onChange({ ...draft, lines: [...lines, { description: "", quantity: 1, unit_net_eur: null, vat_rate: 0.22 }] })}>＋ Aggiungi riga</button>
     </div>
     <button type="button" disabled={!ready || busy} onClick={onSubmit}>{busy ? "Preparazione…" : "Crea bozza fattura"}</button>
-    <small>Cliente e prestazione restano campi separati · nessun invio automatico</small>
+    <small>{intent && !intentReady ? "Completa protocollo, progressivo e anno della dichiarazione · " : ""}Nessun invio automatico</small>
   </section>;
 }
 

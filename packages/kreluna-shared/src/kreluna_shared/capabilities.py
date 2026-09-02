@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from kreluna_shared.f24 import F24PrepareArgs
 from kreluna_shared.workflows import (
@@ -18,6 +18,18 @@ class NotepadWriteArgs(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class InvoiceLineArgs(BaseModel):
+    description: str = Field(min_length=2, max_length=500)
+    quantity: float = Field(default=1, gt=0, le=100_000)
+    unit_net_eur: float = Field(gt=0, le=1_000_000)
+    vat_rate: float = Field(default=0.22, ge=0, le=1)
+
+    @field_validator("description")
+    @classmethod
+    def strip_description(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
 class InvoicePrepareArgs(BaseModel):
     account_name: str | None = Field(default=None, min_length=2, max_length=200)
     client_name: str = Field(min_length=2, max_length=200)
@@ -25,6 +37,11 @@ class InvoicePrepareArgs(BaseModel):
     net_eur: float = Field(gt=0, le=1_000_000)
     vat_rate: float = Field(default=0.22, ge=0, le=1)
     vat_note: str = Field(default="", max_length=300)
+    vat_treatment: Literal["standard", "intent_declaration"] = "standard"
+    intent_protocol: str = Field(default="", pattern=r"^(?:\d{17})?$")
+    intent_progressive: str = Field(default="", pattern=r"^(?:\d{6})?$")
+    intent_year: str = Field(default="", pattern=r"^(?:\d{4})?$")
+    lines: list[InvoiceLineArgs] = Field(default_factory=list, max_length=100)
 
     @field_validator("account_name", "client_name", "description", "vat_note")
     @classmethod
@@ -32,6 +49,33 @@ class InvoicePrepareArgs(BaseModel):
         if value is None:
             return None
         return " ".join(value.split())
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_intent_fields(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        cleaned = dict(value)
+        # I vecchi task non avevano questi campi: stringhe vuote restano valide
+        # per il trattamento IVA ordinario.
+        for key in ("intent_protocol", "intent_progressive", "intent_year"):
+            cleaned[key] = str(cleaned.get(key) or "").strip()
+        return cleaned
+
+    @model_validator(mode="after")
+    def validate_intent_declaration(self) -> InvoicePrepareArgs:
+        if self.vat_treatment != "intent_declaration":
+            return self
+        if not (self.intent_protocol and self.intent_progressive and self.intent_year):
+            raise ValueError("La dichiarazione d'intento richiede protocollo, progressivo e anno")
+        self.vat_rate = 0
+        self.vat_note = (
+            "N3.5 · Dichiarazione d'intento · "
+            f"protocollo {self.intent_protocol}-{self.intent_progressive} · anno {self.intent_year}"
+        )
+        for line in self.lines:
+            line.vat_rate = 0
+        return self
 
 
 class InvoiceSubmitArgs(BaseModel):

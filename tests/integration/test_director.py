@@ -932,6 +932,11 @@ async def test_spoken_invoice_keeps_issuer_recipient_and_tax_regime(client: Asyn
         "net_eur": 50000.0,
         "vat_rate": 0.0,
         "vat_note": "Dichiarazione d'intento",
+        "vat_treatment": "standard",
+        "intent_protocol": "",
+        "intent_progressive": "",
+        "intent_year": "",
+        "lines": [],
     }
 
 

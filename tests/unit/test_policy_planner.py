@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from kreluna_shared.capabilities import validate_capability_args
 from kreluna_shared.crypto import (
     generate_device_keypair,
@@ -136,6 +137,46 @@ def test_unknown_capability_rejected():
         assert False
     except ValueError as exc:
         assert "UNKNOWN_CAPABILITY" in str(exc)
+
+
+def test_invoice_intent_declaration_is_structured_and_forces_zero_vat():
+    args = validate_capability_args(
+        "invoice_prepare_demo",
+        {
+            "account_name": "Andrea Gadducci",
+            "client_name": "Tesi Giorgio",
+            "description": "Consulenza",
+            "net_eur": 1000,
+            "vat_rate": 0.22,
+            "vat_treatment": "intent_declaration",
+            "intent_protocol": "12345678901234567",
+            "intent_progressive": "000001",
+            "intent_year": "2026",
+        },
+    )
+
+    assert args["account_name"] == "Andrea Gadducci"
+    assert args["client_name"] == "Tesi Giorgio"
+    assert args["vat_rate"] == 0
+    assert args["vat_note"] == (
+        "N3.5 · Dichiarazione d'intento · protocollo 12345678901234567-000001 · anno 2026"
+    )
+
+
+def test_invoice_intent_declaration_requires_all_references():
+    with pytest.raises(ValueError, match="protocollo, progressivo e anno"):
+        validate_capability_args(
+            "invoice_prepare_demo",
+            {
+                "client_name": "Tesi Giorgio",
+                "description": "Consulenza",
+                "net_eur": 1000,
+                "vat_treatment": "intent_declaration",
+                "intent_protocol": "",
+                "intent_progressive": "",
+                "intent_year": "",
+            },
+        )
 
 
 def test_grant_device_bound_and_replay():
