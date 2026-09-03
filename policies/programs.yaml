@@ -122,7 +122,7 @@ portals:
 
 settings:
   # Quanto aspetta che tu finisca il login, prima di rinunciare.
-  wait_for_login_seconds: 60
+  wait_for_login_seconds: 120
   # Ogni quanto ricontrolla se il campo è comparso.
   poll_seconds: 3
   # Safari è già incluso nel Mac e viene configurato dalla guida dell'Agent.

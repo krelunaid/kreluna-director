@@ -1,7 +1,7 @@
 {
   "name": "kreluna-director-web",
   "private": true,
-  "version": "0.5.54",
+  "version": "0.5.57",
   "type": "module",
   "scripts": {
     "dev": "vite",

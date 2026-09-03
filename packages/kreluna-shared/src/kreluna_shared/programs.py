@@ -28,7 +28,7 @@ class Portal(BaseModel):
 
 
 class PortalSettings(BaseModel):
-    wait_for_login_seconds: int = Field(default=60, ge=0, le=600)
+    wait_for_login_seconds: int = Field(default=120, ge=0, le=600)
     poll_seconds: int = Field(default=3, ge=1, le=60)
     mac_browser: str = "Safari"
 

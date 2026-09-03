@@ -242,6 +242,15 @@ def find_field_script(browser: str, selector: str) -> str:
     )
 
 
+def click_selector_script(browser: str, selector: str) -> str:
+    css = selector.replace("'", "\\'")
+    return _js(
+        browser,
+        f"(function(){{var e=document.querySelector('{css}');if(!e)return '{JS_MISSING}';"
+        "e.click();return 'CLICCATO';})()",
+    )
+
+
 def fill_field_script(browser: str, selector: str, text: str) -> str:
     css = selector.replace("'", "\\'")
     value = json.dumps(text)
@@ -683,6 +692,7 @@ def fill_field_visible(
     text: str,
     *,
     mover: Callable[..., bool] = move_and_click,
+    click_pointer: bool = True,
 ) -> tuple[bool, bool]:
     """Mostra il mouse sul campo e poi scrive, senza premere Invio."""
 
@@ -694,9 +704,37 @@ def fill_field_visible(
             center["y"],
             screen_width=center["screen_width"],
             screen_height=center["screen_height"],
-            click=True,
+            click=click_pointer,
         )
     return fill_field(runner, browser, selector, text), moved
+
+
+def click_selector_visible(
+    runner: Runner,
+    browser: str,
+    selector: str,
+    *,
+    mover: Callable[..., bool] = move_and_click,
+) -> bool:
+    """Clicca col mouse un controllo DOM noto, senza coordinate memorizzate."""
+
+    center = field_center(runner, browser, selector)
+    if not center:
+        return False
+    moved = mover(
+        center["x"],
+        center["y"],
+        screen_width=center["screen_width"],
+        screen_height=center["screen_height"],
+        click=False,
+    )
+    if not moved:
+        return False
+    try:
+        answer = runner.osascript(click_selector_script(browser, selector))
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+    return "CLICCATO" in answer and JS_MISSING not in answer
 
 
 def screenshot(runner: Runner) -> bytes:

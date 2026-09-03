@@ -701,7 +701,7 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
 
     monkeypatch.setattr(portal.mac_browser, "fill_field", fill_field)
     monkeypatch.setattr(portal.mac_browser, "page_text", lambda *_args: "Entra in webdesk")
-    monkeypatch.setattr(portal.mac_browser, "click_text_in_section", click_login)
+    monkeypatch.setattr(portal.mac_browser, "click_selector_visible", click_login)
     monkeypatch.setattr(
         portal,
         "_start_webdesk_invoice",
@@ -722,6 +722,9 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
 
     assert result["continued"] is True
     assert result["sent"] is False
+    assert any(
+        "https://app.webdesk.it/Apps/Login/View" in script for script in fake.scripts
+    )
     assert filled == [
         ("#studioInput", "ABC123"),
         ("#loginInput", "utente"),
@@ -794,6 +797,60 @@ def test_invoice_form_moves_mouse_fills_known_fields_and_never_submits(monkeypat
     assert "manodopera" in joined
     assert "submit()" not in joined
     assert "form.submit" not in joined
+
+
+def test_login_field_can_move_without_clicking_password_manager():
+    class LoginMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            if "screen_width" in script:
+                return '{"x":500,"y":400,"screen_width":1920,"screen_height":1080}'
+            if "value=" in script:
+                return "SCRITTO"
+            return "APERTO"
+
+    clicks: list[bool] = []
+
+    def move(_x, _y, **kwargs):
+        clicks.append(kwargs["click"])
+        return True
+
+    written, moved = mac_browser.fill_field_visible(
+        LoginMac(),
+        "Safari",
+        "#passwordInput",
+        "segreto",
+        mover=move,
+        click_pointer=False,
+    )
+
+    assert written is True
+    assert moved is True
+    assert clicks == [False]
+
+
+def test_webdesk_login_button_moves_then_uses_exact_dom_button():
+    class ButtonMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            if "screen_width" in script:
+                return '{"x":600,"y":500,"screen_width":1920,"screen_height":1080}'
+            if "e.click()" in script:
+                return "CLICCATO"
+            return "APERTO"
+
+    physical_clicks: list[bool] = []
+
+    def move(_x, _y, **kwargs):
+        physical_clicks.append(kwargs["click"])
+        return True
+
+    fake = ButtonMac()
+    assert mac_browser.click_selector_visible(
+        fake, "Safari", "#submitButton", mover=move
+    )
+    assert physical_clicks == [False]
+    assert any("#submitButton" in script and "e.click()" in script for script in fake.scripts)
 
 
 def test_planner_uses_vault_only_when_explicitly_requested() -> None:

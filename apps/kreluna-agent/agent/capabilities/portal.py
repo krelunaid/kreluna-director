@@ -18,6 +18,8 @@ from kreluna_shared.programs import load_settings, portal_for_key
 
 from agent.tools import mac_browser
 
+WEB_DESK_LOGIN_URL = "https://app.webdesk.it/Apps/Login/View"
+
 
 def _open_local_app(path_value: str) -> None:
     path = Path(path_value).expanduser()
@@ -572,7 +574,15 @@ def open_portal(
     browser = mac_browser.pick_browser(run, settings.mac_browser)
     evidence: list[dict[str, Any]] = []
 
-    mac_browser.open_url(run, browser, target_url)
+    # Il link interno di Fattura SMART, quando la sessione è scaduta, passa da
+    # una pagina bianca prima di rimandare al login. Aprire direttamente il
+    # login ufficiale rende il percorso Fort Knox stabile e comprensibile.
+    opening_url = (
+        WEB_DESK_LOGIN_URL
+        if portal == "fatture-webdesk" and use_saved_access
+        else target_url
+    )
+    mac_browser.open_url(run, browser, opening_url)
     check()
     _append_optional_evidence(evidence, run, "portale-aperto", portal)
 
@@ -681,14 +691,21 @@ def open_portal(
                     "inseriscilo nel campo Codice studio Webdesk e riprova.",
                     capture=False,
                 )
-            if not mac_browser.fill_field(run, browser, "#studioInput", studio_code):
+            studio_written, _ = mac_browser.fill_field_visible(
+                run, browser, "#studioInput", studio_code, click_pointer=False
+            )
+            if not studio_written:
                 return stop(
                     "codice-studio-non-compilato",
                     "Webdesk non mostra la casella Codice studio prevista. Mi fermo senza accedere.",
                     capture=False,
                 )
-        username_written = mac_browser.fill_field(run, browser, spec.username_field, username)
-        password_written = mac_browser.fill_field(run, browser, spec.password_field, secret)
+        username_written, _ = mac_browser.fill_field_visible(
+            run, browser, spec.username_field, username, click_pointer=False
+        )
+        password_written, _ = mac_browser.fill_field_visible(
+            run, browser, spec.password_field, secret, click_pointer=False
+        )
         credentials["username"] = ""
         credentials["secret"] = ""
         credentials["credential_label"] = ""
@@ -705,11 +722,8 @@ def open_portal(
                 capture=False,
             )
         if portal == "fatture-webdesk":
-            clicked = mac_browser.click_text_in_section(
-                run,
-                browser,
-                "Entra in webdesk",
-                "Accedi",
+            clicked = mac_browser.click_selector_visible(
+                run, browser, "#submitButton"
             )
             if not clicked:
                 return stop(
