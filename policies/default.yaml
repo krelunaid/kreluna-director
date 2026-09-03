@@ -37,6 +37,9 @@ deny:
   - arbitrary_remote_shell
   - remote_shell
   - eval_code
+  - invoice_save
+  - invoice_emit
+  - invoice_send
   - bulk_delete_without_recovery_plan
 
 screenshot:

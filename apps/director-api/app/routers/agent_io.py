@@ -238,6 +238,7 @@ async def credential_lease(
         "username": username,
         "secret": secret,
         "secret_kind": credential.secret_kind,
+        "credential_label": credential.credential_label,
         "expires_in_seconds": 30,
         "single_use": True,
     }

@@ -614,22 +614,41 @@ def open_portal(
         sleep(settings.poll_seconds)
         has_username = mac_browser.field_is_there(run, browser, spec.username_field)
         has_password = mac_browser.field_is_there(run, browser, spec.password_field)
-        if portal == "fatture-webdesk" and not has_username and not has_password:
-            if query:
-                return _start_webdesk_invoice(
-                    run=run,
-                    browser=browser,
-                    client_name=query,
-                    invoice=invoice,
-                    settings=settings,
-                    sleep=sleep,
-                    check=check,
-                    stop=stop,
+        if portal == "fatture-webdesk":
+            waited = 0.0
+            page = mac_browser.page_text(run, browser)
+            while (
+                not has_username
+                and not has_password
+                and "FATTURA SMART" not in page.upper()
+                and waited < settings.wait_for_login_seconds
+            ):
+                check()
+                sleep(settings.poll_seconds)
+                waited += settings.poll_seconds
+                has_username = mac_browser.field_is_there(
+                    run, browser, spec.username_field
                 )
-            return stop(
-                "accesso-gia-attivo",
-                "Webdesk è già aperto con una sessione attiva. Non ho salvato o inviato nulla.",
-            )
+                has_password = mac_browser.field_is_there(
+                    run, browser, spec.password_field
+                )
+                page = mac_browser.page_text(run, browser)
+            if "FATTURA SMART" in page.upper() and not has_username and not has_password:
+                if query:
+                    return _start_webdesk_invoice(
+                        run=run,
+                        browser=browser,
+                        client_name=query,
+                        invoice=invoice,
+                        settings=settings,
+                        sleep=sleep,
+                        check=check,
+                        stop=stop,
+                    )
+                return stop(
+                    "accesso-gia-attivo",
+                    "Webdesk è già aperto con una sessione attiva. Non ho salvato o inviato nulla.",
+                )
         if not has_username or not has_password:
             return stop(
                 "campi-login-non-trovati",
@@ -650,12 +669,30 @@ def open_portal(
         credentials = response.json()
         username = str(credentials.get("username") or "")
         secret = str(credentials.get("secret") or "")
+        credential_label = str(credentials.get("credential_label") or "")
         if not username or not secret:
             raise RuntimeError("CASSAFORTE_ACCESSO_VUOTO")
+        if portal == "fatture-webdesk":
+            studio_code = credential_label.strip().upper()
+            if studio_code == "PRINCIPALE" or not studio_code:
+                return stop(
+                    "codice-studio-mancante",
+                    "In Fort Knox manca il codice studio Webdesk. Apri l'accesso Webdesk, "
+                    "inseriscilo nel campo Codice studio / profilo e riprova.",
+                    capture=False,
+                )
+            if not mac_browser.fill_field(run, browser, "#studioInput", studio_code):
+                return stop(
+                    "codice-studio-non-compilato",
+                    "Webdesk non mostra la casella Codice studio prevista. Mi fermo senza accedere.",
+                    capture=False,
+                )
         username_written = mac_browser.fill_field(run, browser, spec.username_field, username)
         password_written = mac_browser.fill_field(run, browser, spec.password_field, secret)
         credentials["username"] = ""
         credentials["secret"] = ""
+        credentials["credential_label"] = ""
+        credential_label = ""
         username = ""
         secret = ""
         if not username_written or not password_written:

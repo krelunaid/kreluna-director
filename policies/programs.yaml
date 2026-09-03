@@ -13,8 +13,8 @@ portals:
     configured: false
     url: https://www.ipsoa.it
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
-    username_field: "input[type=email], input[name*=user], input[name*=login]"
-    password_field: "input[type=password]"
+    username_field: "#loginInput"
+    password_field: "#passwordInput"
     login_note: Completa l’accesso e l’eventuale OTP a mano. L’Agent non trasmette e non paga.
   contabilita-ipsoa:
     role: pc-contabilita
@@ -67,8 +67,8 @@ portals:
     configured: true
     url: https://app.webdesk.it/Apps/Login/View
     field: "input[type=search], input[name*=cerca], input[placeholder*=erca]"
-    username_field: "input[type=email], input[name*=user], input[name*=login]"
-    password_field: "input[type=password]"
+    username_field: "#loginInput"
+    password_field: "#passwordInput"
     # I nomi descrivono le schermate IPSOA viste nel manuale. I valori restano
     # vuoti finche l'Agent non impara i selettori dalla pagina vera: non vengono
     # mai indovinati da una fotografia.

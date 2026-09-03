@@ -672,12 +672,18 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
                     )
                 }
             )
-        return Response({"username": "utente", "secret": "segreto"})
+        return Response(
+            {
+                "username": "utente",
+                "secret": "segreto",
+                "credential_label": "ABC123",
+            }
+        )
 
     logged_in = False
 
     def field_is_there(_run, _browser, selector):
-        return not logged_in and ("user" in selector or "password" in selector)
+        return not logged_in and selector in {"#loginInput", "#passwordInput"}
 
     def click_login(*_args, **_kwargs):
         nonlocal logged_in
@@ -686,7 +692,14 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
 
     monkeypatch.setattr("agent.capabilities.portal.httpx.post", post)
     monkeypatch.setattr(portal.mac_browser, "field_is_there", field_is_there)
-    monkeypatch.setattr(portal.mac_browser, "fill_field", lambda *_args: True)
+    filled: list[tuple[str, str]] = []
+
+    def fill_field(_run, _browser, selector, value):
+        filled.append((selector, value))
+        return True
+
+    monkeypatch.setattr(portal.mac_browser, "fill_field", fill_field)
+    monkeypatch.setattr(portal.mac_browser, "page_text", lambda *_args: "Entra in webdesk")
     monkeypatch.setattr(portal.mac_browser, "click_text_in_section", click_login)
     monkeypatch.setattr(
         portal,
@@ -708,6 +721,11 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
 
     assert result["continued"] is True
     assert result["sent"] is False
+    assert filled == [
+        ("#studioInput", "ABC123"),
+        ("#loginInput", "utente"),
+        ("#passwordInput", "segreto"),
+    ]
 
 
 def test_secret_text_is_embedded_as_json_not_javascript_quote() -> None:

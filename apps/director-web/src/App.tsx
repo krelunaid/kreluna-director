@@ -1294,7 +1294,7 @@ export default function App() {
           <label className="vault-url-field">Link del portale<input required type="url" maxLength={1000} value={vaultForm.portal_url} onChange={(event) => setVaultForm({ ...vaultForm, portal_url: event.target.value })} placeholder="https://indirizzo-del-portale.it/login" autoComplete="url" /></label>
           <label>Password o token<input required type="password" maxLength={2048} value={vaultForm.secret} onChange={(event) => setVaultForm({ ...vaultForm, secret: event.target.value })} placeholder="Non verrà più mostrato" autoComplete="new-password" /></label>
           <label>Tipo<select value={vaultForm.secret_kind} onChange={(event) => setVaultForm({ ...vaultForm, secret_kind: event.target.value as VaultCredentialInput["secret_kind"] })}><option value="password">Password</option><option value="api_token">Token API</option><option value="client_secret">Client secret</option></select></label>
-          <label>Profilo<input required maxLength={120} value={vaultForm.credential_label} onChange={(event) => setVaultForm({ ...vaultForm, credential_label: event.target.value })} placeholder="principale" /></label>
+          <label>{vaultForm.portal.trim().toLowerCase() === "webdesk" ? "Codice studio Webdesk" : "Profilo"}<input required maxLength={120} value={vaultForm.credential_label} onChange={(event) => setVaultForm({ ...vaultForm, credential_label: event.target.value })} placeholder={vaultForm.portal.trim().toLowerCase() === "webdesk" ? "Codice dello studio" : "principale"} /></label>
         </div>
         <div className="vault-form-note">SPID, CNS, CIE, smart card e OTP non possono essere salvati: l’Agent si fermerà e chiederà l’intervento umano.</div>
         <div className="vault-form-actions"><button type="button" onClick={closeVaultForm}>Annulla</button><button className="primary" disabled={vaultBusy}>{vaultBusy ? "Cifro…" : "Cifra e salva"}</button></div>
@@ -1394,7 +1394,7 @@ function InvoiceChatCard({ draft, busy, onChange, onSubmit }: { draft: InvoiceCh
       <button type="button" className="add-line" onClick={() => onChange({ ...draft, lines: [...lines, { description: "", quantity: 1, unit_net_eur: null, vat_rate: 0.22, vat_treatment: "standard" }] })}>＋ Aggiungi riga</button>
     </div>
     <button type="button" disabled={!ready || busy} onClick={onSubmit}>{busy ? "Preparazione…" : "Crea bozza fattura"}</button>
-    <small>{intent && !intentReady ? "Completa data ricevuta e protocollo Webdesk · " : ""}Nessun invio automatico</small>
+    <small>{intent && !intentReady ? "Completa data ricevuta e protocollo Webdesk · " : ""}Regola permanente: l’Agent compila soltanto. Non salva, non emette e non invia.</small>
   </section>;
 }
 
