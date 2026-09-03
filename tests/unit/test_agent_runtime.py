@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import httpx
 from agent.main import AgentApp
 from agent.safety import SafetyState
 from kreluna_shared.crypto import generate_device_keypair
@@ -100,3 +101,45 @@ def test_kill_and_task_cancel_stop_owned_ui_processes():
     assert cancelled_process.terminated is True
     with pytest.raises(PermissionError, match="TASK_CANCELLED"):
         safety.assert_task_active("task-2")
+
+
+@pytest.mark.asyncio
+async def test_agent_waits_for_director_instead_of_exiting(monkeypatch):
+    app = agent_without_network()
+    app.server_pubkey = None
+    app.ensure_enrolled = lambda client: asyncio.sleep(0)
+    attempts = 0
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, *_args, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise httpx.ConnectError("Director in avvio")
+            return httpx.Response(
+                200,
+                request=httpx.Request("GET", app.director + "/health"),
+                json={"server_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="},
+            )
+
+    async def stop_after_bootstrap():
+        raise asyncio.CancelledError
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+    app.loop = stop_after_bootstrap
+
+    with pytest.raises(asyncio.CancelledError):
+        await app.start()
+
+    assert attempts == 2
+    assert app.server_pubkey is not None

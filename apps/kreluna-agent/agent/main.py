@@ -60,10 +60,19 @@ class AgentApp:
             self.role_caps = ["notepad_write"]
 
     async def start(self) -> None:
-        async with httpx.AsyncClient() as client:
-            await self.ensure_enrolled(client)
-            health = (await client.get(f"{self.director}/health")).json()
-            self.server_pubkey = b64d(health["server_pubkey"])
+        # Il Director e l'Agent possono partire insieme all'accesso dell'utente.
+        # Se il servizio locale impiega qualche secondo in piu, l'Agent deve
+        # restare vivo e riprovare: una persona non deve riaprirlo a mano.
+        while self.server_pubkey is None:
+            try:
+                async with httpx.AsyncClient() as client:
+                    await self.ensure_enrolled(client)
+                    response = await client.get(f"{self.director}/health", timeout=10)
+                    response.raise_for_status()
+                    self.server_pubkey = b64d(response.json()["server_pubkey"])
+            except Exception as exc:
+                print(f"[kreluna-agent] Director non ancora pronto, riprovo tra 2s: {exc}", flush=True)
+                await asyncio.sleep(2)
         await self.loop()
 
     async def ensure_enrolled(self, client: httpx.AsyncClient) -> None:
