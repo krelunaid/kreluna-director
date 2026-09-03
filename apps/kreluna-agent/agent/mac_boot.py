@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -23,6 +24,29 @@ def config_path() -> Path:
 
 def enrollment_path() -> Path:
     return support_dir() / "enrollment.once"
+
+
+def acquire_single_instance():
+    """Una seconda icona non deve creare una seconda connessione dello stesso PC."""
+
+    import fcntl
+
+    support_dir().mkdir(parents=True, exist_ok=True)
+    handle = (support_dir() / "agent.lock").open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        return None
+    handle.seek(0)
+    handle.truncate()
+    handle.write(str(os.getpid()))
+    handle.flush()
+    try:
+        os.fchmod(handle.fileno(), 0o600)
+    except OSError:
+        pass
+    return handle
 
 
 def validated_enrollment_code(value: str) -> str:
@@ -272,6 +296,18 @@ def ask_config() -> dict[str, str] | None:
 
 
 def main() -> int:
+    instance_lock = acquire_single_instance()
+    if instance_lock is None:
+        subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'display notification "Kreluna Agent è già attivo" with title "Kreluna Agent"',
+            ],
+            capture_output=True,
+            check=False,
+        )
+        return 0
     data = load_config()
     preset_role = os.environ.get("KRELUNA_AGENT_ID")
     preset_url = os.environ.get("AGENT_DIRECTOR_URL")
@@ -297,6 +333,12 @@ def main() -> int:
             return 1
         save_config(data)
     apply_config(data)
+    if data.get("role") == "pc-fatture" and os.environ.get("KRELUNA_SKIP_BROWSER_GUIDE") != "1":
+        # La guida resta parallela: il PC diventa verde subito mentre l'utente
+        # concede l'unico permesso che macOS non consente di pre-approvare.
+        from agent.browser_setup import guide_browser_permissions
+
+        threading.Thread(target=guide_browser_permissions, daemon=True).start()
     import asyncio
 
     from agent.main import AgentApp

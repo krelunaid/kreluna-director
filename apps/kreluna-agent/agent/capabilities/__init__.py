@@ -7,7 +7,6 @@ from agent.capabilities import (
     documents,
     email_draft,
     f24,
-    invoice_demo,
     notepad,
     payments,
     portal,
@@ -18,8 +17,10 @@ Handler = Callable[..., Awaitable[dict[str, Any]] | dict[str, Any]]
 
 CAPABILITY_ALLOWLIST: dict[str, Handler] = {
     "notepad_write": notepad.write_notepad,
-    "invoice_prepare_demo": invoice_demo.prepare,
-    "invoice_submit_demo": invoice_demo.submit,
+    # Compatibilità con richieste create da versioni vecchie: non riaprire mai
+    # il simulatore locale; usa il portale reale e fermati prima del salvataggio.
+    "invoice_prepare_demo": portal.open_legacy_invoice_in_webdesk,
+    "invoice_submit_demo": portal.refuse_legacy_invoice_submit,
     "document_check": documents.check,
     "email_draft": email_draft.draft,
     "f24_prepare": f24.prepare,

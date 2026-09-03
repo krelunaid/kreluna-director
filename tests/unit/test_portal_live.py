@@ -1,6 +1,7 @@
 import subprocess
 
 import pytest
+from agent.capabilities import portal
 from agent.capabilities.portal import open_portal, prepare_invoice_portal
 from agent.tools import mac_browser
 from kreluna_shared.agents import preferred_role
@@ -492,6 +493,34 @@ def test_permission_errors_explain_what_to_switch_on():
     assert "Apple Event" in str(mac_browser._translate(blocked))
     no_access = mac_browser.MacControlError("assistive access is not enabled (-25211)")
     assert "Accessibilità" in str(mac_browser._translate(no_access))
+
+
+def test_old_demo_requests_are_routed_to_real_webdesk(monkeypatch):
+    captured = {}
+
+    def fake_open_portal(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "sent": False}
+
+    monkeypatch.setattr(portal, "open_portal", fake_open_portal)
+    result = portal.open_legacy_invoice_in_webdesk(
+        client_name="Cliente Prova",
+        description="Consulenza",
+        net_eur=100,
+        vat_rate=0.22,
+    )
+
+    assert result["sent"] is False
+    assert captured["portal"] == "fatture-webdesk"
+    assert captured["query"] == "Cliente Prova"
+    assert captured["invoice"]["lines"] == [
+        {
+            "description": "Consulenza",
+            "quantity": 1,
+            "unit_net_eur": 100,
+            "vat_rate": 0.22,
+        }
+    ]
 
 
 def test_osascript_timeout_never_exposes_the_raw_command(monkeypatch):

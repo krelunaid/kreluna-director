@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -64,3 +66,31 @@ def test_mac_enrollment_code_is_a_one_time_file_not_saved_in_config(tmp_path, mo
     assert "enrollment_code" not in mac_boot.load_config()
     assert mac_boot.enrollment_path().read_text(encoding="utf-8").strip() == code
     assert mac_boot.enrollment_path().stat().st_mode & 0o777 == 0o600
+
+
+def test_mac_agent_refuses_a_second_live_instance(tmp_path):
+    """Il lock resta del kernel: un altro processo non può rubarlo."""
+
+    from agent import mac_boot
+
+    original = mac_boot.support_dir
+    mac_boot.support_dir = lambda: tmp_path
+    try:
+        first = mac_boot.acquire_single_instance()
+        assert first is not None
+        code = (
+            "from pathlib import Path; "
+            "from agent import mac_boot; "
+            f"mac_boot.support_dir=lambda: Path({str(tmp_path)!r}); "
+            "print(mac_boot.acquire_single_instance() is None)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert result.stdout.strip() == "True"
+        first.close()
+    finally:
+        mac_boot.support_dir = original

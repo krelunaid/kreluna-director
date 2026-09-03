@@ -682,3 +682,67 @@ def open_portal(
         "Non ho premuto invio, non ho scaricato niente.",
         filled=True,
     )
+
+
+def open_legacy_invoice_in_webdesk(
+    client_name: str,
+    description: str,
+    net_eur: float,
+    vat_rate: float = 0.22,
+    account_name: str = "",
+    vat_note: str = "",
+    vat_treatment: str = "standard",
+    intent_lookup: str = "automatic",
+    intent_received_date: str = "",
+    intent_receipt_protocol: str = "",
+    intent_protocol: str = "",
+    intent_progressive: str = "",
+    intent_year: str = "",
+    lines: list[dict[str, Any]] | None = None,
+    cancel_check: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    """Compatibilità sicura: una vecchia richiesta demo apre il Webdesk vero.
+
+    Il vecchio simulatore non viene più richiamato dall'Agent installato. Anche
+    questo percorso si ferma prima di Salva, Emetti o Invia.
+    """
+
+    detail_lines = lines or [
+        {
+            "description": description,
+            "quantity": 1,
+            "unit_net_eur": net_eur,
+            "vat_rate": vat_rate,
+        }
+    ]
+    invoice = {
+        "account_name": account_name,
+        "client_name": client_name,
+        "description": description,
+        "net_eur": net_eur,
+        "vat_rate": vat_rate,
+        "vat_note": vat_note,
+        "vat_treatment": vat_treatment,
+        "intent_lookup": intent_lookup,
+        "intent_received_date": intent_received_date,
+        "intent_receipt_protocol": intent_receipt_protocol,
+        "intent_protocol": intent_protocol,
+        "intent_progressive": intent_progressive,
+        "intent_year": intent_year,
+        "lines": detail_lines,
+    }
+    return open_portal(
+        portal="fatture-webdesk",
+        query=client_name,
+        invoice=invoice,
+        cancel_check=cancel_check,
+    )
+
+
+def refuse_legacy_invoice_submit(draft_id: str = "") -> dict[str, Any]:
+    """Una vecchia approvazione demo non deve mai riaprire o emettere il simulatore."""
+
+    del draft_id
+    raise RuntimeError(
+        "La vecchia prova locale è stata disattivata. Prepara nuovamente la fattura su Webdesk."
+    )
