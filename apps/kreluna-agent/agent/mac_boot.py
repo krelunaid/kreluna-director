@@ -298,15 +298,23 @@ def ask_config() -> dict[str, str] | None:
 def main() -> int:
     instance_lock = acquire_single_instance()
     if instance_lock is None:
-        subprocess.run(
-            [
-                "osascript",
-                "-e",
-                'display notification "Kreluna Agent è già attivo" with title "Kreluna Agent"',
-            ],
-            capture_output=True,
-            check=False,
-        )
+        # Un secondo doppio clic non crea un altro Agent: riapre soltanto la
+        # guida del browser, così anche un utente non tecnico può recuperarla.
+        data = load_config()
+        if data.get("role") == "pc-fatture":
+            from agent.browser_setup import guide_browser_permissions
+
+            guide_browser_permissions(always_show=True)
+        else:
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    'display notification "Kreluna Agent è già attivo" with title "Kreluna Agent"',
+                ],
+                capture_output=True,
+                check=False,
+            )
         return 0
     data = load_config()
     preset_role = os.environ.get("KRELUNA_AGENT_ID")

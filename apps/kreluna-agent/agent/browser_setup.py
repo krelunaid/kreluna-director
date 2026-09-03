@@ -20,12 +20,14 @@ WEBDESK_LOGIN = "https://app.webdesk.it/Apps/Login/View"
 Run = Callable[..., subprocess.CompletedProcess[str]]
 
 
-def _run(command: list[str], *, timeout: float = 30) -> subprocess.CompletedProcess[str]:
+def _run(command: list[str], *, timeout: float | None = 30) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
 
 
-def _apple_script(run: Run, script: str) -> subprocess.CompletedProcess[str]:
-    return run(["/usr/bin/osascript", "-e", script], timeout=30)
+def _apple_script(
+    run: Run, script: str, *, timeout: float | None = 30
+) -> subprocess.CompletedProcess[str]:
+    return run(["/usr/bin/osascript", "-e", script], timeout=timeout)
 
 
 def installed_browser(run: Run = _run) -> str | None:
@@ -88,13 +90,15 @@ def _dialog(run: Run, text: str, buttons: tuple[str, str], default: str) -> str:
         f'display dialog "{escaped}" buttons {{"{left}", "{right}"}} '
         f'default button "{default}" with title "Configura Kreluna Agent"'
     )
-    result = _apple_script(run, script)
+    # La guida deve aspettare l'utente: configurare Safari può richiedere più
+    # di 30 secondi e non deve sparire mentre sono aperte le Impostazioni.
+    result = _apple_script(run, script, timeout=None)
     if result.returncode != 0:
         return ""
     return result.stdout.strip().removeprefix("button returned:").strip()
 
 
-def guide_browser_permissions(run: Run = _run) -> bool:
+def guide_browser_permissions(run: Run = _run, *, always_show: bool = False) -> bool:
     """Apre il browser e accompagna l'utente nell'unico consenso non automatizzabile."""
 
     if sys.platform != "darwin":
@@ -111,7 +115,7 @@ def guide_browser_permissions(run: Run = _run) -> bool:
 
     # Aprire una pagina e controllarne il titolo non compila e non invia alcun dato.
     run(["/usr/bin/open", "-a", browser, WEBDESK_LOGIN], timeout=15)
-    if control_is_ready(browser, run):
+    if control_is_ready(browser, run) and not always_show:
         return True
 
     message = (
@@ -119,7 +123,7 @@ def guide_browser_permissions(run: Run = _run) -> bool:
         f"{permission_instructions(browser)}\n\n"
         "Segui i numeri e poi premi il pulsante di controllo."
     )
-    for _attempt in range(3):
+    while True:
         verify = "Ho attivato: controlla"
         if _dialog(run, message, ("Non ora", verify), verify) != verify:
             return False
@@ -136,4 +140,3 @@ def guide_browser_permissions(run: Run = _run) -> bool:
             f"{permission_instructions(browser)}\n\n"
             "Segui tutti i numeri e premi di nuovo Ho attivato: controlla."
         )
-    return False

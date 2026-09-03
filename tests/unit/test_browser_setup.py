@@ -10,10 +10,12 @@ class FakeRun:
         self.installed = installed
         self.ready = ready
         self.commands: list[list[str]] = []
+        self.calls: list[tuple[list[str], dict[str, object]]] = []
         self.dialog_answers = ["Ho attivato: controlla"]
 
-    def __call__(self, command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+    def __call__(self, command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
         self.commands.append(command)
+        self.calls.append((command, kwargs))
         joined = " ".join(command)
         if command[:2] == ["/usr/bin/open", "-a"]:
             return subprocess.CompletedProcess(command, 0, "", "")
@@ -59,6 +61,12 @@ def test_guide_opens_webdesk_and_verifies_permission(monkeypatch):
     assert browser_setup.guide_browser_permissions(fake) is True
     assert any(command[:4] == ["/usr/bin/open", "-a", "Safari", browser_setup.WEBDESK_LOGIN] for command in fake.commands)
     assert sum("do JavaScript" in " ".join(command) for command in fake.commands) >= 2
+    dialog_calls = [
+        kwargs
+        for command, kwargs in fake.calls
+        if "display dialog" in " ".join(command)
+    ]
+    assert dialog_calls and dialog_calls[0]["timeout"] is None
 
 
 def test_ready_browser_does_not_show_the_permission_dialog(monkeypatch):
@@ -67,3 +75,11 @@ def test_ready_browser_does_not_show_the_permission_dialog(monkeypatch):
 
     assert browser_setup.guide_browser_permissions(fake) is True
     assert not any("display dialog" in " ".join(command) for command in fake.commands)
+
+
+def test_guide_can_be_reopened_even_when_browser_is_ready(monkeypatch):
+    monkeypatch.setattr(browser_setup.sys, "platform", "darwin")
+    fake = FakeRun(installed=("Safari",), ready=True)
+
+    assert browser_setup.guide_browser_permissions(fake, always_show=True) is True
+    assert any("display dialog" in " ".join(command) for command in fake.commands)
