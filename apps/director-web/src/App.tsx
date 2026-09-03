@@ -181,6 +181,7 @@ const EMPTY_VAULT_FORM: VaultCredentialInput = {
   client_name: "",
   portal: "",
   portal_url: "",
+  portal_account: "",
   username: "",
   secret: "",
   secret_kind: "password",
@@ -701,6 +702,7 @@ export default function App() {
       client_name: item.client_name,
       portal: item.portal,
       portal_url: item.portal_url,
+      portal_account: "",
       username: "",
       secret: "",
       secret_kind: item.secret_kind as VaultCredentialInput["secret_kind"],
@@ -1292,15 +1294,16 @@ export default function App() {
           <label>Portale<input required maxLength={80} list="fort-knox-portals" value={vaultForm.portal} onChange={(event) => setVaultForm({ ...vaultForm, portal: event.target.value })} placeholder="es. Webdesk, CGN, AdE" /><datalist id="fort-knox-portals"><option value="webdesk" /><option value="ade" /><option value="cgn" /><option value="comunica" /><option value="ipsoa" /><option value="inps" /></datalist></label>
           <label>Username<input required maxLength={320} value={vaultForm.username} onChange={(event) => setVaultForm({ ...vaultForm, username: event.target.value })} placeholder="Username o email" autoComplete="off" /></label>
           <label className="vault-url-field">Link del portale<input required type="url" maxLength={1000} value={vaultForm.portal_url} onChange={(event) => setVaultForm({ ...vaultForm, portal_url: event.target.value })} placeholder="https://indirizzo-del-portale.it/login" autoComplete="url" /></label>
+          {vaultForm.portal.trim().toLowerCase() === "webdesk" ? <label>Codice studio Webdesk<input required maxLength={120} value={vaultForm.portal_account} onChange={(event) => setVaultForm({ ...vaultForm, portal_account: event.target.value })} placeholder="Codice dello studio" autoComplete="off" /></label> : null}
           <label>Password o token<input required type="password" maxLength={2048} value={vaultForm.secret} onChange={(event) => setVaultForm({ ...vaultForm, secret: event.target.value })} placeholder="Non verrà più mostrato" autoComplete="new-password" /></label>
           <label>Tipo<select value={vaultForm.secret_kind} onChange={(event) => setVaultForm({ ...vaultForm, secret_kind: event.target.value as VaultCredentialInput["secret_kind"] })}><option value="password">Password</option><option value="api_token">Token API</option><option value="client_secret">Client secret</option></select></label>
-          <label>{vaultForm.portal.trim().toLowerCase() === "webdesk" ? "Codice studio Webdesk" : "Profilo"}<input required maxLength={120} value={vaultForm.credential_label} onChange={(event) => setVaultForm({ ...vaultForm, credential_label: event.target.value })} placeholder={vaultForm.portal.trim().toLowerCase() === "webdesk" ? "Codice dello studio" : "principale"} /></label>
+          <label>Profilo<input required maxLength={120} value={vaultForm.credential_label} onChange={(event) => setVaultForm({ ...vaultForm, credential_label: event.target.value })} placeholder="principale" /></label>
         </div>
         <div className="vault-form-note">SPID, CNS, CIE, smart card e OTP non possono essere salvati: l’Agent si fermerà e chiederà l’intervento umano.</div>
         <div className="vault-form-actions"><button type="button" onClick={closeVaultForm}>Annulla</button><button className="primary" disabled={vaultBusy}>{vaultBusy ? "Cifro…" : "Cifra e salva"}</button></div>
       </form> : null}
       {vaultPreview ? <section className="vault-preview"><div><strong>{vaultPreview.recognized} accessi riconosciuti</strong><span>{vaultPreview.warnings.length ? ` · ${vaultPreview.warnings.length} righe da correggere` : " · CSV pronto"}</span></div><div className="vault-preview-list">{vaultPreview.rows.slice(0, 8).map((row) => <span key={`${row.row_number}-${row.client_name}-${row.portal}`} title={row.portal_url || "Link non indicato"}><b>{row.client_name}</b><i>{row.portal}</i><em>{row.username_masked}</em></span>)}</div><div className="vault-preview-actions"><button onClick={() => { setVaultFile(null); setVaultPreview(null); }}>Annulla</button><button className="primary" disabled={vaultBusy} onClick={() => void importVaultFile()}>Cifra e importa</button></div></section> : null}
-      <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}</span><small className="vault-saved-link" title={item.portal_url}>{item.portal_url || "Link da aggiungere"}</small></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => editVaultCredential(item)}>Aggiorna</button><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Premi Nuovo cliente oppure importa il modello CSV.</span></div> : null}</div>
+      <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}{item.portal === "webdesk" ? item.portal_account_saved ? " · codice studio salvato" : " · codice studio mancante" : ""}</span><small className="vault-saved-link" title={item.portal_url}>{item.portal_url || "Link da aggiungere"}</small></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => editVaultCredential(item)}>Aggiorna</button><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Premi Nuovo cliente oppure importa il modello CSV.</span></div> : null}</div>
       <div className="vault-safety"><strong>Barriere sempre attive</strong><span>Niente SPID/CNS automatico · niente invio fatture, F24, PEC o pagamenti · OTP inserito dalla persona.</span></div>
       </>}
     </div></div> : null}

@@ -38,7 +38,7 @@ from app.models import (
 from app.services.audit import write_audit
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.registry import hub
-from app.services.vault import client_key_for_name, decrypt_credential
+from app.services.vault import client_key_for_name, decrypt_credential, decrypt_portal_account
 
 router = APIRouter()
 
@@ -239,6 +239,7 @@ async def credential_lease(
         "secret": secret,
         "secret_kind": credential.secret_kind,
         "credential_label": credential.credential_label,
+        "portal_account": decrypt_portal_account(credential),
         "expires_in_seconds": 30,
         "single_use": True,
     }

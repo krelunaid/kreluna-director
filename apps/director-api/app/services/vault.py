@@ -40,6 +40,7 @@ HEADER_ALIASES = {
     "client_name": {"cliente", "client", "client_name", "ragione_sociale", "azienda", "ditta"},
     "portal": {"portale", "portal", "sistema", "servizio", "provider", "programma"},
     "portal_url": {"link", "url", "link_portale", "portal_url", "indirizzo", "sito"},
+    "portal_account": {"codice_studio", "studio", "account_portale", "portal_account"},
     "username": {"username", "utente", "user", "email", "login", "utenza"},
     "secret": {"password", "secret", "segreto", "token", "api_key", "chiave", "pin"},
     "secret_kind": {"tipo", "tipo_segreto", "secret_kind", "tipo_chiave"},
@@ -68,6 +69,7 @@ class ParsedCredential:
     client_key: str
     portal: str
     portal_url: str
+    portal_account: str
     username: str
     secret: str
     secret_kind: str
@@ -79,6 +81,7 @@ class ParsedCredential:
             "client_name": self.client_name,
             "portal": self.portal,
             "portal_url": self.portal_url,
+            "portal_account_saved": bool(self.portal_account),
             "username_masked": mask_username(self.username),
             "secret_kind": self.secret_kind,
             "credential_label": self.credential_label,
@@ -171,6 +174,7 @@ def normalize_credential(
     client_name: str,
     portal: str,
     portal_url: str = "",
+    portal_account: str = "",
     username: str,
     secret: str,
     secret_kind: str = "password",
@@ -189,6 +193,9 @@ def normalize_credential(
     clean_portal = _ascii_slug(portal_raw, max_length=70)
     clean_portal = PORTAL_ALIASES.get(clean_portal, clean_portal)
     clean_portal_url = normalize_portal_url(portal_url)
+    clean_portal_account = " ".join(portal_account.replace("\x00", "").split()).strip()
+    if len(clean_portal_account) > 120:
+        raise VaultImportError("codice studio/account portale troppo lungo")
     clean_username = _clean_public(username, field="username", max_length=320)
     clean_secret = secret.strip()
     if not clean_secret or len(clean_secret) > 2048 or "\x00" in clean_secret:
@@ -218,6 +225,7 @@ def normalize_credential(
         client_key=client_key,
         portal=clean_portal,
         portal_url=clean_portal_url,
+        portal_account=clean_portal_account,
         username=clean_username,
         secret=clean_secret,
         secret_kind=clean_kind,
@@ -260,6 +268,7 @@ def parse_credentials_csv(data: bytes) -> tuple[list[ParsedCredential], list[dic
                 client_name=str(row.get(columns["client_name"]) or ""),
                 portal=str(row.get(columns["portal"]) or ""),
                 portal_url=str(row.get(columns.get("portal_url", "")) or ""),
+                portal_account=str(row.get(columns.get("portal_account", "")) or ""),
                 username=str(row.get(columns["username"]) or ""),
                 secret=str(row.get(columns["secret"]) or ""),
                 secret_kind=kind,
@@ -296,7 +305,9 @@ def tenant_vault_key(tenant_id: str) -> str:
     ).hexdigest()
 
 
-def encrypt_credential_fields(row: ClientCredential, *, username: str, secret: str) -> None:
+def encrypt_credential_fields(
+    row: ClientCredential, *, username: str, secret: str, portal_account: str = ""
+) -> None:
     row.username_ciphertext = encrypt_secret_text(
         tenant_vault_key(row.tenant_id),
         username,
@@ -306,6 +317,15 @@ def encrypt_credential_fields(row: ClientCredential, *, username: str, secret: s
         tenant_vault_key(row.tenant_id),
         secret,
         context=credential_context(row, "secret"),
+    )
+    row.portal_account_ciphertext = (
+        encrypt_secret_text(
+            tenant_vault_key(row.tenant_id),
+            portal_account,
+            context=credential_context(row, "portal_account"),
+        )
+        if portal_account
+        else ""
     )
 
 
@@ -335,6 +355,22 @@ def decrypt_credential(row: ClientCredential) -> tuple[str, str]:
             settings.director_credential_key, row.secret_ciphertext, context=context
         )
     return username, secret
+
+
+def decrypt_portal_account(row: ClientCredential) -> str:
+    if not row.portal_account_ciphertext:
+        return ""
+    context = credential_context(row, "portal_account")
+    try:
+        return decrypt_secret_text(
+            tenant_vault_key(row.tenant_id), row.portal_account_ciphertext, context=context
+        )
+    except InvalidTag:
+        return decrypt_secret_text(
+            settings.director_credential_key,
+            row.portal_account_ciphertext,
+            context=context,
+        )
 
 
 def mask_username(value: str) -> str:

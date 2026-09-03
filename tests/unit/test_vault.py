@@ -7,6 +7,7 @@ from app.services.vault import (
     VaultImportError,
     credential_context,
     decrypt_credential,
+    decrypt_portal_account,
     encrypt_credential_fields,
     mask_username,
     normalize_credential,
@@ -86,11 +87,18 @@ def test_credentials_are_context_bound_and_masked() -> None:
         secret_ciphertext="",
         updated_by="owner",
     )
-    encrypt_credential_fields(row, username="cliente@example.it", secret="Segreto Molto Forte")
+    encrypt_credential_fields(
+        row,
+        username="cliente@example.it",
+        secret="Segreto Molto Forte",
+        portal_account="K25710",
+    )
 
     assert "cliente@example.it" not in row.username_ciphertext
     assert "Segreto Molto Forte" not in row.secret_ciphertext
+    assert "K25710" not in row.portal_account_ciphertext
     assert decrypt_credential(row) == ("cliente@example.it", "Segreto Molto Forte")
+    assert decrypt_portal_account(row) == "K25710"
     assert mask_username("cliente@example.it").endswith("@example.it")
     row.portal = "cgn"
     with pytest.raises(InvalidTag):

@@ -673,11 +673,12 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
                 }
             )
         return Response(
-            {
-                "username": "utente",
-                "secret": "segreto",
-                "credential_label": "ABC123",
-            }
+                {
+                    "username": "utente",
+                    "secret": "segreto",
+                    "credential_label": "principale",
+                    "portal_account": "ABC123",
+                }
         )
 
     logged_in = False

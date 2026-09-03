@@ -120,6 +120,7 @@ export type VaultCredential = {
   client_name: string;
   portal: string;
   portal_url: string;
+  portal_account_saved: boolean;
   credential_label: string;
   secret_kind: string;
   username_masked: string;
@@ -131,6 +132,7 @@ export type VaultCredentialInput = {
   client_name: string;
   portal: string;
   portal_url: string;
+  portal_account: string;
   username: string;
   secret: string;
   secret_kind: "password" | "api_token" | "client_secret";
@@ -144,6 +146,7 @@ export type VaultPreview = {
     client_name: string;
     portal: string;
     portal_url: string;
+    portal_account_saved: boolean;
     username_masked: string;
     secret_kind: string;
     credential_label: string;

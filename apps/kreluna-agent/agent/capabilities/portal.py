@@ -669,16 +669,16 @@ def open_portal(
         credentials = response.json()
         username = str(credentials.get("username") or "")
         secret = str(credentials.get("secret") or "")
-        credential_label = str(credentials.get("credential_label") or "")
+        portal_account = str(credentials.get("portal_account") or "")
         if not username or not secret:
             raise RuntimeError("CASSAFORTE_ACCESSO_VUOTO")
         if portal == "fatture-webdesk":
-            studio_code = credential_label.strip().upper()
-            if studio_code == "PRINCIPALE" or not studio_code:
+            studio_code = portal_account.strip().upper()
+            if not studio_code:
                 return stop(
                     "codice-studio-mancante",
                     "In Fort Knox manca il codice studio Webdesk. Apri l'accesso Webdesk, "
-                    "inseriscilo nel campo Codice studio / profilo e riprova.",
+                    "inseriscilo nel campo Codice studio Webdesk e riprova.",
                     capture=False,
                 )
             if not mac_browser.fill_field(run, browser, "#studioInput", studio_code):
@@ -692,7 +692,8 @@ def open_portal(
         credentials["username"] = ""
         credentials["secret"] = ""
         credentials["credential_label"] = ""
-        credential_label = ""
+        credentials["portal_account"] = ""
+        portal_account = ""
         username = ""
         secret = ""
         if not username_written or not password_written:

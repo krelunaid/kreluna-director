@@ -684,6 +684,7 @@ async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncC
     assert lease.json()["username"] == "lease@example.it"
     assert lease.json()["secret"] == "Lease-Segreto-123"
     assert lease.json()["credential_label"] == "principale"
+    assert lease.json()["portal_account"] == ""
     assert lease.json()["single_use"] is True
     assert (await client.post("/agent/credential-lease", json=payload)).status_code == 409
 

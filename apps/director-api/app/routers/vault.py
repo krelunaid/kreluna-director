@@ -20,6 +20,7 @@ from app.services.vault import (
     MAX_CSV_BYTES,
     VaultImportError,
     decrypt_credential,
+    decrypt_portal_account,
     decrypt_username,
     encrypt_credential_fields,
     mask_username,
@@ -40,6 +41,7 @@ class VaultCredentialWrite(BaseModel):
     client_name: str = Field(min_length=1, max_length=200)
     portal: str = Field(min_length=1, max_length=80)
     portal_url: str = Field(default="", max_length=1000)
+    portal_account: str = Field(default="", max_length=120)
     username: str = Field(min_length=1, max_length=320)
     secret: SecretStr = Field(min_length=1, max_length=2048)
     secret_kind: str = Field(default="password", min_length=1, max_length=40)
@@ -232,6 +234,7 @@ def _validated(body: VaultCredentialWrite):
             client_name=body.client_name,
             portal=body.portal,
             portal_url=body.portal_url,
+            portal_account=body.portal_account,
             username=body.username,
             secret=body.secret.get_secret_value(),
             secret_kind=body.secret_kind,
@@ -303,6 +306,7 @@ async def list_credentials(
                 "client_name": row.client_name,
                 "portal": row.portal,
                 "portal_url": row.portal_url,
+                "portal_account_saved": bool(decrypt_portal_account(row)),
                 "credential_label": row.credential_label,
                 "secret_kind": row.secret_kind,
                 "username_masked": username_masked,
@@ -344,6 +348,7 @@ async def create_credential(
             client_key=item.client_key,
             portal=item.portal,
             portal_url=item.portal_url,
+            portal_account_ciphertext="",
             credential_label=item.credential_label,
             secret_kind=item.secret_kind,
             username_ciphertext="",
@@ -357,7 +362,9 @@ async def create_credential(
     row.status = "ready"
     row.updated_by = actor.user_id
     row.updated_at = utcnow()
-    encrypt_credential_fields(row, username=item.username, secret=item.secret)
+    encrypt_credential_fields(
+        row, username=item.username, secret=item.secret, portal_account=item.portal_account
+    )
     await session.flush()
     await write_audit(
         session,
@@ -419,7 +426,9 @@ async def update_credential(
     row.status = "ready"
     row.updated_by = actor.user_id
     row.updated_at = utcnow()
-    encrypt_credential_fields(row, username=item.username, secret=item.secret)
+    encrypt_credential_fields(
+        row, username=item.username, secret=item.secret, portal_account=item.portal_account
+    )
     await write_audit(
         session,
         tenant_id=actor.tenant_id,
@@ -493,6 +502,7 @@ async def import_credentials(
                 client_key=item.client_key,
                 portal=item.portal,
                 portal_url=item.portal_url,
+                portal_account_ciphertext="",
                 credential_label=item.credential_label,
                 secret_kind=item.secret_kind,
                 username_ciphertext="",
@@ -509,7 +519,9 @@ async def import_credentials(
         row.status = "ready"
         row.updated_by = actor.user_id
         row.updated_at = utcnow()
-        encrypt_credential_fields(row, username=item.username, secret=item.secret)
+        encrypt_credential_fields(
+            row, username=item.username, secret=item.secret, portal_account=item.portal_account
+        )
     await write_audit(
         session,
         tenant_id=actor.tenant_id,
