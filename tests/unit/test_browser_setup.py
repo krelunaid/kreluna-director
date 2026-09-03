@@ -10,7 +10,7 @@ class FakeRun:
         self.installed = installed
         self.ready = ready
         self.commands: list[list[str]] = []
-        self.dialog_answers = ["Verifica"]
+        self.dialog_answers = ["Ho attivato: controlla"]
 
     def __call__(self, command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
         self.commands.append(command)
@@ -24,7 +24,7 @@ class FakeRun:
             return subprocess.CompletedProcess(command, 0 if self.ready else 1, "READY\n" if self.ready else "", "bloccato")
         if "display dialog" in joined:
             answer = self.dialog_answers.pop(0) if self.dialog_answers else "Continua"
-            if answer == "Verifica":
+            if answer == "Ho attivato: controlla":
                 self.ready = True
             return subprocess.CompletedProcess(command, 0, f"button returned:{answer}\n", "")
         return subprocess.CompletedProcess(command, 1, "", "")

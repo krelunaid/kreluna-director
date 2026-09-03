@@ -6,7 +6,7 @@ import sys
 from typing import Any
 from urllib.parse import urlparse
 
-APP_VERSION = "0.5.46"
+APP_VERSION = "0.5.47"
 STAMP_NAME = "installed_version"
 DEFAULT_UPDATE_API = "https://api.github.com/repos/krelunaid/kreluna-director/releases/latest"
 DEFAULT_RELEASE_PAGE = "https://github.com/krelunaid/kreluna-director/releases/latest"

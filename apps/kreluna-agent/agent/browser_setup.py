@@ -41,13 +41,20 @@ def installed_browser(run: Run = _run) -> str | None:
 def permission_instructions(browser: str) -> str:
     if browser == "Safari":
         return (
-            "1. In Safari apri Safari > Impostazioni > Avanzate.\n"
-            "2. Attiva Mostra funzionalità per sviluppatori web.\n"
-            "3. Apri Sviluppo e attiva Consenti JavaScript dagli Apple Event."
+            "Safari è già aperto: non devi aprire un altro programma.\n\n"
+            "1. In alto a sinistra, accanto alla mela, clicca Safari.\n"
+            "2. Clicca Impostazioni e poi Avanzate.\n"
+            "3. Attiva Mostra funzionalità per sviluppatori web.\n"
+            "4. Chiudi le Impostazioni. In alto apparirà il menu Sviluppo.\n"
+            "5. Clicca Sviluppo > Consenti JavaScript dagli Apple Event.\n"
+            "6. Torna qui e premi Ho attivato: controlla."
         )
     return (
-        f"In {browser} apri Visualizza > Sviluppatore e attiva "
-        "Consenti JavaScript dagli Apple Event."
+        f"{browser} è già aperto: non devi aprire un altro programma.\n\n"
+        "1. In alto clicca Visualizza.\n"
+        "2. Apri Sviluppatore.\n"
+        "3. Attiva Consenti JavaScript dagli Apple Event.\n"
+        "4. Torna qui e premi Ho attivato: controlla."
     )
 
 
@@ -84,7 +91,7 @@ def _dialog(run: Run, text: str, buttons: tuple[str, str], default: str) -> str:
     result = _apple_script(run, script)
     if result.returncode != 0:
         return ""
-    return result.stdout.rsplit(":", 1)[-1].strip()
+    return result.stdout.strip().removeprefix("button returned:").strip()
 
 
 def guide_browser_permissions(run: Run = _run) -> bool:
@@ -110,10 +117,11 @@ def guide_browser_permissions(run: Run = _run) -> bool:
     message = (
         f"Kreluna ha riconosciuto {browser}. Serve una sola autorizzazione.\n\n"
         f"{permission_instructions(browser)}\n\n"
-        "Quando hai finito premi Verifica."
+        "Segui i numeri e poi premi il pulsante di controllo."
     )
     for _attempt in range(3):
-        if _dialog(run, message, ("Più tardi", "Verifica"), "Verifica") != "Verifica":
+        verify = "Ho attivato: controlla"
+        if _dialog(run, message, ("Non ora", verify), verify) != verify:
             return False
         if control_is_ready(browser, run):
             _dialog(
@@ -126,6 +134,6 @@ def guide_browser_permissions(run: Run = _run) -> bool:
         message = (
             "Il permesso non risulta ancora attivo.\n\n"
             f"{permission_instructions(browser)}\n\n"
-            "Attivalo e premi di nuovo Verifica."
+            "Segui tutti i numeri e premi di nuovo Ho attivato: controlla."
         )
     return False
