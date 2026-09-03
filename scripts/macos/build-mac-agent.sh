@@ -22,8 +22,10 @@ mkdir -p "$APP/Contents/MacOS" "$RES"
 
 cp "$ROOT/packaging/macos-agent/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
-cp "$ROOT/packaging/macos-agent/Kreluna" "$APP/Contents/MacOS/Kreluna"
-chmod +x "$APP/Contents/MacOS/Kreluna"
+xcrun swiftc \
+  -framework Cocoa \
+  "$ROOT/packaging/macos-agent/KrelunaLauncher.swift" \
+  -o "$APP/Contents/MacOS/Kreluna"
 
 bash "$ROOT/scripts/lib/copy-agent-tree.sh" "$RES"
 cp "$ROOT/packaging/macos-agent/director.url" "$RES/director.url"

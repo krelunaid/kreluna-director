@@ -296,6 +296,10 @@ def ask_config() -> dict[str, str] | None:
 
 
 def main() -> int:
+    if os.environ.get("KRELUNA_GUIDE_ONLY") == "1":
+        from agent.browser_setup import guide_browser_permissions
+
+        return 0 if guide_browser_permissions(always_show=True) else 1
     instance_lock = acquire_single_instance()
     if instance_lock is None:
         # Un secondo doppio clic non crea un altro Agent: riapre soltanto la
@@ -334,7 +338,7 @@ def main() -> int:
             return 1
         save_config(asked)
         data = asked
-    else:
+    elif os.environ.get("KRELUNA_TRUST_SAVED_CONFIG") != "1":
         data = confirm_existing(data)
         if not data:
             print("Avvio annullato.", file=sys.stderr)
