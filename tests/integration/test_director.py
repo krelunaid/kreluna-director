@@ -974,7 +974,6 @@ async def test_incomplete_invoice_returns_the_structured_chat_draft(client: Asyn
         "net_eur": None,
         "vat_rate": 0.22,
         "vat_note": "",
-        "live": True,
     }
     reset = await client.post("/chat/reset", headers=auth(token))
     assert reset.status_code == 200
@@ -1242,9 +1241,17 @@ async def test_approval_token_single_use_and_kill(client: AsyncClient, planned_b
         capabilities=["invoice_prepare_demo", "invoice_submit_demo"],
     )
     planned = await client.post(
-        "/chat",
+        "/requests/structured",
         headers=auth(token),
-        json={"message": "Prepara una fattura demo a Bianchi per consulenza EUR 200"},
+        json={
+            "capability": "invoice_prepare_demo",
+            "args": {
+                "client_name": "Bianchi",
+                "description": "Consulenza",
+                "net_eur": 200,
+                "vat_rate": 0.22,
+            },
+        },
     )
     task_id = planned.json()["tasks"][0]["id"]
     # simulate agent completing prepare

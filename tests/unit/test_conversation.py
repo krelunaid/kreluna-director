@@ -192,7 +192,8 @@ def test_structured_invoice_keeps_full_client_description_and_amount():
 
     assert plan.ok
     task = plan.tasks[0]
-    assert task.args["client_name"] == "Seconda Prova SRL"
-    assert task.args["description"] == "Assistenza amministrativa"
-    assert task.args["net_eur"] == 150
-    assert task.args["vat_rate"] == 0.22
+    args = invoice_args(task)
+    assert args["client_name"] == "Seconda Prova SRL"
+    assert args["description"] == "Assistenza amministrativa"
+    assert args["net_eur"] == 150
+    assert args["vat_rate"] == 0.22

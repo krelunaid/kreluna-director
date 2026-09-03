@@ -67,7 +67,8 @@ def test_payments_and_invoice_check_are_split():
     assert check.ok
     assert check.tasks[0].capability == "invoice_check"
     create = plan_deterministic("Prepara una fattura demo a Rossi per consulenza EUR 1500")
-    assert create.tasks[0].capability == "invoice_prepare_demo"
+    assert create.tasks[0].capability == "portal_open"
+    assert create.tasks[0].args["portal"] == "fatture-webdesk"
     assert preferred_role("invoice_prepare_demo") == "pc-fatture"
     assert preferred_role("payment_prepare") == "pc-pagamenti"
     assert preferred_role("contabilita_prepare") == "pc-contabilita"

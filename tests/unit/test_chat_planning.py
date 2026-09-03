@@ -60,11 +60,12 @@ async def test_written_invoice_facts_survive_an_unnecessary_model_question(ai_on
     assert plan.ok
     assert plan.source == "llm-grounded"
     task = plan.tasks[0]
-    assert task.capability == "invoice_prepare_demo"
-    assert task.args["client_name"] == "Seconda Prova SRL"
-    assert task.args["description"] == "Assistenza amministrativa"
-    assert task.args["net_eur"] == 150
-    assert task.args["vat_rate"] == 0.22
+    assert task.capability == "portal_open"
+    args = task.args["invoice"]
+    assert args["client_name"] == "Seconda Prova SRL"
+    assert args["description"] == "Assistenza amministrativa"
+    assert args["net_eur"] == 150
+    assert args["vat_rate"] == 0.22
 
 
 @pytest.mark.asyncio

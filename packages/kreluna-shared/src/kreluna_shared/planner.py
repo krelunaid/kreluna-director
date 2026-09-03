@@ -700,7 +700,6 @@ def plan_deterministic(text: str) -> PlanResult:
                     "net_eur": net,
                     "vat_rate": vat_rate,
                     "vat_note": vat_note,
-                    "live": "demo" not in lowered,
                 },
             )
         return invoice_plan(
@@ -710,7 +709,6 @@ def plan_deterministic(text: str) -> PlanResult:
             account_name=account,
             vat_rate=vat_rate,
             vat_note=vat_note,
-            live="demo" not in lowered,
         )
 
     if "document" in lowered or "documenti mancanti" in lowered:
@@ -856,7 +854,6 @@ def invoice_plan(
     account_name: str = "",
     vat_rate: float = 0.22,
     vat_note: str = "",
-    live: bool = True,
 ) -> PlanResult:
     account = f" per conto di {account_name}" if account_name else ""
     tax = f"IVA {vat_rate * 100:g}%"
@@ -889,23 +886,6 @@ def invoice_plan(
             }
         ],
     }
-    if not live:
-        return PlanResult(
-            ok=True,
-            summary=(
-                f"Mando PC-FATTURE al simulatore locale{account}: fattura a {client} "
-                f"per {description}, € {net:,.2f}, {tax}. Nessun dato entra in Webdesk."
-            ),
-            tasks=[
-                PlannedTask(
-                    goal=f"Aprire il simulatore e compilare la fattura a {client}",
-                    capability="invoice_prepare_demo",
-                    args=invoice_args,
-                    risk=Risk.MEDIUM,
-                    needs_approval=False,
-                )
-            ],
-        )
     return PlanResult(
         ok=True,
         summary=(
@@ -999,7 +979,6 @@ def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
                 "net_eur": net,
                 "vat_rate": vat_rate,
                 "vat_note": vat_note,
-                "live": bool(pending.get("live", True)),
             },
         )
     return invoice_plan(
@@ -1009,7 +988,6 @@ def complete_pending(pending: dict[str, Any], text: str) -> PlanResult | None:
         account_name=account,
         vat_rate=vat_rate,
         vat_note=vat_note,
-        live=bool(pending.get("live", True)),
     )
 
 

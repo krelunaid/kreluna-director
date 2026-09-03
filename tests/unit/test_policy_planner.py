@@ -64,9 +64,9 @@ def test_planner_routes_invoice_to_pc_fatture_with_range():
 
     invoice = plan_deterministic("Prepara una fattura demo a Rossi Mario per consulenza, EUR 1500 + IVA")
     assert invoice.ok
-    assert invoice.tasks[0].capability == "invoice_prepare_demo"
-    assert invoice.tasks[0].args["net_eur"] == 1500.0
-    assert "Rossi" in invoice.tasks[0].args["client_name"]
+    assert invoice.tasks[0].capability == "portal_open"
+    assert invoice_args(invoice.tasks[0])["net_eur"] == 1500.0
+    assert "Rossi" in invoice_args(invoice.tasks[0])["client_name"]
 
 
 def test_planner_gadducci_spoken_italian():
