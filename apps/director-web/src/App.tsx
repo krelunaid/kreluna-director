@@ -1080,7 +1080,7 @@ export default function App() {
       return <article className={`workspace-row ${task.status}`} key={task.id}>
         <span className={`workspace-row-icon ${task.status}`}>{task.status === "failed" || task.error_state === "active" ? "△" : "▣"}</span>
         <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{f24 ? `${f24.form_label} · saldo ${euro(f24.totals.balance_eur)} · ${f24.ready_for_review ? "validato" : "da completare"}` : work ? `${work.title} · ${work.program} · ${work.ready_for_review ? "validata" : "da completare"}` : `${task.capability.replace(/_/g, " ")} · rischio ${task.risk}`}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
-        <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : invoice ? <button onClick={() => setInvoicePreview(task)}>Apri demo</button> : work ? <button onClick={() => setWorkPreview(task)}>Apri scheda</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
+        <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : invoice ? <button onClick={() => setInvoicePreview(task)}>Apri simulatore</button> : work ? <button onClick={() => setWorkPreview(task)}>Apri scheda</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
       </article>;
     })}</div>;
   }
@@ -1447,7 +1447,7 @@ function InvoiceDemoDialog({ task, onClose }: { task: Task; onClose: () => void 
   const fields = Object.fromEntries(draft.fields.map((field) => [field.key, field.value]));
   const client = String(fields.client_name || draft.client_name);
   return <div className="f24-dialog invoice-demo-dialog" role="dialog" aria-modal="true" aria-labelledby="invoice-demo-title"><div className="invoice-demo-window">
-    <header><div><strong>Webdesk / Agenzia delle Entrate</strong><span>AMBIENTE DIMOSTRATIVO KRELUNA</span></div><button type="button" aria-label="Chiudi demo" onClick={onClose}>×</button></header>
+    <header><div><strong>Simulatore fattura Kreluna</strong><span>NON È IL PROGRAMMA WEBDESK ORIGINALE</span></div><button type="button" aria-label="Chiudi simulatore" onClick={onClose}>×</button></header>
     <div className="invoice-demo-toolbar"><span>Clienti</span><b>›</b><span>Ricerca cliente</span><b>›</b><strong>Nuova fattura</strong></div>
     <section className="invoice-demo-customer"><label>Ricerca cliente<input value={client} readOnly /></label><div><span>1 risultato trovato</span><strong>{client}</strong><button type="button">Selezionato ✓</button></div><small>La demo cerca prima il cliente; se non esiste mostra “Crea nuovo cliente”.</small></section>
     <section className="invoice-demo-form">
@@ -1462,7 +1462,7 @@ function InvoiceDemoDialog({ task, onClose }: { task: Task; onClose: () => void 
       </div>
       <div className="invoice-demo-actions"><button type="button" className="save">Bozza salvata ✓</button><button type="button" disabled>Emetti / invia (bloccato)</button></div>
     </section>
-    <footer><span>DEMO LOCALE: nessun dato inviato ad Agenzia delle Entrate o IPSOA</span><button type="button" onClick={onClose}>Chiudi demo</button></footer>
+    <footer><span>SIMULAZIONE LOCALE: nessun dato inserito in Webdesk, Agenzia delle Entrate o IPSOA</span><button type="button" onClick={onClose}>Chiudi simulatore</button></footer>
   </div></div>;
 }
 
