@@ -16,14 +16,19 @@ def ask_then_answer(*messages: str):
     return plan
 
 
+def invoice_args(task):
+    return task.args.get("invoice") or task.args
+
+
 def test_the_amount_arrives_after_the_question():
     plan = ask_then_answer("mi crei una fattura per gadducci", "5000 euro di manodopera")
     assert plan.ok
     task = plan.tasks[0]
-    assert task.capability == "invoice_prepare_demo"
-    assert task.args["client_name"] == "Andrea Gadducci"
-    assert task.args["net_eur"] == 5000.0
-    assert task.args["description"] == "Manodopera"
+    assert task.capability == "portal_open"
+    args = invoice_args(task)
+    assert args["client_name"] == "Andrea Gadducci"
+    assert args["net_eur"] == 5000.0
+    assert args["description"] == "Manodopera"
 
 
 def test_it_asks_again_for_what_is_still_missing():
@@ -38,15 +43,15 @@ def test_it_asks_again_for_what_is_still_missing():
 
     done = complete_pending(half.pending, "manodopera")
     assert done is not None and done.ok
-    assert done.tasks[0].args["net_eur"] == 5000.0
-    assert done.tasks[0].args["description"] == "Manodopera"
+    assert invoice_args(done.tasks[0])["net_eur"] == 5000.0
+    assert invoice_args(done.tasks[0])["description"] == "Manodopera"
 
 
 def test_a_bare_number_is_the_amount():
     plan = ask_then_answer("mi crei una fattura per gadducci", "5000", "consulenza")
     assert plan.ok
-    assert plan.tasks[0].args["net_eur"] == 5000.0
-    assert plan.tasks[0].args["description"] == "Consulenza"
+    assert invoice_args(plan.tasks[0])["net_eur"] == 5000.0
+    assert invoice_args(plan.tasks[0])["description"] == "Consulenza"
 
 
 def test_customer_work_and_amount_can_arrive_in_separate_messages():
@@ -57,9 +62,10 @@ def test_customer_work_and_amount_can_arrive_in_separate_messages():
     )
 
     assert plan.ok
-    assert plan.tasks[0].args["client_name"] == "Mario Rossi"
-    assert plan.tasks[0].args["description"] == "Vendita piante"
-    assert plan.tasks[0].args["net_eur"] == 100
+    args = invoice_args(plan.tasks[0])
+    assert args["client_name"] == "Mario Rossi"
+    assert args["description"] == "Vendita piante"
+    assert args["net_eur"] == 100
 
 
 def test_a_short_typo_is_kept_as_the_invoice_description():
@@ -95,8 +101,8 @@ def test_the_client_can_arrive_last():
     assert not first.ok and first.pending
     done = complete_pending(first.pending, "Vannucci")
     assert done is not None and done.ok
-    assert done.tasks[0].args["client_name"] == "Vannucci"
-    assert done.tasks[0].args["net_eur"] == 5000.0
+    assert invoice_args(done.tasks[0])["client_name"] == "Vannucci"
+    assert invoice_args(done.tasks[0])["net_eur"] == 5000.0
 
 
 def test_spoken_invoice_separates_account_recipient_typo_and_tax_exemption():
@@ -106,12 +112,13 @@ def test_spoken_invoice_separates_account_recipient_typo_and_tax_exemption():
     )
     assert plan.ok
     task = plan.tasks[0]
-    assert task.args["account_name"] == "Andrea Gadducci"
-    assert task.args["client_name"] == "Otil SRL"
-    assert task.args["description"] == "Manodopera"
-    assert task.args["net_eur"] == 50000.0
-    assert task.args["vat_rate"] == 0
-    assert task.args["vat_note"] == "Dichiarazione d'intento"
+    args = invoice_args(task)
+    assert args["account_name"] == "Andrea Gadducci"
+    assert args["client_name"] == "Otil SRL"
+    assert args["description"] == "Manodopera"
+    assert args["net_eur"] == 50000.0
+    assert args["vat_rate"] == 0
+    assert args["vat_note"] == "Dichiarazione d'intento"
     assert "senza IVA" in plan.summary
 
 

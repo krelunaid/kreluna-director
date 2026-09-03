@@ -95,6 +95,7 @@ class ApprovalDecision(BaseModel):
 class StructuredRequestBody(BaseModel):
     capability: Literal[
         "invoice_prepare_demo",
+        "portal_open",
         "f24_prepare",
         "contabilita_prepare",
         "camera_prepare",
@@ -107,6 +108,7 @@ class StructuredRequestBody(BaseModel):
 
 STRUCTURED_LABELS = {
     "invoice_prepare_demo": "fattura",
+    "portal_open": "fattura Webdesk",
     "f24_prepare": "F24",
     "contabilita_prepare": "contabilità",
     "camera_prepare": "pratica camerale",
@@ -190,9 +192,22 @@ async def chat(
         followups.remember(actor.user_id, waiting)
     else:
         followups.forget(actor.user_id)
-    invoice_task = next((item for item in plan.tasks if item.capability == "invoice_prepare_demo"), None)
+    invoice_task = next(
+        (
+            item
+            for item in plan.tasks
+            if item.capability == "invoice_prepare_demo"
+            or (
+                item.capability == "portal_open"
+                and item.args.get("portal") == "fatture-webdesk"
+                and item.args.get("invoice")
+            )
+        ),
+        None,
+    )
     if invoice_task:
-        followups.remember_invoice(actor.user_id, dict(invoice_task.args) | {"capability": "invoice_prepare_demo"})
+        facts = dict(invoice_task.args.get("invoice") or invoice_task.args)
+        followups.remember_invoice(actor.user_id, facts | {"capability": "invoice_prepare_demo"})
     elif answered is not None:
         still = followups.last_invoice(actor.user_id)
         if still:

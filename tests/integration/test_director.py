@@ -924,7 +924,10 @@ async def test_spoken_invoice_keeps_issuer_recipient_and_tax_regime(client: Asyn
     )
     assert response.status_code == 200
     assert response.json()["ok"] is True
-    args = response.json()["tasks"][0]["args"]
+    task = response.json()["tasks"][0]
+    assert task["capability"] == "portal_open"
+    assert task["args"]["portal"] == "fatture-webdesk"
+    args = task["args"]["invoice"]
     assert args == {
         "account_name": "Andrea Gadducci",
         "client_name": "Otil SRL",
@@ -939,7 +942,15 @@ async def test_spoken_invoice_keeps_issuer_recipient_and_tax_regime(client: Asyn
         "intent_protocol": "",
         "intent_progressive": "",
         "intent_year": "",
-        "lines": [],
+        "lines": [
+            {
+                "description": "Manodopera",
+                "quantity": 1.0,
+                "unit_net_eur": 50000.0,
+                "vat_rate": 0.0,
+                "vat_treatment": "intent_declaration",
+            }
+        ],
     }
 
 
@@ -963,6 +974,7 @@ async def test_incomplete_invoice_returns_the_structured_chat_draft(client: Asyn
         "net_eur": None,
         "vat_rate": 0.22,
         "vat_note": "",
+        "live": True,
     }
     reset = await client.post("/chat/reset", headers=auth(token))
     assert reset.status_code == 200

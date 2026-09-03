@@ -18,6 +18,10 @@ from kreluna_shared.protocol import SignedGrant
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def invoice_args(task):
+    return task.args.get("invoice") or task.args
+
+
 def test_policy_yaml_loads():
     engine = load_policy(ROOT / "policies" / "default.yaml")
     assert engine.decide("notepad_write", "active").decision.value == "allow"
@@ -40,18 +44,19 @@ def test_planner_routes_invoice_to_pc_fatture_with_range():
     )
     assert plan.ok
     task = plan.tasks[0]
-    assert task.capability == "invoice_prepare_demo"
-    assert task.args["client_name"] == "Andrea Gadducci"
-    assert task.args["description"] == "Manodopera"
-    assert task.args["net_eur"] == 37500.0
+    assert task.capability == "portal_open"
+    args = invoice_args(task)
+    assert args["client_name"] == "Andrea Gadducci"
+    assert args["description"] == "Manodopera"
+    assert args["net_eur"] == 37500.0
     assert "PC-FATTURE" in plan.summary
 
     english = plan_deterministic(
         "make the invoice to Andrea Gadducci for 35-40 thousand euros of manpower"
     )
     assert english.ok
-    assert english.tasks[0].args["client_name"] == "Andrea Gadducci"
-    assert english.tasks[0].args["net_eur"] == 37500.0
+    assert invoice_args(english.tasks[0])["client_name"] == "Andrea Gadducci"
+    assert invoice_args(english.tasks[0])["net_eur"] == 37500.0
     note = plan_deterministic("Apri Blocco Note e scrivi: Kreluna Agent operativo")
     assert note.ok
     assert note.tasks[0].capability == "notepad_write"
@@ -68,9 +73,10 @@ def test_planner_gadducci_spoken_italian():
     plan = plan_deterministic("mi fai una fattura per gadducci di manodopera da 5.000 euro")
     assert plan.ok
     task = plan.tasks[0]
-    assert task.args["client_name"] == "Andrea Gadducci"
-    assert task.args["description"] == "Manodopera"
-    assert task.args["net_eur"] == 5000.0
+    args = invoice_args(task)
+    assert args["client_name"] == "Andrea Gadducci"
+    assert args["description"] == "Manodopera"
+    assert args["net_eur"] == 5000.0
     assert "Mario Rossi" not in plan.summary
 
 

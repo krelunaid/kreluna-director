@@ -23,15 +23,16 @@ def _reconcile_invoice_facts(local: PlanResult, model: PlanResult) -> PlanResult
     if model.source == "llm-error" or model.denied:
         return model
 
-    local_invoice = next(
-        (task for task in local.tasks if task.capability == "invoice_prepare_demo"),
-        None,
-    )
-    if local.ok and local_invoice is not None:
-        model_invoice = next(
-            (task for task in model.tasks if task.capability == "invoice_prepare_demo"),
-            None,
+    def is_invoice(task) -> bool:
+        return task.capability == "invoice_prepare_demo" or (
+            task.capability == "portal_open"
+            and task.args.get("portal") == "fatture-webdesk"
+            and bool(task.args.get("invoice"))
         )
+
+    local_invoice = next((task for task in local.tasks if is_invoice(task)), None)
+    if local.ok and local_invoice is not None:
+        model_invoice = next((task for task in model.tasks if is_invoice(task)), None)
         summary = model.summary if model.ok and model_invoice is not None else local.summary
         return local.model_copy(
             update={
