@@ -127,7 +127,7 @@ def test_opens_the_site_and_fills_the_field():
     assert result["sent"] is False
     assert result["filled"] is True
     joined = " ".join(fake.scripts)
-    assert "Google Chrome" in joined
+    assert "Safari" in joined
     assert "cgn.it" in joined
     assert "Bianchi Laura" in joined
     assert fake.shots == 2

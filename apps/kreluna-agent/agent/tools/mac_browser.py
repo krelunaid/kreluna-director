@@ -124,8 +124,7 @@ def pick_browser(runner: Runner, preferred: str) -> str:
         if candidate and _is_installed(runner, candidate):
             return candidate
     raise MacControlError(
-        "Non trovo un browser da guidare. Installa Google Chrome, oppure scrivi "
-        "'mac_browser: Safari' in policies/programs.yaml."
+        "Non trovo Safari, Chrome, Edge o Brave su questo Mac."
     )
 
 

@@ -125,5 +125,5 @@ settings:
   wait_for_login_seconds: 60
   # Ogni quanto ricontrolla se il campo è comparso.
   poll_seconds: 3
-  # Browser da guidare sul Mac. Google Chrome è il più affidabile.
-  mac_browser: Google Chrome
+  # Safari è già incluso nel Mac e viene configurato dalla guida dell'Agent.
+  mac_browser: Safari
