@@ -356,12 +356,69 @@ def fill_textbox_near_label_script(browser: str, label: str, text: str) -> str:
         "if(!e)e=l.querySelector('input,textarea');"
         "if(!e&&l.parentElement)e=l.parentElement.querySelector('input,textarea');"
         "if(!e&&l.nextElementSibling)e=l.nextElementSibling.matches('input,textarea')?l.nextElementSibling:l.nextElementSibling.querySelector('input,textarea');"
-        "if(e&&vis(e)&&!e.disabled&&!e.readOnly)found.push(e);}}"
+        "if(e&&vis(e)&&!e.disabled&&!e.readOnly&&found.indexOf(e)<0)found.push(e);}}"
+        "if(found.length===0){for(var x=0;x<docs.length;x++){var inputs=docs[x].querySelectorAll('input[type=text],input:not([type]),textarea');"
+        "for(var y=0;y<inputs.length;y++){var input=inputs[y];if(!vis(input)||input.disabled||input.readOnly)continue;"
+        "var p=input.parentElement,match=false;for(var depth=0;p&&depth<5;depth++,p=p.parentElement){"
+        "var caption=norm(p.innerText);if(caption===wanted||caption.indexOf(wanted+' ')===0){match=true;break;}}"
+        "if(match&&found.indexOf(input)<0)found.push(input);}}}"
         f"if(found.length!==1)return '{JS_MISSING}:'+found.length;"
         "var e=found[0],w=e.ownerDocument.defaultView,proto=e.tagName==='TEXTAREA'?w.HTMLTextAreaElement.prototype:w.HTMLInputElement.prototype;"
         "var setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(e,value);e.focus();"
         "e.dispatchEvent(new w.InputEvent('input',{bubbles:true,inputType:'insertText',data:value.slice(-1)}));"
         "e.dispatchEvent(new w.Event('change',{bubbles:true}));return 'SCRITTO';})()",
+    )
+
+
+def fill_invoice_line_script(
+    browser: str,
+    row_index: int,
+    description: str,
+    quantity: float,
+    unit_net_eur: float,
+) -> str:
+    """Compila i soli campi testuali di una riga Webdesk, senza salvarla."""
+
+    description_value = json.dumps(description)
+    quantity_value = json.dumps(f"{quantity:.2f}".replace(".", ","))
+    amount_value = json.dumps(f"{unit_net_eur:.2f}".replace(".", ","))
+    return _js(
+        browser,
+        "(function(){" + _recursive_dom_helpers()
+        + "var rows=[];for(var i=0;i<docs.length;i++){var all=docs[i].querySelectorAll('tbody tr');"
+        "for(var j=0;j<all.length;j++){var d=all[j].querySelector('input[placeholder*=\"Inserisci descrizione prodotto\"]');"
+        "if(d&&vis(d))rows.push(all[j]);}}"
+        f"if(rows.length<={row_index})return '{JS_MISSING}:RIGA';var row=rows[{row_index}],cells=row.children;"
+        f"if(cells.length<12)return '{JS_MISSING}:COLONNE';"
+        "function write(e,value){if(!e||e.disabled||e.readOnly)return false;var w=e.ownerDocument.defaultView;"
+        "var proto=e.tagName==='TEXTAREA'?w.HTMLTextAreaElement.prototype:w.HTMLInputElement.prototype;"
+        "var setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(e,value);e.focus();"
+        "e.dispatchEvent(new w.InputEvent('input',{bubbles:true,inputType:'insertText',data:value.slice(-1)}));"
+        "e.dispatchEvent(new w.Event('change',{bubbles:true}));e.dispatchEvent(new w.FocusEvent('blur',{bubbles:true}));return true;}"
+        f"if(!write(cells[2].querySelector('input,textarea'),{description_value}))return '{JS_MISSING}:DESCRIZIONE';"
+        f"if(!write(cells[4].querySelector('input'),{quantity_value}))return '{JS_MISSING}:QUANTITA';"
+        f"if(!write(cells[6].querySelector('input'),{amount_value}))return '{JS_MISSING}:IMPORTO';"
+        "return 'RIGA_SCRITTA';})()",
+    )
+
+
+def invoice_line_vat_center_script(browser: str, row_index: int) -> str:
+    """Centro del menu IVA della riga richiesta, ricavato dal DOM reale."""
+
+    return _js(
+        browser,
+        "(function(){" + _recursive_dom_helpers()
+        + "var rows=[];for(var i=0;i<docs.length;i++){var all=docs[i].querySelectorAll('tbody tr');"
+        "for(var j=0;j<all.length;j++){var d=all[j].querySelector('input[placeholder*=\"Inserisci descrizione prodotto\"]');"
+        "if(d&&vis(d))rows.push(all[j]);}}"
+        f"if(rows.length<={row_index})return '{JS_MISSING}:RIGA';var cells=rows[{row_index}].children;"
+        f"if(cells.length<12)return '{JS_MISSING}:COLONNE';var e=cells[8].querySelector('.hsDropDownMultiLabel')||cells[8];"
+        f"if(!vis(e))return '{JS_MISSING}:IVA';var r=e.getBoundingClientRect(),w=e.ownerDocument.defaultView,left=r.left,top=r.top;"
+        "while(w&&w!==w.top){try{var frame=w.frameElement;if(!frame)break;var fr=frame.getBoundingClientRect();"
+        "left+=fr.left;top+=fr.top;w=w.parent;}catch(_e){break;}}var root=w||window;"
+        "var chrome=Math.max(0,root.outerHeight-root.innerHeight),border=Math.max(0,(root.outerWidth-root.innerWidth)/2);"
+        "return JSON.stringify({x:Math.round(root.screenX+border+left+r.width/2),"
+        "y:Math.round(root.screenY+chrome+top+r.height/2),screen_width:root.screen.width,screen_height:root.screen.height});})()",
     )
 
 
@@ -519,6 +576,67 @@ def fill_textbox_near_label(
         if sequential:
             sleeper(0.08)
     return True
+
+
+def fill_invoice_line(
+    runner: Runner,
+    browser: str,
+    row_index: int,
+    description: str,
+    quantity: float,
+    unit_net_eur: float,
+) -> bool:
+    """Compila descrizione, quantità e importo unitario di una riga Webdesk."""
+
+    if row_index < 0:
+        return False
+    try:
+        answer = runner.osascript(
+            fill_invoice_line_script(
+                browser,
+                row_index,
+                description,
+                quantity,
+                unit_net_eur,
+            )
+        )
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+    return "RIGA_SCRITTA" in answer and JS_MISSING not in answer
+
+
+def click_invoice_line_vat(
+    runner: Runner,
+    browser: str,
+    row_index: int,
+    vat_text: str,
+    *,
+    mover: Callable[..., bool] = move_and_click,
+) -> bool:
+    """Apre il menu IVA della riga e sceglie un testo fiscale univoco."""
+
+    try:
+        answer = runner.osascript(invoice_line_vat_center_script(browser, row_index))
+    except MacControlError as exc:
+        raise _translate(exc) from exc
+    center = _parse_center(answer)
+    if not center:
+        return False
+    if not mover(
+        center["x"],
+        center["y"],
+        screen_width=center["screen_width"],
+        screen_height=center["screen_height"],
+        click=True,
+    ):
+        return False
+    return click_text_in_section(
+        runner,
+        browser,
+        "Nuova Fattura",
+        vat_text,
+        mover=mover,
+    )
 
 
 def field_center(runner: Runner, browser: str, selector: str) -> dict[str, int] | None:

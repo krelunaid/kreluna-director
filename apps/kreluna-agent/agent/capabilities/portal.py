@@ -245,6 +245,7 @@ def _start_webdesk_invoice(
     run: mac_browser.Runner,
     browser: str,
     client_name: str,
+    invoice: dict[str, Any] | None,
     settings: Any,
     sleep: Callable[[float], None],
     check: Callable[[], None],
@@ -313,9 +314,86 @@ def _start_webdesk_invoice(
             f'Ho cercato "{client_name}", ma non trovo un unico suggerimento esatto. Scegli tu il cliente.',
             filled=True,
         )
+    if not invoice:
+        return stop(
+            "cliente-fattura-selezionato",
+            f'Ho aperto la fattura e selezionato "{client_name}". Non ho premuto Salva, Emetti o Invia.',
+            filled=True,
+        )
+
+    rows = list(invoice.get("lines") or [])
+    if not rows:
+        rows = [
+            {
+                "description": invoice.get("description") or "",
+                "quantity": 1,
+                "unit_net_eur": invoice.get("net_eur"),
+                "vat_rate": invoice.get("vat_rate", 0.22),
+                "vat_treatment": invoice.get("vat_treatment", "standard"),
+            }
+        ]
+    if any(not row.get("description") or not row.get("unit_net_eur") for row in rows):
+        return stop(
+            "righe-fattura-incomplete",
+            "Cliente selezionato, ma una riga non ha descrizione o importo. Mi fermo senza salvare.",
+            filled=True,
+        )
+
+    intent_rows: list[int] = []
+    for index, row in enumerate(rows):
+        check()
+        if index > 0:
+            if not mac_browser.click_text_in_section(
+                run, browser, "Righe documento", "Aggiungi nuova riga"
+            ):
+                return stop(
+                    "nuova-riga-non-creata",
+                    f"Ho compilato {index} righe, ma Webdesk non ha creato la successiva. Non salvo.",
+                    filled=True,
+                )
+            sleep(0.5)
+        if not mac_browser.fill_invoice_line(
+            run,
+            browser,
+            index,
+            str(row["description"]),
+            float(row.get("quantity") or 1),
+            float(row["unit_net_eur"]),
+        ):
+            return stop(
+                "riga-fattura-non-compilata",
+                f"La riga {index + 1} è cambiata o non è riconoscibile. Non salvo.",
+                filled=True,
+            )
+        treatment = str(row.get("vat_treatment") or "standard")
+        rate = float(row.get("vat_rate") or 0)
+        if treatment == "intent_declaration":
+            vat_text = "Art. 8 c.1 lett.c DPR 633/72 - N3.5"
+            intent_rows.append(index + 1)
+        else:
+            vat_text = f"{rate * 100:g}%"
+        if vat_text != "22%" and not mac_browser.click_invoice_line_vat(
+            run, browser, index, vat_text
+        ):
+            return stop(
+                "iva-riga-non-selezionata",
+                f"Riga {index + 1}: non trovo in modo univoco l’IVA {vat_text}. Non salvo.",
+                filled=True,
+            )
+
+    if intent_rows:
+        return stop(
+            "dichiarazione-intento-da-verificare",
+            "Ho compilato le righe e impostato N3.5. Prima di proseguire devo verificare "
+            "la dichiarazione d’intento associata al cliente nelle righe "
+            + ", ".join(str(item) for item in intent_rows)
+            + ". Non ho premuto Salva, Emetti o Invia.",
+            filled=True,
+        )
     return stop(
-        "cliente-fattura-selezionato",
-        f'Ho aperto la fattura e selezionato "{client_name}". Non ho premuto Salva, Emetti o Invia.',
+        "fattura-webdesk-compilata",
+        f'Ho compilato su Webdesk la bozza per "{client_name}" con {len(rows)} riga/e. '
+        "Non ho premuto Salva, Emetti o Invia.",
         filled=True,
     )
 
@@ -374,6 +452,7 @@ def open_portal(
     portal: str,
     query: str = "",
     use_saved_access: bool = False,
+    invoice: dict[str, Any] | None = None,
     *,
     director_url: str = "",
     device_id: str | None = None,
@@ -559,6 +638,7 @@ def open_portal(
             run=run,
             browser=browser,
             client_name=query,
+            invoice=invoice,
             settings=settings,
             sleep=sleep,
             check=check,

@@ -458,6 +458,35 @@ def plan_deterministic(text: str) -> PlanResult:
     if live is not None:
         portal, portal_name = live
         client = _client_name(raw) or _client_name(lowered) or ""
+        invoice_args: dict[str, Any] | None = None
+        if portal == "fatture-webdesk":
+            invoice_text = re.sub(r"\b(?:vera|vero|davvero)\b", "", raw, flags=re.IGNORECASE)
+            account, recipient = _invoice_parties(invoice_text)
+            client = recipient or _client_name(invoice_text) or client
+            net = _money(raw) or _money(lowered)
+            description = _description(raw)
+            vat_rate, vat_note, _vat_explicit = _vat_details(raw)
+            if client and net is not None and description:
+                intent = "dichiarazione" in vat_note.lower() and "intento" in vat_note.lower()
+                invoice_args = {
+                    "account_name": account or None,
+                    "client_name": client,
+                    "description": description,
+                    "net_eur": net,
+                    "vat_rate": vat_rate,
+                    "vat_note": vat_note,
+                    "vat_treatment": "intent_declaration" if intent else "standard",
+                    "intent_lookup": "automatic",
+                    "lines": [
+                        {
+                            "description": description,
+                            "quantity": 1,
+                            "unit_net_eur": net,
+                            "vat_rate": vat_rate,
+                            "vat_treatment": "intent_declaration" if intent else "standard",
+                        }
+                    ],
+                }
         use_saved_access = any(
             phrase in lowered
             for phrase in (
@@ -489,6 +518,7 @@ def plan_deterministic(text: str) -> PlanResult:
                         "portal": portal,
                         "query": client,
                         "use_saved_access": use_saved_access,
+                        "invoice": invoice_args,
                     },
                     risk=Risk.MEDIUM,
                     needs_approval=False,

@@ -223,6 +223,58 @@ def test_webdesk_customer_name_is_written_one_character_at_a_time():
     assert "Tesi" in fake.scripts[-1]
 
 
+def test_webdesk_invoice_line_uses_verified_columns_and_never_saves():
+    class LineMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            return "RIGA_SCRITTA"
+
+    fake = LineMac()
+    assert mac_browser.fill_invoice_line(
+        fake,
+        "Google Chrome",
+        0,
+        "Consulenza fiscale",
+        2,
+        125.50,
+    )
+    script = fake.scripts[0]
+    assert "cells[2]" in script
+    assert "cells[4]" in script
+    assert "cells[6]" in script
+    assert "Consulenza fiscale" in script
+    assert "125,50" in script
+    for forbidden in ("submit()", "form.submit", "Salva comunque", "Emetti", "Invia"):
+        assert forbidden not in script
+
+
+def test_webdesk_vat_menu_is_clicked_from_dom_coordinates():
+    class VatMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            if "cells[8]" in script and "screen_width" in script:
+                return '{"x":900,"y":600,"screen_width":1920,"screen_height":1080}'
+            if "screen_width" in script:
+                return '{"x":850,"y":650,"screen_width":1920,"screen_height":1080}'
+            return "APERTO"
+
+    moves: list[tuple[int, int]] = []
+
+    def move(x, y, **_kwargs):
+        moves.append((x, y))
+        return True
+
+    fake = VatMac()
+    assert mac_browser.click_invoice_line_vat(
+        fake,
+        "Google Chrome",
+        0,
+        "10%",
+        mover=move,
+    )
+    assert moves == [(900, 600), (850, 650)]
+
+
 def test_real_webdesk_path_opens_invoice_and_selects_exact_customer():
     class WebdeskMac(FakeMac):
         def __init__(self):
@@ -261,6 +313,67 @@ def test_real_webdesk_path_opens_invoice_and_selects_exact_customer():
     assert "SOCIETA' AGRICOLA GIORGIO TESI VIVAI S.S." in scripts
     assert "submit()" not in scripts
     assert "form.submit" not in scripts
+
+
+def test_real_webdesk_invoice_fills_multiple_vat_rows_without_saving(monkeypatch):
+    fake = FakeMac(
+        page_url="https://sme.genya.it/Elements/Factory/Screens/MainSmartInvoice/MainSmartInvoice.html"
+    )
+    page_reads = iter(
+        [
+            "FATTURA SMART Home Fatture + Crea nuovo",
+            "FATTURA SMART Nuova Fattura Cliente Righe documento",
+        ]
+    )
+    actions: list[tuple[str, str]] = []
+    rows: list[tuple[int, str, float, float]] = []
+    vats: list[tuple[int, str]] = []
+
+    monkeypatch.setattr(mac_browser, "page_text", lambda *_args: next(page_reads))
+    monkeypatch.setattr(
+        mac_browser,
+        "click_text_in_section",
+        lambda _run, _browser, section, action, **_kwargs: actions.append((section, action)) or True,
+    )
+    monkeypatch.setattr(mac_browser, "fill_textbox_near_label", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(mac_browser, "click_unique_text_match", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        mac_browser,
+        "fill_invoice_line",
+        lambda _run, _browser, index, description, quantity, amount: rows.append(
+            (index, description, quantity, amount)
+        ) or True,
+    )
+    monkeypatch.setattr(
+        mac_browser,
+        "click_invoice_line_vat",
+        lambda _run, _browser, index, vat: vats.append((index, vat)) or True,
+    )
+
+    result = open_portal(
+        portal="fatture-webdesk",
+        query="Cliente Prova SRL",
+        invoice={
+            "client_name": "Cliente Prova SRL",
+            "description": "Consulenza · Materiale",
+            "net_eur": 300,
+            "vat_rate": 0.22,
+            "lines": [
+                {"description": "Consulenza", "quantity": 1, "unit_net_eur": 100, "vat_rate": 0.22},
+                {"description": "Materiale", "quantity": 2, "unit_net_eur": 100, "vat_rate": 0.10},
+            ],
+        },
+        runner=fake,
+        supported=lambda: True,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result["filled"] is True
+    assert result["sent"] is False
+    assert rows == [(0, "Consulenza", 1.0, 100.0), (1, "Materiale", 2.0, 100.0)]
+    assert vats == [(1, "10%")]
+    assert ("Righe documento", "Aggiungi nuova riga") in actions
+    assert all(action not in {"Salva", "Emetti", "Invia"} for _, action in actions)
 
 
 def test_webdesk_does_not_overwrite_an_open_customer_editor():
@@ -426,6 +539,14 @@ def test_planner_only_goes_live_when_asked():
     assert task.args["query"] == "Andrea Gadducci"
     assert "login lo fai tu" in live.summary
 
+    invoice = plan_deterministic(
+        "Prepara una fattura vera a Giorgio Tesi per 500 euro di consulenza IVA 10%"
+    )
+    assert invoice.tasks[0].capability == "portal_open"
+    assert invoice.tasks[0].args["portal"] == "fatture-webdesk"
+    assert invoice.tasks[0].args["invoice"]["lines"][0]["vat_rate"] == 0.10
+    assert invoice.tasks[0].args["invoice"]["net_eur"] == 500
+
     durc = plan_deterministic("Apri il sito INPS e prepara il DURC vero per Gadducci")
     assert durc.tasks[0].args["portal"] == "durc-inps"
 
@@ -434,6 +555,20 @@ def test_portal_args_are_validated():
     clean = validate_capability_args("portal_open", {"portal": "Visure-CGN", "query": "  Rossi   Mario "})
     assert clean["portal"] == "visure-cgn"
     assert clean["query"] == "Rossi Mario"
+    invoice = validate_capability_args(
+        "portal_open",
+        {
+            "portal": "fatture-webdesk",
+            "query": "Cliente Prova SRL",
+            "invoice": {
+                "client_name": "Cliente Prova SRL",
+                "description": "Consulenza",
+                "net_eur": 100,
+                "lines": [{"description": "Consulenza", "unit_net_eur": 100}],
+            },
+        },
+    )
+    assert invoice["invoice"]["lines"][0]["unit_net_eur"] == 100
     with pytest.raises(ValidationError):
         validate_capability_args("portal_open", {"portal": "../../etc/passwd"})
 

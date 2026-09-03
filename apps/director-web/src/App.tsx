@@ -489,7 +489,7 @@ export default function App() {
     });
     const intent = normalizedLines.some((line) => line.vat_treatment === "intent_declaration");
     const netTotal = normalizedLines.reduce((sum, line) => sum + line.quantity * line.unit_net_eur, 0);
-    setBusy(true); setOrb("think"); invoiceDemoRequestedAt.current = Date.now();
+    setBusy(true); setOrb("think"); invoiceDemoRequestedAt.current = 0;
     try {
       const args = {
         account_name: value.account_name?.trim() || null,
@@ -501,7 +501,12 @@ export default function App() {
         intent_protocol: value.intent_protocol || "", intent_progressive: value.intent_progressive || "", intent_year: value.intent_year || "",
         lines: normalizedLines,
       };
-      const result = await api.structuredRequest("invoice_prepare_demo", args);
+      const result = await api.structuredRequest("portal_open", {
+        portal: "fatture-webdesk",
+        query: args.client_name,
+        use_saved_access: false,
+        invoice: args,
+      });
       setChat((items) => [...items, { role: "director", text: result.summary, source: result.source }]);
       setInvoiceChatDraft(null); setOrb("talk");
       await refresh().catch(() => undefined);
