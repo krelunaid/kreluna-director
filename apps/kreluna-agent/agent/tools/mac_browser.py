@@ -243,10 +243,17 @@ def find_field_script(browser: str, selector: str) -> str:
 
 
 def click_selector_script(browser: str, selector: str) -> str:
+    # This direct activation is only authorized for Webdesk login, never invoices.
+    if selector != "#submitButton":
+        raise ValueError("Direct activation is limited to Webdesk login")
     css = selector.replace("'", "\\'")
     return _js(
         browser,
-        f"(function(){{var e=document.querySelector('{css}');if(!e)return '{JS_MISSING}';"
+        "(function(){if(location.origin!=='https://app.webdesk.it'||"
+        "location.pathname!=='/Apps/Login/View')return 'AZIONE_BLOCCATA';"
+        f"var e=document.querySelector('{css}');if(!e)return '{JS_MISSING}';"
+        "if(e.disabled||e.getAttribute('aria-disabled')==='true'||"
+        "!e.getClientRects().length)return 'AZIONE_BLOCCATA';"
         "e.click();return 'CLICCATO';})()",
     )
 
@@ -716,22 +723,20 @@ def click_selector_visible(
     *,
     mover: Callable[..., bool] = move_and_click,
 ) -> bool:
-    """Clicca col mouse un controllo DOM noto, senza coordinate memorizzate."""
+    """Locate login again at activation time; pointer movement is only visual."""
 
+    script = click_selector_script(browser, selector)
     center = field_center(runner, browser, selector)
-    if not center:
-        return False
-    moved = mover(
-        center["x"],
-        center["y"],
-        screen_width=center["screen_width"],
-        screen_height=center["screen_height"],
-        click=False,
-    )
-    if not moved:
-        return False
+    if center:
+        mover(
+            center["x"],
+            center["y"],
+            screen_width=center["screen_width"],
+            screen_height=center["screen_height"],
+            click=False,
+        )
     try:
-        answer = runner.osascript(click_selector_script(browser, selector))
+        answer = runner.osascript(script)
     except MacControlError as exc:
         raise _translate(exc) from exc
     return "CLICCATO" in answer and JS_MISSING not in answer

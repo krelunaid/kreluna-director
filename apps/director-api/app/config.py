@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     director_host: str = "127.0.0.1"
     director_port: int = 8080
     director_public_url: str = "http://127.0.0.1:8080"
+    # OAuth belongs on the confidential Director server, never inside Agent bundles.
+    gmail_oauth_client_id: str = ""
+    gmail_oauth_client_secret: str = ""
+    gmail_oauth_redirect_uri: str = ""
     director_remote_dir: str = ""
     director_cloudflared_path: str = ""
     director_database_url: str = "sqlite+aiosqlite:///./data/kreluna.db"

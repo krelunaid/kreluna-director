@@ -853,6 +853,37 @@ def test_webdesk_login_button_moves_then_uses_exact_dom_button():
     assert any("#submitButton" in script and "e.click()" in script for script in fake.scripts)
 
 
+def test_login_activation_does_not_depend_on_pointer(monkeypatch):
+    for center in (None, {"x": 600, "y": 500, "screen_width": 1920, "screen_height": 1080}):
+        monkeypatch.setattr(mac_browser, "field_center", lambda *_args: center)
+
+        class LoginMac(FakeMac):
+            def osascript(self, script):
+                self.scripts.append(script)
+                return "CLICCATO"
+
+        fake = LoginMac()
+        assert mac_browser.click_selector_visible(
+            fake, "Safari", "#submitButton", mover=lambda *_args, **_kwargs: False
+        )
+        assert len(fake.scripts) == 1  # no duplicate login attempts
+        assert "document.querySelector" in fake.scripts[0]
+
+
+def test_direct_click_is_limited_to_visible_webdesk_login():
+    script = mac_browser.click_selector_script("Safari", "#submitButton")
+    assert "https://app.webdesk.it" in script
+    assert "/Apps/Login/View" in script
+    assert "e.disabled" in script
+    assert "getClientRects" in script
+    try:
+        mac_browser.click_selector_script("Safari", "#saveInvoice")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Invoice buttons must not be directly activated")
+
+
 def test_planner_uses_vault_only_when_explicitly_requested() -> None:
     ordinary = plan_deterministic("Apri il sito CGN e fai la visura vera per Gadducci")
     assert ordinary.tasks[0].args["use_saved_access"] is False
