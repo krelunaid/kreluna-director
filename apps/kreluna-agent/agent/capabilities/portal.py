@@ -127,7 +127,8 @@ def prepare_invoice_portal(
     browser = mac_browser.pick_browser(run, settings.mac_browser)
     mac_browser.open_url(run, browser, spec.url)
     check()
-    evidence = [_evidence(mac_browser.screenshot(run), "fatture-aperto", spec.key)]
+    evidence: list[dict[str, Any]] = []
+    _append_optional_evidence(evidence, run, "fatture-aperto", spec.key)
     required = {"client_name", "description", "net_eur"}
     if not required.issubset(spec.invoice_fields):
         customer_search_ready = all(
@@ -219,7 +220,7 @@ def prepare_invoice_portal(
                 "evidence": evidence,
             }
         moved = moved or visible
-    evidence.append(_evidence(mac_browser.screenshot(run), "fattura-compilata", spec.key))
+    _append_optional_evidence(evidence, run, "fattura-compilata", spec.key)
     return {
         "configured": True,
         "filled": True,
@@ -238,6 +239,28 @@ def _evidence(png: bytes, step: str, portal_key: str) -> dict[str, Any]:
         "png": png,
         "metadata": {"step": step, "portal": portal_key, "live": True, "sent": False},
     }
+
+
+def _optional_evidence(
+    run: mac_browser.Runner, step: str, portal_key: str
+) -> dict[str, Any] | None:
+    """La prova visiva è utile, ma un rifiuto macOS non deve bloccare il lavoro."""
+
+    try:
+        return _evidence(mac_browser.screenshot(run), step, portal_key)
+    except mac_browser.MacControlError:
+        return None
+
+
+def _append_optional_evidence(
+    evidence: list[dict[str, Any]],
+    run: mac_browser.Runner,
+    step: str,
+    portal_key: str,
+) -> None:
+    item = _optional_evidence(run, step, portal_key)
+    if item is not None:
+        evidence.append(item)
 
 
 def _start_webdesk_invoice(
@@ -444,7 +467,7 @@ def learn_portal(
             f'Ho guardato "{page.get("titolo") or "la pagina"}" e ho trovato {len(scritti)} campi. '
             "Non ho scritto e non ho cliccato niente."
         ),
-        "evidence": [_evidence(mac_browser.screenshot(run), "pagina-studiata", portal)],
+        "evidence": [item] if (item := _optional_evidence(run, "pagina-studiata", portal)) else [],
     }
 
 
@@ -544,7 +567,7 @@ def open_portal(
 
     mac_browser.open_url(run, browser, target_url)
     check()
-    evidence.append(_evidence(mac_browser.screenshot(run), "portale-aperto", portal))
+    _append_optional_evidence(evidence, run, "portale-aperto", portal)
 
     def stop(
         step: str,
@@ -554,7 +577,7 @@ def open_portal(
         capture: bool = True,
     ) -> dict[str, Any]:
         if capture:
-            evidence.append(_evidence(mac_browser.screenshot(run), step, portal))
+            _append_optional_evidence(evidence, run, step, portal)
         return {
             "ok": True,
             "live": True,

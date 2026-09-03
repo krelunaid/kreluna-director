@@ -8,6 +8,7 @@ Tre regole di questo file:
 
 from __future__ import annotations
 
+import ctypes
 import json
 import subprocess
 import sys
@@ -32,6 +33,22 @@ FORBIDDEN_ACTION_TEXT = ("salva", "salva comunque", "emetti", "invia", "trasmett
 
 class MacControlError(RuntimeError):
     """Manca un permesso sul Mac, oppure il browser non risponde."""
+
+
+def screen_capture_allowed() -> bool:
+    """Controlla il consenso senza far comparire ogni volta la finestra macOS."""
+
+    if sys.platform != "darwin":
+        return True
+    try:
+        core_graphics = ctypes.CDLL(
+            "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+        )
+        preflight = core_graphics.CGPreflightScreenCaptureAccess
+        preflight.restype = ctypes.c_bool
+        return bool(preflight())
+    except (AttributeError, OSError):
+        return True
 
 
 @dataclass
@@ -74,6 +91,8 @@ class Runner:
             raise MacControlError((result.stderr or "Il browser non si apre").strip())
 
     def screencapture(self, path: Path) -> bytes:
+        if not screen_capture_allowed():
+            raise MacControlError("Registrazione schermo non autorizzata")
         result = subprocess.run(
             ["screencapture", "-x", str(path)],
             capture_output=True,
