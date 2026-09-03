@@ -93,6 +93,9 @@ def test_fatture_portal_describes_customer_search_and_create_fields():
     } <= set(target.customer_create_fields)
     assert target.customer_create_fields["save_button"] == ""
     assert target.invoice_workflow["customer_search_mode"] == "sequential_keystrokes"
+    assert target.invoice_workflow["new_invoice_frame_path"].endswith("CrudScDocument.html")
+    assert target.invoice_workflow["line_table"]["columns"]["vat"] == 8
+    assert target.invoice_workflow["line_table"]["columns"]["intent_declaration"] == 9
     assert target.invoice_workflow["intent_missing_text"] == "Nessuna dichiarazione presente"
     assert target.invoice_workflow["intent_is_per_line"] is True
     assert "Salva" in target.invoice_workflow["stop_before"]
@@ -154,6 +157,12 @@ def test_webdesk_helpers_search_inside_iframes_and_refuse_final_actions():
     assert "InputEvent('input'" in fill_script
     assert "Giorgio Tesi" in fill_script
 
+    center_script = mac_browser.text_in_section_center_script(
+        "Google Chrome", "Fatture", "+ Crea nuovo"
+    )
+    assert "frameElement" in center_script
+    assert "screen_width" in center_script
+
     fake = FakeMac()
     with pytest.raises(RuntimeError, match="AZIONE_WEB_DESK_VIETATA"):
         mac_browser.click_text_in_section(fake, "Google Chrome", "Fattura", "Salva")
@@ -164,6 +173,32 @@ def test_webdesk_helpers_search_inside_iframes_and_refuse_final_actions():
     )
     assert "tokens.every" in suggestion_script
     assert "found.length!==1" in suggestion_script
+
+
+def test_webdesk_click_uses_dom_derived_visible_coordinates():
+    class CenterMac(FakeMac):
+        def osascript(self, script: str) -> str:
+            self.scripts.append(script)
+            if "screen_width" in script:
+                return '{"x":588,"y":405,"screen_width":1920,"screen_height":1080}'
+            return "APERTO"
+
+    moves: list[tuple[int, int]] = []
+
+    def move(x, y, **_kwargs):
+        moves.append((x, y))
+        return True
+
+    fake = CenterMac()
+    assert mac_browser.click_text_in_section(
+        fake,
+        "Google Chrome",
+        "Fatture",
+        "+ Crea nuovo",
+        mover=move,
+    )
+    assert moves == [(588, 405)]
+    assert "MouseEvent" not in " ".join(fake.scripts)
 
 
 def test_webdesk_customer_name_is_written_one_character_at_a_time():

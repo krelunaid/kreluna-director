@@ -93,9 +93,25 @@ portals:
     invoice_workflow:
       app_name: Fattura SMART
       new_invoice_path: [Home, Fatture, Crea nuovo]
+      new_invoice_frame_path: CrudScDocument/CrudScDocument.html
+      new_invoice_frame_id_is_dynamic: true
       customer_search_mode: sequential_keystrokes
       customer_search_wait_ms: 1000
       customer_match: exact_suggestion
+      line_table:
+        description_placeholder: Inserisci descrizione prodotto
+        columns:
+          description: 2
+          quantity: 4
+          unit: 5
+          amount: 6
+          discount: 7
+          vat: 8
+          intent_declaration: 9
+          item_type: 10
+          total: 11
+        add_row_text: Aggiungi nuova riga
+        default_vat_text: 22%
       customer_master_path: [Home, Clienti, Apri cliente, Dichiarazione d'intento]
       intent_missing_text: Nessuna dichiarazione presente
       intent_fields: [Data ricevuta telematica, Protocollo di ricezione della DI]

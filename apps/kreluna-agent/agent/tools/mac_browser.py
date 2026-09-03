@@ -285,6 +285,39 @@ def click_text_in_section_script(browser: str, section: str, action: str, *, dou
     )
 
 
+def text_in_section_center_script(browser: str, section: str, action: str) -> str:
+    """Centro visibile di un controllo testuale, anche dentro iframe annidati."""
+
+    section_value = json.dumps(section)
+    action_value = json.dumps(action)
+    forbidden = json.dumps(list(FORBIDDEN_ACTION_TEXT))
+    return _js(
+        browser,
+        "(function(){" + _recursive_dom_helpers()
+        + f"var section=norm({section_value}),action=norm({action_value}),deny={forbidden};"
+        "if(deny.some(function(x){return action===x||action.indexOf(x)>=0;}))"
+        f"return '{JS_BLOCKED}';"
+        "var tags='button,a,[role=button],input,div,span';var candidates=[],best=99;"
+        "for(var i=0;i<docs.length;i++){var all=docs[i].querySelectorAll(tags);"
+        "for(var j=0;j<all.length;j++){var e=all[j];if(!vis(e))continue;"
+        "var own=norm(e.innerText||e.value||e.getAttribute('aria-label'));"
+        "if(own!==action)continue;var p=e,ok=!section;"
+        "for(var depth=0;p&&depth<8;depth++,p=p.parentElement){"
+        "if(norm(p.innerText).indexOf(section)>=0){ok=true;break;}}"
+        "if(ok&&depth<best){best=depth;candidates=[e];}else if(ok&&depth===best)candidates.push(e);}}"
+        f"if(candidates.length!==1)return '{JS_MISSING}:'+candidates.length;"
+        "var e=candidates[0],r=e.getBoundingClientRect(),w=e.ownerDocument.defaultView;"
+        "var left=r.left,top=r.top;"
+        "while(w&&w!==w.top){try{var frame=w.frameElement;if(!frame)break;"
+        "var fr=frame.getBoundingClientRect();left+=fr.left;top+=fr.top;w=w.parent;}catch(_e){break;}}"
+        "var root=w||window,chrome=Math.max(0,root.outerHeight-root.innerHeight);"
+        "var border=Math.max(0,(root.outerWidth-root.innerWidth)/2);"
+        "return JSON.stringify({x:Math.round(root.screenX+border+left+r.width/2),"
+        "y:Math.round(root.screenY+chrome+top+r.height/2),"
+        "screen_width:root.screen.width,screen_height:root.screen.height});})()",
+    )
+
+
 def click_unique_text_match_script(browser: str, section: str, words: str) -> str:
     """Clicca l'unico suggerimento che contiene tutte le parole cercate."""
 
@@ -406,13 +439,36 @@ def click_text_in_section(
     action: str,
     *,
     double: bool = False,
+    mover: Callable[..., bool] = move_and_click,
 ) -> bool:
-    """Clicca solo un controllo testuale univoco e mai un'azione definitiva."""
+    """Clicca un controllo univoco col mouse visibile, mai un'azione definitiva."""
 
     clean = action.strip().lower()
     if any(word in clean for word in FORBIDDEN_ACTION_TEXT):
         raise RuntimeError("AZIONE_WEB_DESK_VIETATA")
     try:
+        center_answer = runner.osascript(
+            text_in_section_center_script(browser, section, action)
+        )
+        center = _parse_center(center_answer)
+        if center:
+            clicked = mover(
+                center["x"],
+                center["y"],
+                screen_width=center["screen_width"],
+                screen_height=center["screen_height"],
+                click=True,
+            )
+            if clicked and double:
+                clicked = mover(
+                    center["x"],
+                    center["y"],
+                    screen_width=center["screen_width"],
+                    screen_height=center["screen_height"],
+                    click=True,
+                )
+            if clicked:
+                return True
         answer = runner.osascript(
             click_text_in_section_script(browser, section, action, double=double)
         )
@@ -470,6 +526,10 @@ def field_center(runner: Runner, browser: str, selector: str) -> dict[str, int] 
         answer = runner.osascript(field_center_script(browser, selector))
     except MacControlError as exc:
         raise _translate(exc) from exc
+    return _parse_center(answer)
+
+
+def _parse_center(answer: str) -> dict[str, int] | None:
     start, end = answer.find("{"), answer.rfind("}")
     if start == -1 or end <= start:
         return None
