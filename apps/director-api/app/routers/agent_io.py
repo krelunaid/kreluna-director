@@ -6,6 +6,7 @@ import json
 from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlparse
 
 from cryptography.exceptions import InvalidTag
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -154,6 +155,32 @@ async def _credential_for_task(
             .order_by(ClientCredential.credential_label)
         )
     ).scalars().first()
+    # Webdesk è normalmente un accesso unico dello studio, non una password
+    # diversa per ogni destinatario della fattura. Se il nome del destinatario
+    # non coincide, usa l'unico accesso Webdesk disponibile; con più accessi
+    # resta obbligatoria una corrispondenza esplicita per evitare ambiguità.
+    if credential is None and portal_key == "fatture-webdesk":
+        candidates = (
+            await session.execute(
+                select(ClientCredential)
+                .where(
+                    ClientCredential.tenant_id == device.tenant_id,
+                    ClientCredential.portal.in_(allowed_portals),
+                    ClientCredential.status == "ready",
+                )
+                .order_by(ClientCredential.credential_label)
+            )
+        ).scalars().all()
+        official = [
+            item
+            for item in candidates
+            if (urlparse(item.portal_url).hostname or "").lower()
+            in {"app.webdesk.it", "sme.genya.it"}
+        ]
+        if len(official) == 1:
+            credential = official[0]
+        elif len(candidates) == 1:
+            credential = candidates[0]
     if credential is None:
         raise HTTPException(status_code=404, detail="Nessun accesso salvato per cliente e portale")
     return device, task, credential

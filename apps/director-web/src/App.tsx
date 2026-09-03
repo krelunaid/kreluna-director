@@ -504,7 +504,7 @@ export default function App() {
       const result = await api.structuredRequest("portal_open", {
         portal: "fatture-webdesk",
         query: args.client_name,
-        use_saved_access: false,
+        use_saved_access: true,
         invoice: args,
       });
       setChat((items) => [...items, { role: "director", text: result.summary, source: result.source }]);

@@ -652,6 +652,64 @@ def test_saved_access_is_filled_once_without_login_click_or_final_screenshot(mon
     assert fake.shots == 1, "dopo aver compilato l'accesso non crea una schermata"
 
 
+def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
+    class Response:
+        is_success = True
+
+        def __init__(self, payload):
+            self.payload = payload
+
+        def json(self):
+            return self.payload
+
+    def post(url, *args, **kwargs):
+        if url.endswith("/agent/portal-location"):
+            return Response(
+                {
+                    "portal_url": (
+                        "https://sme.genya.it/Elements/Factory/Screens/"
+                        "MainSmartInvoice/MainSmartInvoice.html"
+                    )
+                }
+            )
+        return Response({"username": "utente", "secret": "segreto"})
+
+    logged_in = False
+
+    def field_is_there(_run, _browser, selector):
+        return not logged_in and ("user" in selector or "password" in selector)
+
+    def click_login(*_args, **_kwargs):
+        nonlocal logged_in
+        logged_in = True
+        return True
+
+    monkeypatch.setattr("agent.capabilities.portal.httpx.post", post)
+    monkeypatch.setattr(portal.mac_browser, "field_is_there", field_is_there)
+    monkeypatch.setattr(portal.mac_browser, "fill_field", lambda *_args: True)
+    monkeypatch.setattr(portal.mac_browser, "click_text_in_section", click_login)
+    monkeypatch.setattr(
+        portal,
+        "_start_webdesk_invoice",
+        lambda **_kwargs: {"ok": True, "continued": True, "sent": False},
+    )
+    fake = FakeMac(page_url="https://app.webdesk.it/Apps/Login/View")
+    result, _ = run(
+        fake,
+        portal="fatture-webdesk",
+        query="Cliente Prova SRL",
+        invoice={"client_name": "Cliente Prova SRL", "lines": []},
+        use_saved_access=True,
+        director_url="https://director.example.it",
+        device_id="device-1",
+        task_id="task-1",
+        sign_request=lambda _path, payload: payload,
+    )
+
+    assert result["continued"] is True
+    assert result["sent"] is False
+
+
 def test_secret_text_is_embedded_as_json_not_javascript_quote() -> None:
     script = mac_browser.fill_field_script("Google Chrome", "input[type=password]", "a';alert(1)//")
 

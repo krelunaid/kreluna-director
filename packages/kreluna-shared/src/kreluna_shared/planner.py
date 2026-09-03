@@ -487,7 +487,7 @@ def plan_deterministic(text: str) -> PlanResult:
                         }
                     ],
                 }
-        use_saved_access = any(
+        use_saved_access = portal == "fatture-webdesk" or any(
             phrase in lowered
             for phrase in (
                 "accesso salvato",
@@ -899,7 +899,7 @@ def invoice_plan(
                 args={
                     "portal": "fatture-webdesk",
                     "query": client,
-                    "use_saved_access": False,
+                    "use_saved_access": True,
                     "invoice": invoice_args,
                 },
                 risk=Risk.MEDIUM,

@@ -1,6 +1,6 @@
 [project]
 name = "kreluna-director"
-version = "0.5.51"
+version = "0.5.52"
 description = "Kreluna Director — cloud IA that coordinates studio Windows/Linux agents with human approval."
 readme = "README.md"
 requires-python = ">=3.11"

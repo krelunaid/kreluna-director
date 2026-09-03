@@ -69,6 +69,13 @@ def _safe_portal_target_url(value: str) -> str:
     return clean
 
 
+def _is_webdesk_location(value: str) -> bool:
+    """Webdesk autentica su app.webdesk.it e poi apre Fattura SMART su Genya."""
+
+    host = (urlparse(value).hostname or "").lower().removeprefix("www.")
+    return host in {"app.webdesk.it", "sme.genya.it"}
+
+
 def prepare_invoice_portal(
     *,
     account_name: str = "",
@@ -598,7 +605,8 @@ def open_portal(
                 f"{spec.name}: questo accesso resta manuale. SPID, CNS, CIE e smart card non vengono compilati.",
             )
         where = mac_browser.current_url(run, browser)
-        if not mac_browser.same_site(target_url, where):
+        trusted_webdesk = portal == "fatture-webdesk" and _is_webdesk_location(where)
+        if not trusted_webdesk and not mac_browser.same_site(target_url, where):
             return stop(
                 "sito-sbagliato",
                 f"Sul {browser} adesso c'è un altro sito, non {spec.name}. Non uso Fort Knox.",
@@ -606,6 +614,22 @@ def open_portal(
         sleep(settings.poll_seconds)
         has_username = mac_browser.field_is_there(run, browser, spec.username_field)
         has_password = mac_browser.field_is_there(run, browser, spec.password_field)
+        if portal == "fatture-webdesk" and not has_username and not has_password:
+            if query:
+                return _start_webdesk_invoice(
+                    run=run,
+                    browser=browser,
+                    client_name=query,
+                    invoice=invoice,
+                    settings=settings,
+                    sleep=sleep,
+                    check=check,
+                    stop=stop,
+                )
+            return stop(
+                "accesso-gia-attivo",
+                "Webdesk è già aperto con una sessione attiva. Non ho salvato o inviato nulla.",
+            )
         if not has_username or not has_password:
             return stop(
                 "campi-login-non-trovati",
@@ -641,6 +665,64 @@ def open_portal(
                 "accesso-non-compilato",
                 f"{spec.name}: i campi sono cambiati. Ho ripulito ciò che avevo scritto e mi sono fermato.",
                 capture=False,
+            )
+        if portal == "fatture-webdesk":
+            clicked = mac_browser.click_text_in_section(
+                run,
+                browser,
+                "Entra in webdesk",
+                "Accedi",
+            )
+            if not clicked:
+                return stop(
+                    "accesso-pronto",
+                    "Ho compilato l'accesso Webdesk, ma il pulsante Accedi non è riconoscibile. "
+                    "Mi fermo senza inviare il modulo.",
+                    filled=True,
+                    capture=False,
+                )
+
+            waited = 0.0
+            while waited < settings.wait_for_login_seconds:
+                check()
+                sleep(settings.poll_seconds)
+                waited += settings.poll_seconds
+                where = mac_browser.current_url(run, browser)
+                login_visible = mac_browser.field_is_there(
+                    run, browser, spec.password_field
+                )
+                if _is_webdesk_location(where) and not login_visible:
+                    break
+            else:
+                return stop(
+                    "accesso-richiesto",
+                    "Webdesk non ha completato l'accesso. Se compare un controllo o un codice OTP, "
+                    "completalo tu e poi riprova.",
+                    filled=True,
+                    capture=False,
+                )
+
+            if (urlparse(target_url).hostname or "").lower() == "sme.genya.it" and (
+                urlparse(where).hostname or ""
+            ).lower() != "sme.genya.it":
+                mac_browser.open_url(run, browser, target_url)
+                sleep(settings.poll_seconds)
+
+            if query:
+                return _start_webdesk_invoice(
+                    run=run,
+                    browser=browser,
+                    client_name=query,
+                    invoice=invoice,
+                    settings=settings,
+                    sleep=sleep,
+                    check=check,
+                    stop=stop,
+                )
+            return stop(
+                "accesso-completato",
+                "Accesso a Webdesk completato. Non ho salvato o inviato nulla.",
+                filled=True,
             )
         return stop(
             "accesso-compilato",

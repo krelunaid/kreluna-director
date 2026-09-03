@@ -688,6 +688,65 @@ async def test_assigned_agent_receives_one_single_use_vault_lease(client: AsyncC
 
 
 @pytest.mark.asyncio
+async def test_webdesk_uses_the_only_studio_access_for_a_different_invoice_customer(
+    client: AsyncClient,
+):
+    token = await login(client)
+    vault = await unlock_fort_knox(client, token)
+    imported = await client.post(
+        "/vault/import",
+        headers=vault,
+        files={
+            "file": (
+                "accessi.csv",
+                (
+                    b"cliente;portale;link_portale;username;password\n"
+                    b"Studio Webdesk;webdesk;https://app.webdesk.it/Apps/Login/View;"
+                    b"studio@example.it;Segreto-123\n"
+                ),
+                "text/csv",
+            )
+        },
+    )
+    assert imported.status_code == 200
+    private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-webdesk-{uuid4()}",
+        capabilities=["portal_open"],
+    )
+    async with SessionLocal() as session:
+        task = Task(
+            tenant_id=DEMO_TENANT_ID,
+            requested_by="22222222-2222-2222-2222-222222222222",
+            goal="Fattura a un cliente diverso dal nome della credenziale",
+            capability="portal_open",
+            args_json=(
+                '{"portal":"fatture-webdesk","query":"Cliente Destinatario SRL",'
+                '"use_saved_access":true}'
+            ),
+            risk="medium",
+            status="assigned",
+            idempotency_key=f"webdesk-studio-{uuid4()}",
+            assigned_device_id=device_id,
+        )
+        session.add(task)
+        await session.commit()
+        task_id = task.id
+
+    path = "/agent/portal-location"
+    response = await client.post(
+        path,
+        json=signed_agent_request(
+            private,
+            path,
+            {"device_id": device_id, "task_id": task_id},
+        ),
+    )
+    assert response.status_code == 200
+    assert response.json()["portal_url"] == "https://app.webdesk.it/Apps/Login/View"
+
+
+@pytest.mark.asyncio
 async def test_enrollment_replay_and_revoke(client: AsyncClient):
     role = f"pc-test-enroll-{uuid4()}"
     _private, device_id, code = await enroll_test_agent(
