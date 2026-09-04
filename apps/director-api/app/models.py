@@ -70,6 +70,28 @@ class GmailAuthorization(Base):
     invalidated: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class WebdeskMailPolicy(Base):
+    __tablename__ = "webdesk_mail_policies"
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+
+
+class WebdeskMailChallenge(Base):
+    """One outstanding validation per studio; never stores a code or message body."""
+    __tablename__ = "webdesk_mail_challenges"
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), default=new_id)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"))
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    connection_version: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_poll_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class AIProviderCredential(Base):
     """Tenant-scoped API credential encrypted before database persistence."""
 

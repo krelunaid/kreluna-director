@@ -34,8 +34,35 @@ rinnovo. Questo NON verifica fatture automatiche o recupero di codici Webdesk.
   Google; in caso di fallimento invita a revocare dal proprio account.
 
 connected indica un collegamento memorizzato, non la raggiungibilità attuale
-di Google. verify effettua il controllo reale. available resta falso:
-il recupero automatico dei codici Webdesk non è ancora implementato.
+di Google. verify effettua il controllo reale. available richiede anche
+l’autorizzazione esplicita del titolare ai codici Webdesk, disattivata di default.
+PUT /integrations/gmail/webdesk-policy abilita o disabilita questa eccezione.
+
+## Validazione Webdesk
+
+Il percorso Mac riconosce esclusivamente la pagina HTTPS
+www.webdesk.it/Account/AccessNewLocation.aspx (anche senza www): richiesta del
+codice, campo MainContent_CodSicurezza, pulsante Procedi, conferma postazione,
+link Accedi a webdesk. Non seleziona automaticamente la fiducia per 90 giorni.
+Il successo richiede poi la dashboard, non la sola scomparsa della password.
+
+L’Agent assegnato firma start/poll su /agent/webdesk-code. Il Director verifica
+task attivo, studio, dispositivo, Fort Knox richiesto, portale fatture-webdesk,
+opt-in e destinatario uguale all’account Gmail. Una sola richiesta per task,
+una per studio alla volta, scadenza tre minuti, polling limitato e monouso.
+Il messaggio deve essere successivo alla richiesta, non spam/cestino, provenire
+da noreply@webdesk.it con DMARC positivo del ricevente Gmail, contenere il login
+atteso e un unico codice nel formato osservato. Account errato, ambiguità,
+revoca, cancellazione o cambio dispositivo fermano il percorso. I codici
+rimangono in memoria e viaggiano solo al dispositivo autorizzato sul canale
+protetto (loopback ammesso sul Mac); non sono scritti nei log o nelle evidenze.
+
+scripts/check-webdesk-gmail-local.py prova il login reale con task e dispositivo
+effimeri in memoria e copie cifrate delle credenziali. Non modifica la coda
+installata, non crea fatture e non salva screenshot. Il 4 settembre 2026 la
+prova ha raggiunto la conferma di validazione reale; il link finale, aggiunto
+dopo averne osservato il formato, ha aperto la dashboard Webdesk. Non equivale
+ancora alla verifica end-to-end di una fattura né all’installazione dell’Agent.
 
 ## Limiti e lavoro residuo
 
@@ -45,14 +72,12 @@ Per la distribuzione pubblica completare la verifica degli scope ristretti.
 Un servizio centralizzato richiede client web e callback HTTPS; non distribuire
 client secret web nei pacchetti desktop.
 
-gmail.readonly permette la lettura dell’intera casella. Attualmente sono
-chiamati solo token, revoca e profilo Gmail: nessun corpo email letto,
-inviato, modificato o cancellato.
+gmail.readonly permette la lettura dell’intera casella. Il collegamento usa
+token, revoca e profilo. La validazione legge solo messaggi selezionati dalla
+ricerca Webdesk e con metadati verificati: nessun invio, modifica o cancellazione.
 
-Prima di automatizzare i codici serve un’eccezione opt-in alla policy OTP
-limitata a Webdesk: mittente/destinatario verificati, richiesta attiva,
-finestra temporale breve, blocco su ambiguità e consegna monouso al solo Agent
-assegnato. Mai SPID/CNS o pagamenti; nessun codice nei log o evidenze.
+L’eccezione opt-in riguarda solo la validazione postazione Webdesk.
+Gli altri OTP, SPID/CNS e pagamenti restano esclusi.
 
 Restano vietati salvataggio, emissione e invio autonomo delle fatture.
 

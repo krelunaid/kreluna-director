@@ -689,6 +689,7 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
     def click_login(*_args, **_kwargs):
         nonlocal logged_in
         logged_in = True
+        fake.page_url = "https://app.webdesk.it/Apps/Dashboard/View"
         return True
 
     monkeypatch.setattr("agent.capabilities.portal.httpx.post", post)

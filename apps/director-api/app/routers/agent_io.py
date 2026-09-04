@@ -20,7 +20,8 @@ from kreluna_shared.crypto import (
     verify_bytes,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -30,15 +31,27 @@ from app.models import (
     ClientCredential,
     Device,
     Evidence,
+    GmailConnection,
     InvoiceDraft,
     Task,
     UsedNonce,
+    WebdeskMailChallenge,
+    WebdeskMailPolicy,
+    as_utc,
+    new_id,
     utcnow,
 )
 from app.services.audit import write_audit
+from app.services.gmail import GmailError, digest
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
 from app.services.registry import hub
-from app.services.vault import client_key_for_name, decrypt_credential, decrypt_portal_account
+from app.services.vault import (
+    client_key_for_name,
+    decrypt_credential,
+    decrypt_portal_account,
+    decrypt_username,
+)
+from app.services.webdesk_mail import read_validation_code
 
 router = APIRouter()
 
@@ -194,6 +207,111 @@ def _credential_transport_allowed(request: Request) -> bool:
         return True
     client_host = (request.client.host if request.client else "").lower()
     return public.scheme == "http" and client_host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+class WebdeskCodeBody(CredentialLeaseBody):
+    recipient: str = Field(default="", max_length=200)
+    challenge_id: str = Field(default="", max_length=36)
+
+
+async def _webdesk_mail_context(session, body, request, path):
+    if not _credential_transport_allowed(request):
+        raise HTTPException(403, "Il codice richiede un canale protetto.")
+    device, task, credential = await _credential_for_task(session, body, path=path)
+    if json.loads(task.args_json).get("portal") != "fatture-webdesk":
+        raise HTTPException(403, "Solo validazione Webdesk.")
+    policy = await session.get(WebdeskMailPolicy, device.tenant_id)
+    connection = await session.get(GmailConnection, device.tenant_id)
+    if not policy or not policy.enabled or not connection:
+        raise HTTPException(409, "Recupero codice Webdesk non attivo nelle Impostazioni Gmail.")
+    return device, task, connection, credential
+
+
+@router.post("/agent/webdesk-code/start")
+async def start_webdesk_code(body: WebdeskCodeBody, request: Request,
+                             session: Annotated[AsyncSession, Depends(get_session)]):
+    device, task, connection, _ = await _webdesk_mail_context(session, body, request, "/agent/webdesk-code/start")
+    if body.recipient.strip().lower() != connection.email:
+        raise HTTPException(409, "Webdesk invia il codice a un account diverso da Gmail collegato.")
+    now = utcnow()
+    existing = await session.get(WebdeskMailChallenge, device.tenant_id)
+    if existing and as_utc(existing.expires_at) > now:
+        raise HTTPException(409, "Una validazione Webdesk è già in corso. Attendi prima di riprovare.")
+    if existing:
+        await session.delete(existing)
+        await session.flush()
+    row = WebdeskMailChallenge(tenant_id=device.tenant_id, id=new_id(), device_id=device.id,
+                              task_id=task.id, connection_version=digest(connection.refresh_ciphertext),
+                              created_at=now, expires_at=now+timedelta(minutes=3), next_poll_at=now)
+    session.add(row)
+    session.add(UsedNonce(nonce=f"webdesk-code-start:{task.id}"))
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(409, "Validazione già richiesta per questo lavoro.") from None
+    return {"challenge_id": row.id, "expires_in_seconds": 180}
+
+
+@router.post("/agent/webdesk-code/poll")
+async def poll_webdesk_code(body: WebdeskCodeBody, request: Request,
+                            session: Annotated[AsyncSession, Depends(get_session)]):
+    device, task, connection, credential = await _webdesk_mail_context(session, body, request, "/agent/webdesk-code/poll")
+    now = utcnow()
+    row = await session.get(WebdeskMailChallenge, device.tenant_id)
+    if (not row or row.id != body.challenge_id or row.task_id != task.id or row.device_id != device.id
+            or row.consumed or as_utc(row.expires_at) <= now
+            or row.connection_version != digest(connection.refresh_ciphertext)):
+        raise HTTPException(409, "Validazione scaduta, annullata o già utilizzata.")
+    claimed = await session.execute(update(WebdeskMailChallenge).where(
+        WebdeskMailChallenge.tenant_id == device.tenant_id,
+        WebdeskMailChallenge.id == body.challenge_id,
+        WebdeskMailChallenge.consumed.is_(False),
+        WebdeskMailChallenge.attempts < 18,
+        WebdeskMailChallenge.next_poll_at <= now,
+    ).values(attempts=WebdeskMailChallenge.attempts+1, next_poll_at=now+timedelta(seconds=5))
+      .execution_options(synchronize_session=False))
+    if claimed.rowcount != 1:
+        raise HTTPException(429, "Attendi prima del prossimo controllo del codice.")
+    await session.commit()
+    try:
+        login = decrypt_username(credential)
+        match = await read_validation_code(settings, connection, as_utc(row.created_at), now, login)
+    except (GmailError, ValueError, InvalidTag):
+        await session.execute(update(WebdeskMailChallenge).where(
+            WebdeskMailChallenge.tenant_id == device.tenant_id,
+            WebdeskMailChallenge.id == body.challenge_id,
+        ).values(consumed=True))
+        await session.commit()
+        raise HTTPException(409, "Codice Webdesk non verificato: procedura fermata.") from None
+    if match is None:
+        return {"pending": True}
+    message_id, code = match
+    # Atomically consume, then recheck authority after Gmail network I/O.
+    consumed = await session.execute(update(WebdeskMailChallenge).where(
+        WebdeskMailChallenge.tenant_id == device.tenant_id,
+        WebdeskMailChallenge.id == body.challenge_id,
+        WebdeskMailChallenge.consumed.is_(False),
+        WebdeskMailChallenge.expires_at > utcnow(),
+    ).values(consumed=True).execution_options(synchronize_session=False))
+    await session.refresh(device)
+    await session.refresh(task)
+    policy = await session.get(WebdeskMailPolicy, device.tenant_id, populate_existing=True)
+    current = await session.get(GmailConnection, device.tenant_id, populate_existing=True)
+    if (consumed.rowcount != 1 or device.killed or device.paused or device.status != "active"
+            or task.status not in {"assigned", "running"} or task.assigned_device_id != device.id
+            or not policy or not policy.enabled or not current
+            or digest(current.refresh_ciphertext) != row.connection_version):
+        await session.rollback()
+        raise HTTPException(409, "Lavoro o autorizzazione non più attivi.")
+    session.add(UsedNonce(nonce=f"webdesk-mail:{device.tenant_id}:{digest(message_id)}"))
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(409, "Messaggio già utilizzato.") from None
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"pending": False, "code": code}, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/agent/credential-lease")

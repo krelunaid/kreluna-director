@@ -132,6 +132,18 @@ def _is_safari(browser: str) -> bool:
     return browser.strip().lower() == "safari"
 
 
+SAFARI_REAL_WINDOW = '''
+  set webWindow to missing value
+  repeat with candidateWindow in windows
+    if (count of tabs of candidateWindow) > 0 then
+      set webWindow to candidateWindow
+      exit repeat
+    end if
+  end repeat
+  if webWindow is missing value then error "Nessuna finestra Safari con schede"
+'''
+
+
 def open_url_script(browser: str, url: str) -> str:
     if _is_safari(browser):
         return f'''
@@ -140,7 +152,8 @@ tell application "{browser}"
   if (count of windows) is 0 then
     make new document
   end if
-  set URL of current tab of front window to "{url}"
+{SAFARI_REAL_WINDOW}
+  set URL of current tab of webWindow to "{url}"
 end tell
 return "APERTO"
 '''
@@ -158,9 +171,12 @@ return "APERTO"
 
 def current_url_script(browser: str) -> str:
     tab = "current tab" if _is_safari(browser) else "active tab"
+    setup = SAFARI_REAL_WINDOW if _is_safari(browser) else ""
+    window = "webWindow" if _is_safari(browser) else "front window"
     return f'''
 tell application "{browser}"
-  return URL of {tab} of front window
+{setup}
+  return URL of {tab} of {window}
 end tell
 '''
 
@@ -171,7 +187,8 @@ def _js(browser: str, javascript: str) -> str:
         return f'''
 tell application "{browser}"
   activate
-  do JavaScript "{payload}" in current tab of front window
+{SAFARI_REAL_WINDOW}
+  do JavaScript "{payload}" in current tab of webWindow
 end tell
 '''
     return f'''

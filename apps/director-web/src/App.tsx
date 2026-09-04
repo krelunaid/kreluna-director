@@ -256,6 +256,16 @@ export default function App() {
   const [gmailBusy, setGmailBusy] = useState(false);
   const [gmailMessage, setGmailMessage] = useState("");
   const [gmailUrl, setGmailUrl] = useState("");
+  async function setWebdeskCodes(enabled: boolean) {
+    if (gmailBusy) return;
+    setGmailBusy(true);
+    try {
+      await api.gmailWebdeskPolicy(enabled);
+      setGmailStatus(await api.gmailStatus());
+      setGmailMessage(enabled ? "Codici Webdesk automatici attivati. Nessun salvataggio o invio di fatture." : "Codici automatici disattivati.");
+    } catch { setGmailMessage("Impossibile aggiornare l’autorizzazione Webdesk."); }
+    finally { setGmailBusy(false); }
+  }
   async function gmailAction(action: "status" | "connect" | "disconnect") {
     if (gmailBusy) return;
     setGmailBusy(true); setGmailMessage("");
@@ -1178,7 +1188,8 @@ export default function App() {
         {gmailStatus?.configured && !gmailStatus.connected ? <form onSubmit={(event) => { event.preventDefault(); void gmailAction("connect"); }}><label>Email da collegare<input type="email" required maxLength={200} value={gmailEmail} onChange={(event) => { setGmailEmail(event.target.value); setGmailUrl(""); }} /></label><label><input type="checkbox" checked={gmailConsent} onChange={(event) => setGmailConsent(event.target.checked)} />Google richiede accesso in sola lettura alla posta: il permesso riguarda l’intera casella. Nessun invio, modifica o cancellazione di email.</label><button disabled={gmailBusy || !gmailConsent}>Collega Gmail</button></form> : null}
         {gmailUrl ? <p><a href={gmailUrl} target="_blank" rel="noreferrer noopener">Apri Google nel browser</a></p> : null}
         {gmailStatus?.connected ? <button disabled={gmailBusy} onClick={() => void gmailAction("disconnect")}>Scollega Gmail</button> : null}
-        <p role="status">{gmailMessage}</p><small>Il collegamento non attiva ancora il recupero automatico dei codici Webdesk. Nessuna fattura salvata o inviata.</small>
+        {gmailStatus?.connected ? <label><input type="checkbox" disabled={gmailBusy} checked={gmailStatus.webdesk_codes_enabled} onChange={event => void setWebdeskCodes(event.target.checked)} />Autorizzo l’Agent assegnato a richiedere e inserire il codice email della sola validazione Webdesk. Esclusi SPID, pagamenti e invio fatture.</label> : null}
+        <p role="status">{gmailMessage}</p><small>Codici solo per il lavoro Webdesk attivo. Nessuna fattura salvata, emessa o inviata.</small>
       </article>
       <article><span>SESSIONE</span><h3>{name}</h3><p>Accesso protetto su questo Mac. La password non viene conservata nell’app.</p><div className="settings-state connected">● Sessione attiva</div><button onClick={() => { setToken(null); setReady(false); }}>Esci dallo studio</button></article>
       <article><span>BARRIERE DI SICUREZZA</span><h3>Sempre attive</h3><p>Niente shell remota, eval, pagamenti, invii fiscali o login automatici SPID/CNS. Le schermate non vanno all’IA.</p><div className="settings-state connected">● Protezioni operative</div><button onClick={() => void openVault()}>Apri Fort Knox</button></article>
@@ -1339,12 +1350,12 @@ export default function App() {
           <label>Tipo<select value={vaultForm.secret_kind} onChange={(event) => setVaultForm({ ...vaultForm, secret_kind: event.target.value as VaultCredentialInput["secret_kind"] })}><option value="password">Password</option><option value="api_token">Token API</option><option value="client_secret">Client secret</option></select></label>
           <label>Profilo<input required maxLength={120} value={vaultForm.credential_label} onChange={(event) => setVaultForm({ ...vaultForm, credential_label: event.target.value })} placeholder="principale" /></label>
         </div>
-        <div className="vault-form-note">SPID, CNS, CIE, smart card e OTP non possono essere salvati: l’Agent si fermerà e chiederà l’intervento umano.</div>
+        <div className="vault-form-note">SPID, CNS, CIE, smart card e OTP non possono essere salvati. Solo la validazione Webdesk può recuperare un codice temporaneo da Gmail, se autorizzata nelle Impostazioni.</div>
         <div className="vault-form-actions"><button type="button" onClick={closeVaultForm}>Annulla</button><button className="primary" disabled={vaultBusy}>{vaultBusy ? "Cifro…" : "Cifra e salva"}</button></div>
       </form> : null}
       {vaultPreview ? <section className="vault-preview"><div><strong>{vaultPreview.recognized} accessi riconosciuti</strong><span>{vaultPreview.warnings.length ? ` · ${vaultPreview.warnings.length} righe da correggere` : " · CSV pronto"}</span></div><div className="vault-preview-list">{vaultPreview.rows.slice(0, 8).map((row) => <span key={`${row.row_number}-${row.client_name}-${row.portal}`} title={row.portal_url || "Link non indicato"}><b>{row.client_name}</b><i>{row.portal}</i><em>{row.username_masked}</em></span>)}</div><div className="vault-preview-actions"><button onClick={() => { setVaultFile(null); setVaultPreview(null); }}>Annulla</button><button className="primary" disabled={vaultBusy} onClick={() => void importVaultFile()}>Cifra e importa</button></div></section> : null}
       <div className="vault-list">{vaultCredentials.map((item) => <article className="vault-row" key={item.id}><div className={`vault-lock ${item.status}`}>◆</div><div><strong>{item.client_name}</strong><span>{item.portal} · {item.credential_label}{item.portal === "webdesk" ? item.portal_account_saved ? " · codice studio salvato" : " · codice studio mancante" : ""}</span><small className="vault-saved-link" title={item.portal_url}>{item.portal_url || "Link da aggiungere"}</small></div><div className="vault-user"><span>{item.username_masked}</span><small>{item.secret_kind.replace(/_/g, " ")}</small></div><div className="vault-actions"><button onClick={() => editVaultCredential(item)}>Aggiorna</button><button onClick={() => void checkVaultCredential(item.id)}>Controlla</button><button className="danger-text" onClick={() => void revokeVaultCredential(item.id)}>Rimuovi</button></div></article>)}{!vaultCredentials.length && !vaultPreview ? <div className="vault-empty"><strong>Nessun accesso ancora caricato</strong><span>Premi Nuovo cliente oppure importa il modello CSV.</span></div> : null}</div>
-      <div className="vault-safety"><strong>Barriere sempre attive</strong><span>Niente SPID/CNS automatico · niente invio fatture, F24, PEC o pagamenti · OTP inserito dalla persona.</span></div>
+      <div className="vault-safety"><strong>Barriere sempre attive</strong><span>Niente SPID/CNS automatico · niente invio fatture, F24, PEC o pagamenti · eccezione OTP solo per validazione Webdesk autorizzata.</span></div>
       </>}
     </div></div> : null}
     {libraryEditor ? <div className="library-dialog" role="dialog" aria-modal="true" aria-labelledby="library-editor-title"><form className="library-editor-card" onSubmit={saveLibraryItem}>

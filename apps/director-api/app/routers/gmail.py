@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.deps import Actor, require_roles
-from app.models import GmailConnection
+from app.models import GmailConnection, WebdeskMailChallenge, WebdeskMailPolicy
 from app.services.gmail import (
     GmailError,
     begin_authorization,
@@ -29,12 +29,39 @@ async def status(
     result = configuration_status(settings)
     row = await session.get(GmailConnection, actor.tenant_id)
     result.update(connected=row is not None, email=row.email if row else "")
+    policy = await session.get(WebdeskMailPolicy, actor.tenant_id)
+    result["webdesk_codes_enabled"] = bool(policy and policy.enabled)
+    result["available"] = bool(row and policy and policy.enabled)
     result["message"] = (
-        "Gmail collegato. Recupero automatico Webdesk non ancora attivo."
+        ("Gmail collegato. Codici Webdesk automatici autorizzati." if result["available"] else
+         "Gmail collegato. Recupero automatico Webdesk disattivato.")
         if row else "Premi Collega Gmail e autorizza l’account nel browser."
         if result["configured"] else result["message"]
     )
     return result
+
+
+class WebdeskPolicyInput(BaseModel):
+    enabled: bool
+
+
+@router.put("/webdesk-policy")
+async def webdesk_policy(body: WebdeskPolicyInput,
+    actor: Annotated[Actor, Depends(require_roles("studio_owner", "platform_admin"))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    if body.enabled and not await session.get(GmailConnection, actor.tenant_id):
+        raise HTTPException(409, "Collega prima Gmail.")
+    policy = await session.get(WebdeskMailPolicy, actor.tenant_id)
+    if policy is None:
+        policy = WebdeskMailPolicy(tenant_id=actor.tenant_id)
+        session.add(policy)
+    policy.enabled, policy.updated_by = body.enabled, actor.user_id
+    challenge = await session.get(WebdeskMailChallenge, actor.tenant_id)
+    if challenge:
+        challenge.consumed = True
+    await session.commit()
+    return {"enabled": body.enabled}
 
 
 class ConnectInput(BaseModel):

@@ -291,7 +291,8 @@ async function uploadLibraryDocument(
 }
 
 export const api = {
-  gmailStatus: () => request<{ configured: boolean; connected: boolean; available: boolean; email: string; message: string }>("/integrations/gmail/status"),
+  gmailStatus: () => request<{ configured: boolean; connected: boolean; available: boolean; email: string; message: string; webdesk_codes_enabled: boolean }>("/integrations/gmail/status"),
+  gmailWebdeskPolicy: (enabled: boolean) => request<{ enabled: boolean }>("/integrations/gmail/webdesk-policy", { method: "PUT", body: JSON.stringify({ enabled }) }),
   gmailVerify: () => request<{ verified: boolean; email: string; message: string }>("/integrations/gmail/verify", { method: "POST" }),
   gmailConnect: (email: string) => request<{ authorization_url: string }>("/integrations/gmail/connect", { method: "POST", body: JSON.stringify({ email, consent_readonly: true }) }),
   gmailDisconnect: () => request<{ connected: boolean; revoked: boolean; message: string }>("/integrations/gmail/connection", { method: "DELETE" }),

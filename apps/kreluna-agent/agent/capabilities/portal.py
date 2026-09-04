@@ -16,9 +16,65 @@ import httpx
 from kreluna_shared.crypto import sha256_hex
 from kreluna_shared.programs import load_settings, portal_for_key
 
-from agent.tools import mac_browser
+from agent.tools import mac_browser, webdesk_validation
 
 WEB_DESK_LOGIN_URL = "https://app.webdesk.it/Apps/Login/View"
+
+
+def _webdesk_mail_validation(run, browser, state, director_url, device_id, task_id,
+                             sign_request, sleep, check):
+    if state.get("stage") == "validated":
+        check()
+        if not webdesk_validation.perform(run, browser, "continue").get("acted"):
+            raise RuntimeError("Il collegamento Accedi a webdesk non è riconoscibile.")
+        return
+    if state.get("stage") != "request":
+        raise RuntimeError("Webdesk richiede un codice già richiesto o una verifica non riconosciuta. Mi fermo.")
+    recipient = state.get("recipient", "")
+    def call(path, **fields):
+        check()
+        try:
+            response = httpx.post(director_url.rstrip('/') + path,
+                json=sign_request(path, {"device_id": device_id, "task_id": task_id, **fields}),
+                timeout=60)
+            if not response.is_success:
+                raise ValueError()
+            return response.json()
+        except (httpx.HTTPError, ValueError):
+            raise RuntimeError("Recupero codice Webdesk non disponibile o non autorizzato. Nessun codice inserito.") from None
+    challenge = call("/agent/webdesk-code/start", recipient=recipient, challenge_id="")
+    check()
+    if not webdesk_validation.perform(run, browser, "request", recipient).get("acted"):
+        raise RuntimeError("La pagina Webdesk è cambiata: nessun codice richiesto.")
+    for _ in range(18):
+        check()
+        sleep(5)
+        current = webdesk_validation.perform(run, browser)
+        if current.get("stage") != "code" or current.get("recipient") != recipient:
+            raise RuntimeError("La pagina di validazione è cambiata. Non inserisco il codice.")
+        result = call("/agent/webdesk-code/poll", recipient="", challenge_id=challenge["challenge_id"])
+        if result.get("pending") is True:
+            continue
+        code = result.pop("code", "")
+        try:
+            check()
+            if not webdesk_validation.perform(run, browser, "submit", recipient, code).get("acted"):
+                raise RuntimeError("Il codice non è stato inserito: pagina non riconosciuta.")
+        finally:
+            code = ""
+            result.clear()
+        for _ in range(10):
+            check()
+            sleep(1)
+            state = webdesk_validation.perform(run, browser)
+            if state.get("stage") == "validated":
+                if not webdesk_validation.perform(run, browser, "continue").get("acted"):
+                    raise RuntimeError("Il collegamento Accedi a webdesk non è riconoscibile.")
+                return
+            if state.get("stage") == "other":
+                return
+        raise RuntimeError("Webdesk non ha confermato il codice. Mi fermo senza ripetere l’invio.")
+    raise RuntimeError("Codice Webdesk non arrivato in tempo. Nessuna fattura salvata o inviata.")
 
 
 def _open_local_app(path_value: str) -> None:
@@ -740,10 +796,19 @@ def open_portal(
                 sleep(settings.poll_seconds)
                 waited += settings.poll_seconds
                 where = mac_browser.current_url(run, browser)
+                location = urlparse(where)
+                if location.hostname in {"www.webdesk.it", "webdesk.it"}:
+                    state = webdesk_validation.perform(run, browser)
+                    _webdesk_mail_validation(run, browser, state, director_url, device_id,
+                                             task_id, sign_request, sleep, check)
+                    # Re-read the browser after validation, never treat submission as success.
+                    continue
                 login_visible = mac_browser.field_is_there(
                     run, browser, spec.password_field
                 )
-                if _is_webdesk_location(where) and not login_visible:
+                if (_is_webdesk_location(where) and not login_visible and (
+                    location.hostname == "sme.genya.it" or location.path == "/Apps/Dashboard/View"
+                )):
                     break
             else:
                 return stop(
