@@ -73,7 +73,12 @@ class AgentApp:
             except Exception as exc:
                 print(f"[kreluna-agent] Director non ancora pronto, riprovo tra 2s: {exc}", flush=True)
                 await asyncio.sleep(2)
-        await self.loop()
+        try:
+            await self.loop()
+        finally:
+            from agent.tools.dedicated_browser import shutdown
+
+            await asyncio.to_thread(shutdown)
 
     async def ensure_enrolled(self, client: httpx.AsyncClient) -> None:
         if self.identity.device_id:

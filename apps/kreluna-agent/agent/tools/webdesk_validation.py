@@ -20,12 +20,13 @@ if(action==='continue')return JSON.stringify({stage:'changed'});
 var emails=Array.from(new Set(text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g)||[]));
 if(emails.length!==1)return JSON.stringify({stage:'unknown'});
 var recipient=emails[0].toLowerCase();
-function visible(e){return e&&!e.disabled&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';}
+function rendered(e){return e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';}
+function visible(e){return rendered(e)&&!e.disabled;}
 var requestButtons=Array.from(document.querySelectorAll('button,input[type=submit],input[type=button]')).filter(
  e=>visible(e)&&(e.value||e.innerText||'').trim().toLowerCase()==='invia codice di sicurezza');
 var field=document.getElementById('MainContent_CodSicurezza');
 var confirm=document.getElementById('MainContent_ChangePasswordPushButton');
-var stage=visible(field)&&visible(confirm)&&(confirm.value||confirm.innerText||'').trim().toLowerCase()==='procedi'
+var stage=visible(field)&&rendered(confirm)&&(confirm.value||confirm.innerText||'').trim().toLowerCase()==='procedi'
  ?'code':requestButtons.length===1?'request':'unknown';
 """
 
@@ -43,9 +44,10 @@ def script(browser, action="inspect", recipient="", code=""):
     elif action == "submit":
         js += "if(stage!=='code')return JSON.stringify({stage:'changed'});"
         js += f"field.value={json.dumps(code)};"
-        js += "field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));confirm.click();"
+        js += "field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));"
+        js += "if(!visible(confirm))return JSON.stringify({stage:'changed'});confirm.click();"
     js += "return JSON.stringify({stage:stage,recipient:recipient,acted:" + ("false" if action == "inspect" else "true") + "});})()"
-    return mac_browser._js(browser, js)
+    return mac_browser._js(browser, js, read_only=action == "inspect")
 
 
 def perform(runner, browser, action="inspect", recipient="", code=""):

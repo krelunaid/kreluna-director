@@ -23,6 +23,15 @@ WEB_DESK_LOGIN_URL = "https://app.webdesk.it/Apps/Login/View"
 
 def _webdesk_mail_validation(run, browser, state, director_url, device_id, task_id,
                              sign_request, sleep, check):
+    # Chromium can report the URL before this older ASP.NET page has rendered.
+    # Wait only in the dedicated browser; never repeat a request/submit click.
+    if getattr(run, "dedicated", False):
+        for _ in range(10):
+            if state.get("stage") not in {"unknown", "other"}:
+                break
+            check()
+            sleep(2)
+            state = webdesk_validation.perform(run, browser)
     if state.get("stage") == "validated":
         check()
         if not webdesk_validation.perform(run, browser, "continue").get("acted"):
@@ -50,8 +59,20 @@ def _webdesk_mail_validation(run, browser, state, director_url, device_id, task_
         check()
         sleep(5)
         current = webdesk_validation.perform(run, browser)
+        if getattr(run, "dedicated", False):
+            for _ in range(8):
+                if current.get("stage") == "code" or (
+                    current.get("recipient") and current.get("recipient") != recipient
+                ):
+                    break
+                check()
+                sleep(5)
+                current = webdesk_validation.perform(run, browser)
         if current.get("stage") != "code" or current.get("recipient") != recipient:
-            raise RuntimeError("La pagina di validazione è cambiata. Non inserisco il codice.")
+            failure = RuntimeError("La pagina di validazione è cambiata. Non inserisco il codice.")
+            failure.validation_stage = current.get("stage")
+            failure.recipient_matches = current.get("recipient") == recipient
+            raise failure
         result = call("/agent/webdesk-code/poll", recipient="", challenge_id=challenge["challenge_id"])
         if result.get("pending") is True:
             continue
@@ -551,6 +572,16 @@ def open_portal(
     sleep: Callable[[float], None] = time.sleep,
     cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
+    if (portal == "fatture-webdesk" and runner is None
+            and os.environ.get("KRELUNA_WEBDESK_BROWSER") == "dedicated"):
+        from agent.tools.dedicated_browser import run_webdesk
+
+        return run_webdesk(open_portal, {
+            "portal": portal, "query": query, "use_saved_access": use_saved_access,
+            "invoice": invoice, "director_url": director_url, "device_id": device_id,
+            "task_id": task_id, "sign_request": sign_request, "sleep": sleep,
+            "cancel_check": cancel_check,
+        })
     check = cancel_check or (lambda: None)
     check()
     spec = portal_for_key(portal)

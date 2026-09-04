@@ -1,9 +1,12 @@
 """Real Webdesk/Gmail login, isolated in-memory task; never prepares an invoice."""
 import asyncio
 import json
+import os
 import socket
 import sys
+import tempfile
 import time
+import traceback
 from pathlib import Path
 from uuid import uuid4
 
@@ -100,17 +103,61 @@ async def main():
             print("LOCAL_CHECK_NOT_STARTED")
             return 1
         print("REAL_WEBDESK_LOGIN_CHECK_STARTED_NO_INVOICE_ACTIONS", flush=True)
+        dedicated = "--dedicated" in sys.argv
+        if dedicated:
+            os.environ["KRELUNA_WEBDESK_BROWSER"] = "dedicated"
         result = await asyncio.to_thread(open_portal, portal="fatture-webdesk", query="",
             use_saved_access=True, director_url=url, device_id=device_id, task_id=task_id,
-            sign_request=sign, runner=NoEvidence())
+            sign_request=sign, runner=None if dedicated else NoEvidence())
         # A stopped login is not success, even if legacy portal result says ok.
         success = result.get("message", "").startswith("Accesso a Webdesk completato.")
         print("REAL_WEBDESK_LOGIN_VERIFIED" if success else "REAL_WEBDESK_LOGIN_NOT_COMPLETED", flush=True)
         return 0 if success else 1
-    except Exception:  # noqa: BLE001 -- Never expose codes or credential-bearing browser scripts.
+    except Exception as exc:  # noqa: BLE001 -- Only the type, never credentials or scripts.
         print("REAL_WEBDESK_LOGIN_CHECK_STOPPED_NO_SECRETS_LOGGED", flush=True)
+        print("FAILURE_TYPE=" + type(exc).__name__, flush=True)
+        if getattr(exc, "validation_stage", "") in {"unknown", "other", "request", "code", "changed"}:
+            print("VALIDATION_STAGE=" + exc.validation_stage, flush=True)
+            print("RECIPIENT_MATCHES=" + str(exc.recipient_matches), flush=True)
+        diagnostic = getattr(exc, "diagnostic", "")
+        if diagnostic in {"NAVIGATION_IN_PROGRESS", "PAGE_OPERATION_FAILED"}:
+            print("FAILURE_REASON=" + diagnostic, flush=True)
+        print("FAILURE_FRAMES=" + ",".join(
+            f"{frame.name}:{frame.lineno}" for frame in traceback.extract_tb(exc.__traceback__)
+        ), flush=True)
+        from agent.tools import dedicated_browser
+        service = dedicated_browser._service
+        if service is not None:
+            def page_diagnostic():
+                if service.context is None or not service.context.pages:
+                    return "NO_PAGE"
+                service.context.pages[-1].wait_for_timeout(10000)
+                if "--inspect-failure" in sys.argv:
+                    shot = Path(tempfile.mkdtemp(prefix="kreluna-browser-check-")) / "page.png"
+                    page = service.context.pages[-1]
+                    page.screenshot(path=str(shot), mask=[page.locator("input")])
+                    print("LOCAL_DIAGNOSTIC_IMAGE=" + str(shot), flush=True)
+                return service.context.pages[-1].evaluate("""(() => ({
+                  host:location.hostname,path:location.pathname,
+                  validation:document.body.innerText.includes('Validazione della postazione'),
+                  emailCount:(document.body.innerText.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g)||[]).length,
+                  field:!!document.getElementById('MainContent_CodSicurezza'),
+                  confirm:!!document.getElementById('MainContent_ChangePasswordPushButton'),
+                  confirmDisabled:document.getElementById('MainContent_ChangePasswordPushButton')?.disabled,
+                  confirmLabel:document.getElementById('MainContent_ChangePasswordPushButton')?.value,
+                  validated:!!document.getElementById('MainContent_VaiWebdesLink'),
+                  request:document.body.innerText.includes('Invia codice di sicurezza')
+                  ,fields:Array.from(document.querySelectorAll('input')).map(e=>({id:e.id,type:e.type}))
+                  ,buttons:Array.from(document.querySelectorAll('button')).map(e=>({id:e.id}))
+                }))()""")
+            try:
+                print("PAGE_CHECK=" + json.dumps(service.executor.submit(page_diagnostic).result(timeout=25)), flush=True)
+            except Exception:  # noqa: BLE001, S110 -- no page contents in failure logs.
+                pass
         return 1
     finally:
+        from agent.tools.dedicated_browser import shutdown
+        await asyncio.to_thread(shutdown)
         server.should_exit = True
         await serving
         listener.close()

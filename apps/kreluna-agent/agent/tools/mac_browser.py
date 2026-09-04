@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from agent.tools.browser_command import DEDICATED, BrowserCommand
 from agent.tools.screen_pointer import move_and_click
 
 JS_MISSING = "NON_TROVATO"
@@ -120,6 +121,8 @@ def _is_installed(runner: Runner, browser: str) -> bool:
 def pick_browser(runner: Runner, preferred: str) -> str:
     """Usa il browser scelto nella configurazione, se c'è. Altrimenti quello che c'è."""
 
+    if getattr(runner, "dedicated", False):
+        return DEDICATED
     for candidate in (preferred, *CHROME_FAMILY, SAFARI):
         if candidate and _is_installed(runner, candidate):
             return candidate
@@ -145,6 +148,8 @@ SAFARI_REAL_WINDOW = '''
 
 
 def open_url_script(browser: str, url: str) -> str:
+    if browser == DEDICATED:
+        return BrowserCommand("navigate", url)
     if _is_safari(browser):
         return f'''
 tell application "{browser}"
@@ -170,6 +175,8 @@ return "APERTO"
 
 
 def current_url_script(browser: str) -> str:
+    if browser == DEDICATED:
+        return BrowserCommand("url")
     tab = "current tab" if _is_safari(browser) else "active tab"
     setup = SAFARI_REAL_WINDOW if _is_safari(browser) else ""
     window = "webWindow" if _is_safari(browser) else "front window"
@@ -181,7 +188,9 @@ end tell
 '''
 
 
-def _js(browser: str, javascript: str) -> str:
+def _js(browser: str, javascript: str, *, read_only: bool = False) -> str:
+    if browser == DEDICATED:
+        return BrowserCommand("evaluate", javascript, read_only)
     payload = javascript.replace("\\", "\\\\").replace('"', '\\"')
     if _is_safari(browser):
         return f'''
@@ -256,6 +265,7 @@ def find_field_script(browser: str, selector: str) -> str:
     return _js(
         browser,
         f"(function(){{var e=document.querySelector('{css}');return e?'TROVATO':'{JS_MISSING}';}})()",
+        read_only=True,
     )
 
 
@@ -554,6 +564,11 @@ def click_text_in_section(
     clean = action.strip().lower()
     if any(word in clean for word in FORBIDDEN_ACTION_TEXT):
         raise RuntimeError("AZIONE_WEB_DESK_VIETATA")
+    if getattr(runner, "dedicated", False):
+        answer = runner.osascript(
+            click_text_in_section_script(browser, section, action, double=double)
+        )
+        return "CLICCATO" in answer and JS_MISSING not in answer
     try:
         center_answer = runner.osascript(
             text_in_section_center_script(browser, section, action)
@@ -666,6 +681,22 @@ def click_invoice_line_vat(
 ) -> bool:
     """Apre il menu IVA della riga e sceglie un testo fiscale univoco."""
 
+    if getattr(runner, "dedicated", False):
+        # No OS coordinates: locate the current row again in the page.
+        if row_index < 0:
+            return False
+        answer = runner.osascript(_js(browser,
+            "(function(){" + _recursive_dom_helpers()
+            + "var rows=[];for(var i=0;i<docs.length;i++){var all=docs[i].querySelectorAll('tbody tr');"
+            "for(var j=0;j<all.length;j++){var d=all[j].querySelector('input[placeholder*=\"Inserisci descrizione prodotto\"]');"
+            "if(d&&vis(d))rows.push(all[j]);}}"
+            f"if(rows.length<={row_index})return 'NON_TROVATO';var cells=rows[{row_index}].children;"
+            "if(cells.length<12)return 'NON_TROVATO';var e=cells[8].querySelector('.hsDropDownMultiLabel');"
+            "if(!e||!vis(e)||e.disabled)return 'NON_TROVATO';e.click();return 'CLICCATO';})()"
+        ))
+        return answer == "CLICCATO" and click_text_in_section(
+            runner, browser, "Nuova Fattura", vat_text, mover=mover
+        )
     try:
         answer = runner.osascript(invoice_line_vat_center_script(browser, row_index))
     except MacControlError as exc:
@@ -720,6 +751,8 @@ def fill_field_visible(
 ) -> tuple[bool, bool]:
     """Mostra il mouse sul campo e poi scrive, senza premere Invio."""
 
+    if getattr(runner, "dedicated", False):
+        return fill_field(runner, browser, selector, text), False
     center = field_center(runner, browser, selector)
     moved = False
     if center:
@@ -743,7 +776,7 @@ def click_selector_visible(
     """Locate login again at activation time; pointer movement is only visual."""
 
     script = click_selector_script(browser, selector)
-    center = field_center(runner, browser, selector)
+    center = None if getattr(runner, "dedicated", False) else field_center(runner, browser, selector)
     if center:
         mover(
             center["x"],
