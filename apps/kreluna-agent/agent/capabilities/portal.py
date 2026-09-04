@@ -357,7 +357,7 @@ def _open_webdesk_smart(run, browser, settings, sleep, check) -> bool:
         return True
     if location.hostname != "app.webdesk.it" or location.path != "/Apps/Dashboard/View":
         return False
-    if not mac_browser.click_text_in_section(run, browser, "Servizi", "Fattura SMART"):
+    if not mac_browser.click_webdesk_smart(run, browser):
         return False
     # Una sola pressione. Aspetta la destinazione invece di aprire il link
     # interno a Genya senza il contesto creato dal servizio Webdesk.
@@ -800,10 +800,9 @@ def open_portal(
                         check=check,
                         stop=stop,
                     )
-                return stop(
-                    "accesso-gia-attivo",
-                    "Webdesk è già aperto con una sessione attiva. Non ho salvato o inviato nulla.",
-                )
+                if not _open_webdesk_smart(run, browser, settings, sleep, check):
+                    return stop("fattura-smart-non-aperta", "La sessione è attiva, ma Fattura SMART non si è aperta.")
+                return stop("accesso-completato", "Fattura SMART aperta con la sessione attiva. Nessun documento creato.")
         if not has_username or not has_password:
             return stop(
                 "campi-login-non-trovati",
@@ -908,9 +907,7 @@ def open_portal(
                     capture=False,
                 )
 
-            if (urlparse(target_url).hostname or "").lower() == "sme.genya.it" and (
-                urlparse(where).hostname or ""
-            ).lower() != "sme.genya.it":
+            if (urlparse(where).hostname or "").lower() != "sme.genya.it":
                 if not _open_webdesk_smart(run, browser, settings, sleep, check):
                     return stop(
                         "fattura-smart-non-aperta",

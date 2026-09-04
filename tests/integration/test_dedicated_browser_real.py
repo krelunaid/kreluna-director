@@ -52,6 +52,37 @@ def test_real_browser_fill_click_and_separate_page():
             browser.close()
 
 
+def test_smart_tile_activates_once_without_mouse_and_rejects_ambiguity(monkeypatch):
+    from playwright.sync_api import sync_playwright
+    monkeypatch.setattr(mac_browser, "_js", lambda browser, javascript: javascript)
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.route("**/*", lambda route: route.fulfill(content_type="text/html", body="""
+          <div id="area_servizi">
+            <div><div class="tile_servizi" onclick="window.count=(window.count||0)+1"><h2>Fattura SMART</h2></div></div>
+            <div class="tile_servizi" onclick="window.wrong=true">Consegne fatture vendita</div>
+          </div>
+        """))
+        class Runner:
+            def osascript(self, script):
+                return page.evaluate(script)
+        try:
+            page.goto("https://app.webdesk.it/Apps/Dashboard/View")
+            page.mouse.move(0, 0)
+            assert mac_browser.click_webdesk_smart(Runner(), "Safari")
+            assert page.evaluate("window.count") == 1
+            assert not page.evaluate("window.wrong||false")
+            page.evaluate("document.querySelector('#area_servizi').append(document.querySelector('.tile_servizi').cloneNode(true))")
+            assert not mac_browser.click_webdesk_smart(Runner(), "Safari")
+            assert page.evaluate("window.count") == 1
+            page.goto("https://example.test/Apps/Dashboard/View")
+            assert not mac_browser.click_webdesk_smart(Runner(), "Safari")
+            assert page.evaluate("window.count||0") == 0
+        finally:
+            browser.close()
+
+
 def test_disabled_validation_button_detected_but_not_forced():
     from agent.tools import webdesk_validation
     from playwright.sync_api import sync_playwright

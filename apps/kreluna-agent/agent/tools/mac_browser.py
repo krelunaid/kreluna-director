@@ -556,6 +556,24 @@ def page_text(runner: Runner, browser: str) -> str:
         raise _translate(exc) from exc
 
 
+def click_webdesk_smart(runner: Runner, browser: str) -> bool:
+    """Activate the observed service tile by DOM, independent of mouse position."""
+    script = _js(browser, """(function(){
+      if(location.origin !== 'https://app.webdesk.it' ||
+         location.pathname !== '/Apps/Dashboard/View') return 'WRONG_PAGE';
+      var tiles=Array.from(document.querySelectorAll('#area_servizi .tile_servizi'));
+      tiles=tiles.filter(function(e){
+        var r=e.getBoundingClientRect(),s=getComputedStyle(e);
+        return (e.innerText||'').trim().replace(/\\s+/g,' ').toLowerCase()==='fattura smart'
+          && r.width>0 && r.height>0 && s.visibility!=='hidden' && s.display!=='none';
+      });
+      if(tiles.length!==1) return 'AMBIGUOUS_SERVICE';
+      tiles[0].click();
+      return 'SMART_ACTIVATED';
+    })()""")
+    return runner.osascript(script) == "SMART_ACTIVATED"
+
+
 def click_text_in_section(
     runner: Runner,
     browser: str,

@@ -759,12 +759,11 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
     monkeypatch.setattr(portal.mac_browser, "fill_field", fill_field)
     monkeypatch.setattr(portal.mac_browser, "page_text", lambda *_args: "Entra in webdesk")
     monkeypatch.setattr(portal.mac_browser, "click_selector_visible", click_login)
-    def click_smart(_run, _browser, section, action):
-        assert (section, action) == ("Servizi", "Fattura SMART")
+    def click_smart(_run, _browser):
         fake.page_url = "https://sme.genya.it/Elements/Factory/Screens/MainSmartInvoice/MainSmartInvoice.html"
         return True
 
-    monkeypatch.setattr(portal.mac_browser, "click_text_in_section", click_smart)
+    monkeypatch.setattr(portal.mac_browser, "click_webdesk_smart", click_smart)
     monkeypatch.setattr(
         portal,
         "_start_webdesk_invoice",
