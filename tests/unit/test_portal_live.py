@@ -347,7 +347,7 @@ def test_real_webdesk_invoice_fills_multiple_vat_rows_without_saving(monkeypatch
     )
     page_reads = iter(
         [
-            "FATTURA SMART Home Fatture + Crea nuovo",
+            "FATTURA SMART Home Fatture + Crea nuovo\nMittente\nAzienda Prova SRL\nDestinatario",
             "FATTURA SMART Nuova Fattura Cliente Righe documento",
         ]
     )
@@ -382,6 +382,7 @@ def test_real_webdesk_invoice_fills_multiple_vat_rows_without_saving(monkeypatch
         invoice={
             "client_name": "Cliente Prova SRL",
             "description": "Consulenza · Materiale",
+            "account_name": "Azienda Prova SRL",
             "net_eur": 300,
             "vat_rate": 0.22,
             "lines": [
@@ -400,6 +401,36 @@ def test_real_webdesk_invoice_fills_multiple_vat_rows_without_saving(monkeypatch
     assert vats == [(1, "10%")]
     assert ("Righe documento", "Aggiungi nuova riga") in actions
     assert all(action not in {"Salva", "Emetti", "Invia"} for _, action in actions)
+
+
+@pytest.mark.parametrize("account,page,vat,step", [
+    ("", "Azienda Prova", "standard", "emittente-da-verificare"),
+    ("Altra Azienda", "Azienda Prova", "standard", "emittente-da-verificare"),
+    ("Azienda Prova", "Azienda Prova", "intent_declaration", "dichiarazione-intento-da-verificare"),
+])
+def test_invoice_preconditions_stop_before_document_clicks(monkeypatch, account, page, vat, step):
+    fake = FakeMac(page_url="https://sme.genya.it/Elements/Factory/Screens/MainSmartInvoice/MainSmartInvoice.html")
+    monkeypatch.setattr(mac_browser, "page_text", lambda *_: f"FATTURA SMART\nMittente\n{page}\nDestinatario")
+    def forbidden(*args, **kwargs):
+        pytest.fail("Document must not be opened or edited before prerequisites")
+    monkeypatch.setattr(mac_browser, "click_text_in_section", forbidden)
+    monkeypatch.setattr(mac_browser, "fill_invoice_line", forbidden)
+    monkeypatch.setattr(mac_browser, "click_invoice_line_vat", forbidden)
+    result = open_portal("fatture-webdesk", query="Cliente Prova", invoice={
+        "account_name": account, "vat_treatment": vat,
+        "lines": [{"description": "Lavoro", "unit_net_eur": 100}],
+    }, runner=fake, supported=lambda: True, sleep=lambda _: None)
+    assert result["ok"] is False
+    assert result["outcome"] == "blocked"
+    assert result["step"] == step
+    assert result["filled"] is False
+
+
+def test_explicit_invoice_parties_before_amount_are_not_reversed():
+    from kreluna_shared.planner import _invoice_parties
+    account, client = _invoice_parties("mi prepari una fattura per Azienda Alfa al cliente Cliente Beta, di 30000 euro")
+    assert account.casefold() == "azienda alfa"
+    assert client.casefold() == "cliente beta"
 
 
 def test_webdesk_does_not_overwrite_an_open_customer_editor():

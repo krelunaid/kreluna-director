@@ -462,7 +462,10 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
         )
         saved.append(digest)
 
-    if body.ok:
+    if body.result.get("outcome") == "blocked":
+        task.status = "blocked"
+        task.error = str(body.result.get("message") or body.error or "Lavoro non completato")
+    elif body.ok and body.result.get("ok", True) is not False:
         task.status = "completed"
         task.error = None
     elif (body.error or "") in {"AGENT_KILLED", "AGENT_PAUSED"}:
@@ -479,7 +482,7 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
     device.active_task_id = None
     device.presence = "online" if device.id in hub.agents else device.presence
 
-    if body.ok and task.capability == "invoice_prepare_demo":
+    if task.status == "completed" and task.capability == "invoice_prepare_demo":
         observed = body.result.get("observed") or {}
         expected = body.result.get("expected") or {}
         verification = body.result.get("verification") or verify_invoice(expected, observed)

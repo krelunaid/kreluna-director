@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -407,6 +408,25 @@ def _start_webdesk_invoice(
             "schermata-webdesk-occupata",
             "Fattura SMART ha già una scheda di lavoro aperta. Chiudila o annullala tu: non la sovrascrivo.",
         )
+    if invoice:
+        expected = str(invoice.get("account_name") or "").strip()
+        issuers = re.findall(r"(?im)^\s*Mittente\s*[:\t ]*\n?([^\n]+)", text)
+        normalize = lambda value: " ".join(value.casefold().split())
+        if not expected or len(issuers) != 1 or normalize(issuers[0]) != normalize(expected):
+            return stop(
+                "emittente-da-verificare",
+                "Non posso confermare che l'azienda attiva corrisponda all'emittente richiesto. "
+                "Mi fermo prima di aprire una fattura: occorre identificare l'azienda corretta.",
+            )
+        if invoice.get("vat_treatment") == "intent_declaration" or any(
+            row.get("vat_treatment") == "intent_declaration"
+            for row in invoice.get("lines") or []
+        ):
+            return stop(
+                "dichiarazione-intento-da-verificare",
+                "La dichiarazione d'intento del cliente non è ancora verificata e associata. "
+                "Non apro la fattura e non applico N3.5 finché questo controllo non è completato.",
+            )
     if not mac_browser.click_text_in_section(
         run, browser, "Fatture", "+ Crea nuovo"
     ):
@@ -717,8 +737,11 @@ def open_portal(
     ) -> dict[str, Any]:
         if capture:
             _append_optional_evidence(evidence, run, step, portal)
+        completed = step in {"accesso-completato", "pronto", "compilato", "fattura-webdesk-compilata"}
         return {
-            "ok": True,
+            "ok": completed,
+            "outcome": "completed" if completed else "blocked",
+            "step": step,
             "live": True,
             "sent": False,
             "filled": filled,

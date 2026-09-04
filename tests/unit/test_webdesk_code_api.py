@@ -97,6 +97,24 @@ async def test_access_only_webdesk_uses_unique_studio_credential(harness):
     assert (await client.post(path, json=sign(path))).status_code == 200
 
 
+@pytest.mark.parametrize("outer_ok", [True, False])
+async def test_blocked_result_is_not_completed_even_with_legacy_success_flag(harness, monkeypatch, outer_ok):
+    from app.routers import agent_io
+    client, sessions, _ = harness
+    # Authentication is covered by signed API tests; isolate result handling here.
+    monkeypatch.setattr(agent_io, "verify_bytes", lambda *_: True)
+    response = await client.post("/agent/ingest", json={
+        "device_id": "device", "task_id": "task", "nonce": uuid4().hex,
+        "sent_at": int(time.time()), "signature": "dGVzdA==", "ok": outer_ok,
+        "result": {"ok": False, "outcome": "blocked", "message": "Cliente non univoco"},
+    })
+    assert response.status_code == 200, response.text
+    async with sessions() as s:
+        task = await s.get(Task, "task")
+        assert task.status == "blocked"
+        assert task.error == "Cliente non univoco"
+
+
 @pytest.mark.parametrize("consumed", [False, True])
 async def test_new_job_can_replace_only_consumed_challenge(harness, consumed):
     client, sessions, sign = harness

@@ -128,6 +128,13 @@ def _canonical_known_name(value: str) -> str:
 def _invoice_parties(text: str) -> tuple[str, str]:
     """Separa azienda emittente e destinatario in frasi come "per X ... a Y"."""
 
+    explicit = re.search(
+        r"\bfattura\s+(?:per|di)\s+(.+?)\s+al\s+cliente\s+(.+?)"
+        r"(?=\s+(?:di|da|per|con|senza)\b|[,;.]|$)", text, flags=re.IGNORECASE,
+    )
+    if explicit:
+        return _canonical_known_name(explicit.group(1)), _canonical_known_name(explicit.group(2))
+
     amount_then_recipient = re.search(
         r"(?:\d[\d. ,]{0,18}\s*(?:euro|eur|€)|(?:euro|eur|€)\s*\d[\d. ,]{0,18})"
         r"\s+(?:a|ad|al\s+cliente)\s+"

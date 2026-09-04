@@ -268,7 +268,8 @@ class AgentApp:
                 self.safety.assert_task_active(task_id)
                 result = await self._invoke(handler, args, task_id)
                 self.safety.assert_task_active(task_id)
-            await self.report(task_id, True, result, None)
+            succeeded = result.get("ok", True) is True and result.get("outcome") != "blocked"
+            await self.report(task_id, succeeded, result, None if succeeded else result.get("message", "Lavoro non completato"))
         except asyncio.CancelledError:
             print(f"[kreluna-agent] task {task_id} -> interrotto", flush=True)
         except Exception as exc:
