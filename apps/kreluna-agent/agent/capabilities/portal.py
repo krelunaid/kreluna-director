@@ -579,6 +579,9 @@ def learn_portal(
         "pagina": page.get("url") or "",
         "titolo": page.get("titolo") or "",
         "campi_trovati": len(campi),
+        # Curated local guidance, not instructions scraped from the live page.
+        # This is reference knowledge, never permission to execute a document.
+        "guida_operativa": spec.operational_guide,
         "campi": scritti[:20],
         "bottoni": [p for p in proposte if p["tipo"] == "button"][:10],
         "message": (

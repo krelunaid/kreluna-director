@@ -71,6 +71,24 @@ def test_a_page_without_fields_does_not_explode():
     assert result["campi"] == []
 
 
+def test_webdesk_learning_returns_curated_guide_without_executing_it():
+    fake = FakeMac(page={"url": "https://sme.genya.it", "titolo": "Fattura SMART", "campi": []})
+    result = learn_portal("fatture-webdesk", runner=fake, supported=lambda: True)
+    guide = result["guida_operativa"]
+    assert guide["mode"] == "reference_only_not_execution_authority"
+    assert guide["entry"][-1] == "Fattura SMART"
+    assert "not_implemented" in guide["ddt"]["status"]
+    assert "Nessun salvataggio neppure bozza" in guide["restrictions"]
+    assert len(guide["sources"]) == 2
+    for forbidden in ("value=", "submit()", "keystroke", ".click("):
+        assert forbidden not in " ".join(fake.scripts).lower()
+
+
+def test_unrelated_portal_does_not_receive_webdesk_guidance():
+    result = learn_portal("visure-cgn", runner=FakeMac(), supported=lambda: True)
+    assert result["guida_operativa"] == {}
+
+
 def test_the_selector_prefers_the_most_stable_handle():
     assert mac_browser.suggest_selector({"tag": "input", "id": "cf", "name": "x"}) == "#cf"
     assert mac_browser.suggest_selector({"tag": "input", "name": "x"}) == 'input[name="x"]'

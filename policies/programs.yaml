@@ -90,6 +90,28 @@ portals:
       pec: ""
       save_button: ""  # solo arresto/controllo: mai clic automatico
     invoice_fields: {}
+    operational_guide:
+      reviewed_on: "2026-09-04"
+      mode: reference_only_not_execution_authority
+      sources:
+        - url: https://www.wolterskluwer.com/it-it/expert-insights/e-fatture-fattura-smart
+          scope: Funzioni fatture e DDT, non selettori della pagina.
+        - url: https://files.supersite.aruba.it/media/29162_852f1c7d880c97f75845d8d40f51cc3d8fd2adb7.pdf
+          author: Wolters Kluwer
+          document: MAN-B6FDAR38400
+          published: "2018-11"
+          scope: Nota storica; accesso dal servizio, abilitazione documenti, Knowledge Base. Verificare la UI attuale.
+      entry: [Home Webdesk, Servizi, Fattura SMART]
+      invoice:
+        observed_entry: [Home Fattura SMART, Fatture, Crea nuovo]
+        status: partial_automation_not_end_to_end_verified
+        checks: [Confermare emittente, Confermare destinatario, Verificare righe e totali, Verificare dichiarazione intento prima di applicarla]
+      ddt:
+        observed_entry: [Home Fattura SMART, D.D.T., Crea nuovo]
+        status: entry_observed_form_not_verified_automation_not_implemented
+        prerequisite: Se assente verificare Gestione altri documenti; non modificare impostazioni automaticamente.
+      help: Consultare la Knowledge Base contestuale per il documento corrente; non inventare selettori dai tutorial storici.
+      restrictions: [Nessun salvataggio neppure bozza, Nessuna emissione, Nessun invio, Nessun pagamento, Nessun dato fiscale inventato]
     invoice_workflow:
       app_name: Fattura SMART
       new_invoice_path: [Home, Fatture, Crea nuovo]

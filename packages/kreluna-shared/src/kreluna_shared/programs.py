@@ -25,6 +25,7 @@ class Portal(BaseModel):
     customer_create_fields: dict[str, str] = Field(default_factory=dict)
     invoice_fields: dict[str, str] = Field(default_factory=dict)
     invoice_workflow: dict[str, object] = Field(default_factory=dict)
+    operational_guide: dict[str, object] = Field(default_factory=dict)
 
 
 class PortalSettings(BaseModel):

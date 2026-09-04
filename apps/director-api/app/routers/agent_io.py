@@ -154,7 +154,7 @@ async def _credential_for_task(
     portal_key = str(args.get("portal") or "")
     client_key = client_key_for_name(str(args.get("query") or ""))
     allowed_portals = TASK_PORTALS.get(portal_key, set())
-    if not client_key or not allowed_portals:
+    if not allowed_portals or (not client_key and portal_key != "fatture-webdesk"):
         raise HTTPException(status_code=409, detail="Cliente o portale non supportato")
     credential = (
         await session.execute(
@@ -235,7 +235,9 @@ async def start_webdesk_code(body: WebdeskCodeBody, request: Request,
         raise HTTPException(409, "Webdesk invia il codice a un account diverso da Gmail collegato.")
     now = utcnow()
     existing = await session.get(WebdeskMailChallenge, device.tenant_id)
-    if existing and as_utc(existing.expires_at) > now:
+    # A delivered/closed challenge must not block a subsequent job. The
+    # per-task nonce below still prevents requesting twice for the same job.
+    if existing and not existing.consumed and as_utc(existing.expires_at) > now:
         raise HTTPException(409, "Una validazione Webdesk è già in corso. Attendi prima di riprovare.")
     if existing:
         await session.delete(existing)

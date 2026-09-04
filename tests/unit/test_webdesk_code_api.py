@@ -85,6 +85,40 @@ async def test_single_use_signed_delivery(harness, monkeypatch):
         assert "123456" not in str(row.__dict__)
 
 
+async def test_access_only_webdesk_uses_unique_studio_credential(harness):
+    client, sessions, sign = harness
+    async with sessions() as s:
+        task = await s.get(Task, "task")
+        args = json.loads(task.args_json)
+        args["query"] = ""
+        task.args_json = json.dumps(args)
+        await s.commit()
+    path = "/agent/webdesk-code/start"
+    assert (await client.post(path, json=sign(path))).status_code == 200
+
+
+@pytest.mark.parametrize("consumed", [False, True])
+async def test_new_job_can_replace_only_consumed_challenge(harness, consumed):
+    client, sessions, sign = harness
+    start = "/agent/webdesk-code/start"
+    original = (await client.post(start, json=sign(start))).json()["challenge_id"]
+    async with sessions() as s:
+        old = await s.get(Task, "task")
+        s.add(Task(id="next", tenant_id="tenant", requested_by="owner", goal="Test next",
+                   capability="portal_open", status="running", assigned_device_id="device",
+                   idempotency_key="next", args_json=old.args_json))
+        (await s.get(WebdeskMailChallenge, "tenant")).consumed = consumed
+        await s.commit()
+    # Even after consumption the same task must never request another code.
+    assert (await client.post(start, json=sign(start))).status_code == 409
+    response = await client.post(start, json=sign(start, task_id="next"))
+    assert response.status_code == (200 if consumed else 409)
+    async with sessions() as s:
+        current = await s.get(WebdeskMailChallenge, "tenant")
+        assert (current.id != original) == consumed
+        assert current.task_id == ("next" if consumed else "task")
+
+
 @pytest.mark.parametrize("change", ["disabled", "cancelled", "device", "expired", "connection", "other_portal"])
 async def test_authority_rechecked_before_reading(harness, monkeypatch, change):
     client, sessions, sign = harness
