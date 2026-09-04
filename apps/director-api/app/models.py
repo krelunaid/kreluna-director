@@ -49,6 +49,27 @@ class AISelection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class GmailConnection(Base):
+    __tablename__ = "gmail_connections"
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    email: Mapped[str] = mapped_column(String(200))
+    refresh_ciphertext: Mapped[str] = mapped_column(Text)
+    updated_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GmailAuthorization(Base):
+    __tablename__ = "gmail_authorizations"
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    expected_email: Mapped[str] = mapped_column(String(200))
+    verifier_ciphertext: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+    invalidated: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class AIProviderCredential(Base):
     """Tenant-scoped API credential encrypted before database persistence."""
 

@@ -291,6 +291,10 @@ async function uploadLibraryDocument(
 }
 
 export const api = {
+  gmailStatus: () => request<{ configured: boolean; connected: boolean; available: boolean; email: string; message: string }>("/integrations/gmail/status"),
+  gmailVerify: () => request<{ verified: boolean; email: string; message: string }>("/integrations/gmail/verify", { method: "POST" }),
+  gmailConnect: (email: string) => request<{ authorization_url: string }>("/integrations/gmail/connect", { method: "POST", body: JSON.stringify({ email, consent_readonly: true }) }),
+  gmailDisconnect: () => request<{ connected: boolean; revoked: boolean; message: string }>("/integrations/gmail/connection", { method: "DELETE" }),
   dashboardSocketConfig,
   login: (email: string, password: string, rememberDevice = true) =>
     request<{ token: string; expires_in: number; user: { name: string; email: string; role: string } }>("/auth/login", {

@@ -109,7 +109,7 @@ def installed_mac_agent_app() -> Path:
 def start_installed_mac_agent() -> subprocess.Popen | None:
     """Avvia soltanto l'Agent Mac installato e firmato, con una configurazione locale valida."""
 
-    if sys.platform != "darwin":
+    if sys.platform != "darwin" or os.environ.get("KRELUNA_START_INSTALLED_AGENT", "1") == "0":
         return None
     app = installed_mac_agent_app()
     info_path = app / "Contents" / "Info.plist"
@@ -192,6 +192,9 @@ def prepare_env() -> None:
     os.environ.setdefault("DIRECTOR_CREDENTIAL_KEY", _local_secret("credential.key"))
     os.environ.setdefault("KRELUNA_SUPPORT_DIR", str(SUPPORT))
     os.environ.setdefault("KRELUNA_APP_ROOT", str(ROOT))
+    gmail_client = SUPPORT / "gmail-oauth-client.json"
+    if gmail_client.is_file():
+        os.environ.setdefault("GMAIL_OAUTH_CLIENT_FILE", str(gmail_client))
     remote_dir = SUPPORT / "remote"
     os.environ.setdefault("DIRECTOR_REMOTE_DIR", str(remote_dir))
     remote_config = remote_dir / "remote-link.json"

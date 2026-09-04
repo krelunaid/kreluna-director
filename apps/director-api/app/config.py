@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,6 +42,8 @@ class Settings(BaseSettings):
     gmail_oauth_client_id: str = ""
     gmail_oauth_client_secret: str = ""
     gmail_oauth_redirect_uri: str = ""
+    gmail_oauth_client_type: str = "web"
+    gmail_oauth_client_file: str = ""
     director_remote_dir: str = ""
     director_cloudflared_path: str = ""
     director_database_url: str = "sqlite+aiosqlite:///./data/kreluna.db"
@@ -94,6 +97,21 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_must_be_explicit(self) -> "Settings":
+        if self.gmail_oauth_client_file:
+            try:
+                client = json.loads(Path(self.gmail_oauth_client_file).read_text(encoding="utf-8"))["installed"]
+                client_id = client["client_id"]
+                client_secret = client.get("client_secret", "")
+                if not isinstance(client_id, str) or not client_id.endswith(".apps.googleusercontent.com"):
+                    raise ValueError()
+                if not isinstance(client_secret, str):
+                    raise TypeError()
+            except (OSError, ValueError, KeyError, TypeError):
+                raise ValueError("Configurazione del client Gmail desktop non valida") from None
+            self.gmail_oauth_client_id = client_id
+            self.gmail_oauth_client_secret = client_secret
+            self.gmail_oauth_client_type = "desktop"
+            self.gmail_oauth_redirect_uri = f"http://127.0.0.1:{self.director_port}/integrations/gmail/callback"
         explicit_provider = self.kreluna_llm_provider.strip().lower()
         if explicit_provider and explicit_provider not in AI_PROVIDERS:
             raise ValueError(

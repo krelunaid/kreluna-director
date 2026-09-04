@@ -250,6 +250,40 @@ function agentState(agent: Agent, work?: Task): string {
 }
 
 export default function App() {
+  const [gmailStatus, setGmailStatus] = useState<Awaited<ReturnType<typeof api.gmailStatus>> | null>(null);
+  const [gmailEmail, setGmailEmail] = useState("");
+  const [gmailConsent, setGmailConsent] = useState(false);
+  const [gmailBusy, setGmailBusy] = useState(false);
+  const [gmailMessage, setGmailMessage] = useState("");
+  const [gmailUrl, setGmailUrl] = useState("");
+  async function gmailAction(action: "status" | "connect" | "disconnect") {
+    if (gmailBusy) return;
+    setGmailBusy(true); setGmailMessage("");
+    try {
+      if (action === "connect") {
+        if (!gmailConsent) throw new Error("Leggi e conferma i permessi richiesti.");
+        const result = await api.gmailConnect(gmailEmail);
+        const url = new URL(result.authorization_url);
+        if (url.origin !== "https://accounts.google.com" || url.pathname !== "/o/oauth2/v2/auth") throw new Error("Indirizzo Google non valido.");
+        setGmailUrl(result.authorization_url);
+        setGmailMessage("Premi Apri Google, autorizza l’account, poi torna qui e premi Verifica. Il link scade tra 5 minuti.");
+      } else {
+        if (action === "disconnect") {
+          if (!window.confirm("Scollegare Gmail da questo studio?")) return;
+          const result = await api.gmailDisconnect();
+          setGmailMessage(result.message); setGmailUrl("");
+        }
+        const result = await api.gmailStatus();
+        setGmailStatus(result);
+        if (result.connected) setGmailUrl("");
+        if (action === "status" && result.connected) {
+          const verified = await api.gmailVerify();
+          setGmailMessage(verified.message);
+        }
+      }
+    } catch (err) { setGmailMessage(err instanceof Error ? err.message : "Collegamento Gmail non disponibile."); }
+    finally { setGmailBusy(false); }
+  }
   const [ready, setReady] = useState(Boolean(token()));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1140,6 +1174,12 @@ export default function App() {
       <article><span>INTELLIGENZA ARTIFICIALE</span><h3>IA Kreluna</h3><p>{aiConnected ? "Collegata e pronta." : "Servizio non disponibile."}</p><div className={`settings-state ${aiConnected ? "connected" : "warning"}`}>● {aiConnected ? "IA attiva" : "Da controllare"}</div><button onClick={() => openAISettings()}>Configura e verifica</button></article>
       <article><span>AGGIORNAMENTI</span><h3>Kreluna Director v{version}</h3><p>{updateAvailable ? `È disponibile la versione ${updateStatus?.latest_version}.` : "Il programma è aggiornato."}</p><div className={`settings-state ${updateAvailable ? "warning" : "connected"}`}>● {updateAvailable ? "Aggiornamento disponibile" : "Versione corrente"}</div><button disabled={!updateAvailable} onClick={() => setUpdateOpen(true)}>{updateAvailable ? "Installa aggiornamento" : "Nessun aggiornamento"}</button></article>
       <article><span>PC REMOTI</span><h3>{remoteStatus?.connected ? "Collegamento attivo" : "Collegamento da configurare"}</h3><p>{remoteStatus?.detail || "Collega in sicurezza gli Agent Windows e Mac senza aprire porte sul router."}</p><div className={`settings-state ${remoteStatus?.connected ? "connected" : "warning"}`}>● {remoteStatus?.connected ? "PC raggiungibili" : remoteStatus?.state === "starting" ? "Connessione in avvio" : "Non collegato"}</div><button onClick={openRemoteSettings}>{remoteStatus?.configured ? "Verifica o modifica" : "Configura collegamento"}</button></article>
+      <article><span>GMAIL · PROVA LOCALE</span><h3>{gmailStatus?.connected ? "Account collegato" : "Collega Gmail"}</h3><p>{gmailStatus?.message || "Premi Verifica per controllare la configurazione."}</p><p>{gmailStatus?.email}</p><button disabled={gmailBusy} onClick={() => void gmailAction("status")}>Verifica</button>
+        {gmailStatus?.configured && !gmailStatus.connected ? <form onSubmit={(event) => { event.preventDefault(); void gmailAction("connect"); }}><label>Email da collegare<input type="email" required maxLength={200} value={gmailEmail} onChange={(event) => { setGmailEmail(event.target.value); setGmailUrl(""); }} /></label><label><input type="checkbox" checked={gmailConsent} onChange={(event) => setGmailConsent(event.target.checked)} />Google richiede accesso in sola lettura alla posta: il permesso riguarda l’intera casella. Nessun invio, modifica o cancellazione di email.</label><button disabled={gmailBusy || !gmailConsent}>Collega Gmail</button></form> : null}
+        {gmailUrl ? <p><a href={gmailUrl} target="_blank" rel="noreferrer noopener">Apri Google nel browser</a></p> : null}
+        {gmailStatus?.connected ? <button disabled={gmailBusy} onClick={() => void gmailAction("disconnect")}>Scollega Gmail</button> : null}
+        <p role="status">{gmailMessage}</p><small>Il collegamento non attiva ancora il recupero automatico dei codici Webdesk. Nessuna fattura salvata o inviata.</small>
+      </article>
       <article><span>SESSIONE</span><h3>{name}</h3><p>Accesso protetto su questo Mac. La password non viene conservata nell’app.</p><div className="settings-state connected">● Sessione attiva</div><button onClick={() => { setToken(null); setReady(false); }}>Esci dallo studio</button></article>
       <article><span>BARRIERE DI SICUREZZA</span><h3>Sempre attive</h3><p>Niente shell remota, eval, pagamenti, invii fiscali o login automatici SPID/CNS. Le schermate non vanno all’IA.</p><div className="settings-state connected">● Protezioni operative</div><button onClick={() => void openVault()}>Apri Fort Knox</button></article>
     </div></section>;

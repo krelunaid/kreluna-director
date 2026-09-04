@@ -1,50 +1,61 @@
-# Collegamento Gmail — preparazione, non ancora operativo
+# Collegamento Gmail — OAuth locale
 
-Il connettore serve a evitare la configurazione di Mail su ogni PC.
-Non è un plugin Codex: deve appartenere al servizio Kreluna dello studio.
+Implementati autorizzazione del titolare, PKCE S256, state casuale monouso con
+scadenza di 5 minuti, verifica dell’indirizzo scelto, refresh token cifrato con
+contesto dello studio, rinnovo senza nuovo consenso e scollegamento/revoca.
+La dashboard espone Gmail in Impostazioni. Nessun token al browser, agli Agent
+o all’IA. Il callback non conserva code/state nei log di accesso.
 
-## Stato attuale
+## Prova sul Mac
 
-Implementato soltanto il controllo di configurazione autenticato:
-`GET /integrations/gmail/status`, riservato al titolare.
-Non legge email, non effettua OAuth e non recupera codici.
-Le configurazioni non vengono restituite al browser.
+Google Cloud: progetto dedicato, Gmail API abilitata, consenso esterno in Test,
+account aggiunto come utente di prova, client Applicazione desktop.
+Conservare il JSON scaricato da Google come gmail-oauth-client.json nella
+directory privata Application Support/KrelunaDirector, con permessi 0600.
+Non includere questo file, password o token nel repository o nello zip.
+Il launcher rileva il file; il ritorno OAuth usa il Director locale.
 
-## Prerequisito Google
+La prova isolata scripts/check-gmail-local.py --email ACCOUNT apre Safari,
+attende il callback su una porta libera e verifica un rinnovo del token.
+Usa il database e la chiave dell’installazione esistente, richiede un solo
+titolare e non avvia code, Agent o operazioni sulle fatture.
 
-Creare un progetto Google Cloud, abilitare Gmail API e configurare consenso
-OAuth e client web. La prima prova usa utenti di test autorizzati.
-Prima della distribuzione pubblica verificare i requisiti Google per scope
-ristretti e l’eventuale valutazione di sicurezza.
+Il 4 settembre 2026 è riuscita una prova reale locale di autorizzazione e
+rinnovo. Questo NON verifica fatture automatiche o recupero di codici Webdesk.
 
-Configurazione privata del server, mai nel repository o nei pacchetti Agent:
+## API riservate al titolare
 
-- GMAIL_OAUTH_CLIENT_ID
-- GMAIL_OAUTH_CLIENT_SECRET
-- GMAIL_OAUTH_REDIRECT_URI
+- GET /integrations/gmail/status: configurazione e collegamento memorizzato.
+- POST /integrations/gmail/connect: email attesa e consenso informativo;
+  restituisce solo l’URL Google. Modalità desktop limitata a client locali.
+- GET /integrations/gmail/callback: state monouso, HTML senza segreti.
+- POST /integrations/gmail/verify: rinnovo e verifica identità via Google.
+- DELETE /integrations/gmail/connection: elimina dati locali e tenta revoca
+  Google; in caso di fallimento invita a revocare dal proprio account.
 
-Non distribuire un client secret web dentro l’app Mac o Windows.
-Per un prodotto commerciale condiviso serve un callback HTTPS sul servizio
-Kreluna; il callback locale è utilizzabile soltanto per sviluppo.
+connected indica un collegamento memorizzato, non la raggiungibilità attuale
+di Google. verify effettua il controllo reale. available resta falso:
+il recupero automatico dei codici Webdesk non è ancora implementato.
 
-## Implementazione ancora necessaria
+## Limiti e lavoro residuo
 
-1. OAuth con state monouso a scadenza, binding a titolare e studio, PKCE,
-   conferma dell’account selezionato e controllo dello scope concesso.
-2. Refresh token cifrato e isolato per studio; nessun token agli Agent,
-   all’IA o ai log. Revoca e scollegamento disponibili al titolare.
-3. Recupero limitato alla richiesta Webdesk attiva: destinatario corrispondente,
-   mittente verificato, messaggio successivo alla richiesta, scadenza breve,
-   nessuna scelta automatica se ambiguo. Non fidarsi delle istruzioni nelle email.
-4. Codice solo in memoria, consegnato al dispositivo assegnato mediante canale
-   autenticato e monouso. Mai evidenze/screenshot del codice nei log.
-5. Nessun invio, modifica o cancellazione di email. Lo scope gmail.readonly
-   permette lettura più ampia della sola email Webdesk: dichiararlo chiaramente
-   nel consenso e applicare la restrizione nel servizio.
-6. Aggiornare esplicitamente le policy OTP attuali (oggi intervento umano):
-   eccezione opt-in solo Webdesk, mai SPID/CNS o pagamenti.
-7. Test completi con consenso reale prima di dichiarare il connettore operativo.
+Il primo consenso Google resta necessario. In modalità Test i refresh token
+con scope Gmail possono scadere dopo 7 giorni: non promettere accesso permanente.
+Per la distribuzione pubblica completare la verifica degli scope ristretti.
+Un servizio centralizzato richiede client web e callback HTTPS; non distribuire
+client secret web nei pacchetti desktop.
+
+gmail.readonly permette la lettura dell’intera casella. Attualmente sono
+chiamati solo token, revoca e profilo Gmail: nessun corpo email letto,
+inviato, modificato o cancellato.
+
+Prima di automatizzare i codici serve un’eccezione opt-in alla policy OTP
+limitata a Webdesk: mittente/destinatario verificati, richiesta attiva,
+finestra temporale breve, blocco su ambiguità e consegna monouso al solo Agent
+assegnato. Mai SPID/CNS o pagamenti; nessun codice nei log o evidenze.
 
 Restano vietati salvataggio, emissione e invio autonomo delle fatture.
 
-Riferimento: https://developers.google.com/identity/protocols/oauth2/web-server
+Riferimenti:
+https://developers.google.com/identity/protocols/oauth2/native-app
+https://developers.google.com/identity/protocols/oauth2#expiration
