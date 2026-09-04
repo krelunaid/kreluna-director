@@ -269,7 +269,7 @@ async def poll_webdesk_code(body: WebdeskCodeBody, request: Request,
         WebdeskMailChallenge.tenant_id == device.tenant_id,
         WebdeskMailChallenge.id == body.challenge_id,
         WebdeskMailChallenge.consumed.is_(False),
-        WebdeskMailChallenge.attempts < 18,
+        WebdeskMailChallenge.attempts < 30,
         WebdeskMailChallenge.next_poll_at <= now,
     ).values(attempts=WebdeskMailChallenge.attempts+1, next_poll_at=now+timedelta(seconds=5))
       .execution_options(synchronize_session=False))
@@ -287,6 +287,10 @@ async def poll_webdesk_code(body: WebdeskCodeBody, request: Request,
         await session.commit()
         raise HTTPException(409, "Codice Webdesk non verificato: procedura fermata.") from None
     if match is None:
+        await session.refresh(task)
+        await session.refresh(row)
+        if task.status not in {"assigned", "running"} or row.consumed or as_utc(row.expires_at) <= utcnow():
+            raise HTTPException(409, "Lavoro terminato o validazione scaduta.")
         return {"pending": True}
     message_id, code = match
     # Atomically consume, then recheck authority after Gmail network I/O.
@@ -478,6 +482,14 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
         task.error = _readable_error(body.error, device)
         device.recent_errors += 1
     task.result_json = json.dumps(body.result)
+    # A terminal outcome also closes any outstanding email challenge. Never
+    # leave a failed job looking as if it is still waiting for a code.
+    await session.execute(update(WebdeskMailChallenge).where(
+        WebdeskMailChallenge.task_id == task.id,
+        WebdeskMailChallenge.device_id == device.id,
+        WebdeskMailChallenge.tenant_id == device.tenant_id,
+        WebdeskMailChallenge.consumed.is_(False),
+    ).values(consumed=True))
     device.busy = False
     device.active_task_id = None
     device.presence = "online" if device.id in hub.agents else device.presence

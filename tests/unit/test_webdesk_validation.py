@@ -54,3 +54,38 @@ def test_code_flow_rechecks_page_and_confirms_navigation(monkeypatch):
     _webdesk_mail_validation(None, "Safari", {"stage": "request", "recipient": "test@example.test"},
         "https://director.example.test", "device", "task", lambda path, payload: payload, lambda _: None, lambda: None)
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("changed_recipient", [False, True])
+def test_safari_transient_page_and_late_email(monkeypatch, changed_recipient):
+    actions, polls = [], []
+    class Response:
+        is_success = True
+        def __init__(self, data): self.data = data
+        def json(self): return self.data
+    def post(url, **kwargs):
+        if url.endswith("start"):
+            return Response({"challenge_id": "test"})
+        polls.append(1)
+        return Response({"pending": True} if len(polls) < 20 else {"code": "123456"})
+    reads = 0
+    def perform(run, browser, action="inspect", *args):
+        nonlocal reads
+        actions.append(action)
+        if action != "inspect": return {"acted": True}
+        reads += 1
+        if reads <= 2: return {"stage": "unknown"}
+        if "submit" in actions: return {"stage": "validated"}
+        return {"stage": "code", "recipient": "other@example.test" if changed_recipient else "test@example.test"}
+    monkeypatch.setattr("agent.capabilities.portal.httpx.post", post)
+    monkeypatch.setattr(webdesk_validation, "perform", perform)
+    def run():
+        _webdesk_mail_validation(None, "Safari", {"stage": "request", "recipient": "test@example.test"},
+            "https://director.example.test", "d", "t", lambda p, b: b, lambda _: None, lambda: None)
+    if changed_recipient:
+        with pytest.raises(RuntimeError, match="destinatario"): run()
+        assert not polls and "submit" not in actions
+    else:
+        run()
+        assert len(polls) == 20
+        assert actions.count("request") == actions.count("submit") == actions.count("continue") == 1

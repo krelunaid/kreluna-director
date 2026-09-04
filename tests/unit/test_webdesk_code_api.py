@@ -101,6 +101,10 @@ async def test_access_only_webdesk_uses_unique_studio_credential(harness):
 async def test_blocked_result_is_not_completed_even_with_legacy_success_flag(harness, monkeypatch, outer_ok):
     from app.routers import agent_io
     client, sessions, _ = harness
+    async with sessions() as s:
+        s.add(WebdeskMailChallenge(tenant_id="tenant", task_id="task", device_id="device",
+            connection_version="test", expires_at=utcnow()+timedelta(minutes=3), next_poll_at=utcnow()))
+        await s.commit()
     # Authentication is covered by signed API tests; isolate result handling here.
     monkeypatch.setattr(agent_io, "verify_bytes", lambda *_: True)
     response = await client.post("/agent/ingest", json={
@@ -113,6 +117,7 @@ async def test_blocked_result_is_not_completed_even_with_legacy_success_flag(har
         task = await s.get(Task, "task")
         assert task.status == "blocked"
         assert task.error == "Cliente non univoco"
+        assert (await s.get(WebdeskMailChallenge, "tenant")).consumed is True
 
 
 @pytest.mark.parametrize("consumed", [False, True])

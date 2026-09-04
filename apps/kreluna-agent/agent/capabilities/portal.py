@@ -56,19 +56,22 @@ def _webdesk_mail_validation(run, browser, state, director_url, device_id, task_
     check()
     if not webdesk_validation.perform(run, browser, "request", recipient).get("acted"):
         raise RuntimeError("La pagina Webdesk è cambiata: nessun codice richiesto.")
-    for _ in range(18):
+    unreadable = 0
+    for _ in range(30):
         check()
         sleep(5)
+        check()
         current = webdesk_validation.perform(run, browser)
-        if getattr(run, "dedicated", False):
-            for _ in range(8):
-                if current.get("stage") == "code" or (
-                    current.get("recipient") and current.get("recipient") != recipient
-                ):
-                    break
-                check()
-                sleep(5)
-                current = webdesk_validation.perform(run, browser)
+        if current.get("recipient") and current.get("recipient") != recipient:
+            raise RuntimeError("Il destinatario della validazione è cambiato. Non inserisco il codice.")
+        # A page reload or temporary Apple Events failure is not proof that the
+        # workflow changed. Reinspect, without another request or Gmail poll.
+        if current.get("stage") in {"unknown", "request"}:
+            unreadable += 1
+            if unreadable <= 6:
+                continue
+            raise RuntimeError("La pagina del codice non è leggibile da oltre 30 secondi. Validazione interrotta.")
+        unreadable = 0
         if current.get("stage") != "code" or current.get("recipient") != recipient:
             failure = RuntimeError("La pagina di validazione è cambiata. Non inserisco il codice.")
             failure.validation_stage = current.get("stage")
