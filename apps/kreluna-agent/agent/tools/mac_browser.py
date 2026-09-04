@@ -154,7 +154,11 @@ def open_url_script(browser: str, url: str) -> str:
         return f'''
 tell application "{browser}"
   activate
-  if (count of windows) is 0 then
+  set hasWebTabs to false
+  repeat with candidateWindow in windows
+    if (count of tabs of candidateWindow) > 0 then set hasWebTabs to true
+  end repeat
+  if not hasWebTabs then
     make new document
   end if
 {SAFARI_REAL_WINDOW}
@@ -281,6 +285,8 @@ def click_selector_script(browser: str, selector: str) -> str:
         f"var e=document.querySelector('{css}');if(!e)return '{JS_MISSING}';"
         "if(e.disabled||e.getAttribute('aria-disabled')==='true'||"
         "!e.getClientRects().length)return 'AZIONE_BLOCCATA';"
+        "var u=document.querySelector('#loginInput'),p=document.querySelector('#passwordInput'),s=document.querySelector('#studioInput');"
+        "if(!u||!p||!s||!u.value.trim()||!p.value||!s.value.trim())return 'AZIONE_BLOCCATA';"
         "e.click();return 'CLICCATO';})()",
     )
 

@@ -316,6 +316,31 @@ def test_real_webdesk_path_opens_invoice_and_selects_exact_customer():
     assert "form.submit" not in scripts
 
 
+@pytest.mark.parametrize("available_after, expected_calls", [(3, 3), (99, 10)])
+def test_customer_suggestions_wait_without_repeating_success(monkeypatch, available_after, expected_calls):
+    monkeypatch.setattr(mac_browser, "current_url", lambda *_args: "https://sme.genya.it/")
+    pages = iter(["FATTURA SMART Home", "Nuova Fattura Cliente"])
+    monkeypatch.setattr(mac_browser, "page_text", lambda *_args: next(pages))
+    monkeypatch.setattr(mac_browser, "click_text_in_section", lambda *_args: True)
+    monkeypatch.setattr(mac_browser, "fill_textbox_near_label", lambda *_args, **_kwargs: True)
+    calls = []
+
+    def select(*_args):
+        calls.append(True)
+        return len(calls) >= available_after
+
+    monkeypatch.setattr(mac_browser, "click_unique_text_match", select)
+    result = portal._start_webdesk_invoice(
+        run=FakeMac(), browser="Safari", client_name="Cliente Prova", invoice=None,
+        settings=load_settings(), sleep=lambda _: None, check=lambda: None,
+        stop=lambda stage, message, **kwargs: {"stage": stage, **kwargs},
+    )
+    assert len(calls) == expected_calls
+    assert result["stage"] == (
+        "cliente-fattura-selezionato" if available_after <= 10 else "cliente-non-univoco"
+    )
+
+
 def test_real_webdesk_invoice_fills_multiple_vat_rows_without_saving(monkeypatch):
     fake = FakeMac(
         page_url="https://sme.genya.it/Elements/Factory/Screens/MainSmartInvoice/MainSmartInvoice.html"
@@ -703,6 +728,12 @@ def test_webdesk_saved_access_logs_in_and_continues_invoice(monkeypatch):
     monkeypatch.setattr(portal.mac_browser, "fill_field", fill_field)
     monkeypatch.setattr(portal.mac_browser, "page_text", lambda *_args: "Entra in webdesk")
     monkeypatch.setattr(portal.mac_browser, "click_selector_visible", click_login)
+    def click_smart(_run, _browser, section, action):
+        assert (section, action) == ("Servizi", "Fattura SMART")
+        fake.page_url = "https://sme.genya.it/Elements/Factory/Screens/MainSmartInvoice/MainSmartInvoice.html"
+        return True
+
+    monkeypatch.setattr(portal.mac_browser, "click_text_in_section", click_smart)
     monkeypatch.setattr(
         portal,
         "_start_webdesk_invoice",
@@ -877,12 +908,22 @@ def test_direct_click_is_limited_to_visible_webdesk_login():
     assert "/Apps/Login/View" in script
     assert "e.disabled" in script
     assert "getClientRects" in script
+    assert "#loginInput" in script and "#passwordInput" in script and "#studioInput" in script
+    assert "!u.value.trim()||!p.value||!s.value.trim()" in script
     try:
         mac_browser.click_selector_script("Safari", "#saveInvoice")
     except ValueError:
         pass
     else:
         raise AssertionError("Invoice buttons must not be directly activated")
+
+
+def test_safari_open_creates_document_when_only_tabless_windows_exist():
+    script = mac_browser.open_url_script("Safari", "https://app.webdesk.it/Apps/Login/View")
+    assert "set hasWebTabs to false" in script
+    assert "count of tabs of candidateWindow" in script
+    assert "if not hasWebTabs then" in script
+    assert script.index("make new document") < script.index("Nessuna finestra Safari con schede")
 
 
 def test_planner_uses_vault_only_when_explicitly_requested() -> None:

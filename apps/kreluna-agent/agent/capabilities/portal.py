@@ -349,6 +349,25 @@ def _append_optional_evidence(
         evidence.append(item)
 
 
+def _open_webdesk_smart(run, browser, settings, sleep, check) -> bool:
+    """Entra dal servizio della Home, senza saltare il passaggio di sessione."""
+    location = urlparse(mac_browser.current_url(run, browser))
+    if location.hostname == "sme.genya.it":
+        return True
+    if location.hostname != "app.webdesk.it" or location.path != "/Apps/Dashboard/View":
+        return False
+    if not mac_browser.click_text_in_section(run, browser, "Servizi", "Fattura SMART"):
+        return False
+    # Una sola pressione. Aspetta la destinazione invece di aprire il link
+    # interno a Genya senza il contesto creato dal servizio Webdesk.
+    for _attempt in range(max(1, int(settings.wait_for_login_seconds))):
+        check()
+        sleep(1)
+        if urlparse(mac_browser.current_url(run, browser)).hostname == "sme.genya.it":
+            return True
+    return False
+
+
 def _start_webdesk_invoice(
     *,
     run: mac_browser.Runner,
@@ -366,6 +385,11 @@ def _start_webdesk_invoice(
     non e' esattamente quella attesa, si ferma invece di tentare coordinate.
     """
 
+    if not _open_webdesk_smart(run, browser, settings, sleep, check):
+        return stop(
+            "fattura-smart-non-aperta",
+            "Non riesco ad aprire Fattura SMART dal pulsante Servizi della Home Webdesk. Non compilo nulla.",
+        )
     waited = 0
     text = mac_browser.page_text(run, browser)
     while "FATTURA SMART" not in text.upper() and waited < settings.wait_for_login_seconds:
@@ -414,10 +438,18 @@ def _start_webdesk_invoice(
             "cliente-non-compilato",
             "La casella Cliente non è riconoscibile. Non scrivo in un campo incerto.",
         )
-    sleep(1)
-    if not mac_browser.click_unique_text_match(
-        run, browser, "Nuova Fattura", client_name
-    ):
+    # L'autocompletamento può arrivare dopo la prima lettura. Riprovare solo
+    # quando non è stato cliccato nulla; mai ripetere una selezione riuscita.
+    selected = False
+    for _attempt in range(10):
+        check()
+        sleep(1)
+        if mac_browser.click_unique_text_match(
+            run, browser, "Nuova Fattura", client_name
+        ):
+            selected = True
+            break
+    if not selected:
         return stop(
             "cliente-non-univoco",
             f'Ho cercato "{client_name}", ma non trovo un unico suggerimento esatto. Scegli tu il cliente.',
@@ -853,8 +885,11 @@ def open_portal(
             if (urlparse(target_url).hostname or "").lower() == "sme.genya.it" and (
                 urlparse(where).hostname or ""
             ).lower() != "sme.genya.it":
-                mac_browser.open_url(run, browser, target_url)
-                sleep(settings.poll_seconds)
+                if not _open_webdesk_smart(run, browser, settings, sleep, check):
+                    return stop(
+                        "fattura-smart-non-aperta",
+                        "Accesso riuscito, ma Fattura SMART non si è aperta dal pulsante della Home. Non compilo nulla.",
+                    )
 
             if query:
                 return _start_webdesk_invoice(
