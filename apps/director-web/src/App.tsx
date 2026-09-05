@@ -57,7 +57,7 @@ type StructuredDraft = {
   detail: string;
   visura_type: "ordinary" | "historical" | "protests" | "other";
 };
-type NavSection = "dashboard" | "agents" | "tasks" | "requests" | "errors" | "contracts" | "visure" | "vault" | "documents" | "settings";
+type NavSection = "dashboard" | "agents" | "agent-view" | "tasks" | "requests" | "errors" | "contracts" | "visure" | "vault" | "documents" | "settings";
 type RequestFilter = "all" | "active" | "errors" | "approvals";
 type LibraryCategory = "contract" | "document";
 type LibraryEditor = {
@@ -303,6 +303,7 @@ export default function App() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [aiProviders, setAIProviders] = useState<AIProviderOption[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [viewedAgentId, setViewedAgentId] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [chat, setChat] = useState<ChatItem[]>(INITIAL_CHAT);
@@ -1029,6 +1030,11 @@ export default function App() {
     setActiveNav(section); if (prompt) setDraft(prompt);
   }
 
+  function viewAgent(deviceId: string) {
+    setViewedAgentId(deviceId);
+    goTo("agent-view");
+  }
+
   function openComposer(prompt: string) {
     setDraft(prompt); setActiveNav("dashboard");
     window.setTimeout(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus(), 0);
@@ -1130,6 +1136,7 @@ export default function App() {
       const invoice = invoiceDemoFor(task);
       return <article className={`workspace-row ${task.status}`} key={task.id}>
         <span className={`workspace-row-icon ${task.status}`}>{task.status === "failed" || task.error_state === "active" ? "△" : "▣"}</span>
+        {task.assigned_device_id ? <button onClick={() => viewAgent(task.assigned_device_id!)}>Vedi Agent</button> : null}
         <div className="workspace-row-copy"><strong>{task.goal}</strong><span>{f24 ? `${f24.form_label} · saldo ${euro(f24.totals.balance_eur)} · ${f24.ready_for_review ? "validato" : "da completare"}` : work ? `${work.title} · ${work.program} · ${work.ready_for_review ? "validata" : "da completare"}` : `${task.capability.replace(/_/g, " ")} · rischio ${task.risk}`}</span>{task.error ? <small className="request-error">{task.error}</small> : null}<EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} /></div>
         <div className="workspace-row-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit" })}</time> : null}{f24 ? <button onClick={() => setF24Preview(task)}>Apri bozza</button> : invoice ? <button onClick={() => setInvoicePreview(task)}>Apri simulatore</button> : work ? <button onClick={() => setWorkPreview(task)}>Apri scheda</button> : null}{["queued", "assigned"].includes(task.status) ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div>
       </article>;
@@ -1159,6 +1166,19 @@ export default function App() {
   }
 
   function workspacePage() {
+    if (activeNav === "agent-view") {
+      const selected = viewedAgentId ? agents.find(item => item.device_id === viewedAgentId) : agents.find(agentOnline) || agents[0];
+      const related = selected ? tasks.filter(item => item.assigned_device_id === selected.device_id) : [];
+      const current = related.find(item => item.id === selected?.active_task_id);
+      return <section className="workspace-page agent-view-page" aria-labelledby="workspace-title">
+        <div className="workspace-heading"><div><span>OSSERVAZIONE DEL LAVORO</span><h2 id="workspace-title">VEDI AGENT</h2><p>Stato del PC, attività e schermate salvate. Apri questa sezione solo quando serve.</p></div><button onClick={() => goTo("dashboard")}>Torna alla chat</button></div>
+        <div className="agent-view-toolbar"><label>PC da vedere<select value={selected?.device_id || ""} onChange={event => setViewedAgentId(event.target.value)}><option value="" disabled>Seleziona un PC</option>{agents.map(item => <option key={item.device_id} value={item.device_id}>{item.display_name} · {agentOnline(item) ? "Collegato" : "Non collegato"}</option>)}</select></label><button onClick={() => void refresh()}>Aggiorna stato</button></div>
+        {selected ? <><div className="workspace-safety"><strong>{selected.display_name}</strong> · {agentOnline(selected) ? "Collegato" : "Non collegato"} · {selected.killed ? "Fermato" : selected.paused ? "Sospeso" : selected.busy ? "Occupato" : "In attesa"}{selected.last_seen_at ? <span> · Ultimo contatto: {new Date(selected.last_seen_at).toLocaleString("it-IT")}</span> : null}</div>
+        <div className="agent-view-notice"><strong>Schermo in diretta e controllo remoto non ancora disponibili</strong><p>Qui puoi consultare le prove salvate dai lavori. Non puoi ancora inserire codici o usare mouse e tastiera sull’altro PC.</p></div>
+        {current ? <p role="status">In corso: {current.goal}</p> : <p>Nessun lavoro attivo segnalato per questo PC.</p>}
+        <h3>Attività e schermate salvate</h3><p>Apri una miniatura per ingrandirla. Le immagini sono storiche, non in diretta.</p>{taskRows(related, "Questo PC non ha ancora lavori o schermate disponibili.")}</> : <div className="workspace-empty"><strong>PC non disponibile</strong><span>Seleziona un altro PC oppure configura un Agent in PC &amp; Feature.</span></div>}
+      </section>;
+    }
     if (activeNav === "agents") return <section className="workspace-page" aria-labelledby="workspace-title">
       <div className="workspace-heading"><div><span>CONTROLLO LOCALE</span><h2 id="workspace-title">PC &amp; FEATURE</h2><p>Installa, attiva o sospendi gli Agent autorizzati dello studio.</p></div><button onClick={() => void refresh()}>↻ Aggiorna stato</button></div>
       <div className="workspace-stats"><WorkspaceStat value={agents.filter(agentOnline).length} label="PC collegati" tone="green" /><WorkspaceStat value={agents.filter((item) => item.presence === "waiting_install").length} label="Da installare" tone="gold" /><WorkspaceStat value={blocked.length} label="Sospesi" tone="red" /></div>
@@ -1196,7 +1216,7 @@ export default function App() {
     </div></section>;
   }
 
-  return <div className="director-cockpit" id="dashboard">
+  return <div className={`director-cockpit ${activeNav === "agent-view" ? "viewing-agent" : ""}`} id="dashboard">
     <header className="cockpit-header">
       <div className="identity-card">
         <div className="orb brand-orb listen" aria-hidden="true"><span className="orb-core" /><span className="orb-ring" /></div>
@@ -1220,6 +1240,7 @@ export default function App() {
         <nav aria-label="Navigazione principale">
           <NavButton active={activeNav === "dashboard"} icon="⌂" label="Dashboard" onClick={() => goTo("dashboard")} />
           <NavButton active={activeNav === "agents"} icon="▱" label="PC & Feature" onClick={() => goTo("agents")} />
+          <NavButton active={activeNav === "agent-view"} icon="▣" label="Vedi Agent" onClick={() => goTo("agent-view")} />
           <NavButton active={activeNav === "tasks"} icon="⌘" label="Task" count={overview?.tasks_today} onClick={() => goTo("tasks")} />
           <NavButton active={activeNav === "requests"} icon="▱" label="Richieste" count={requestCount} onClick={() => goTo("requests")} />
           <NavButton active={activeNav === "errors"} icon="△" label="Errori" count={overview?.active_errors} onClick={() => goTo("errors")} />
@@ -1282,7 +1303,7 @@ export default function App() {
           <aside className="requests-panel" id="requests"><div className="requests-heading"><h2>RICHIESTE</h2><select aria-label="Filtra richieste" value={requestFilter} onChange={(event) => setRequestFilter(event.target.value as RequestFilter)}><option value="all">Tutte</option><option value="active">In corso</option><option value="errors">Errori</option><option value="approvals">Da approvare</option></select></div>
             <div className="request-list">
               {requestFilter !== "active" && requestFilter !== "errors" ? pending.map((item) => { const observed = ((item.preview.observed as Record<string, string>) || {}) as Record<string, string>; return <article className="request-row approval-row" id="approvals" key={item.id}><span className="request-icon">◉</span><div className="request-copy"><strong>Approvare {observed.client || "fattura"}</strong><span>{observed.total_label || "Operazione in attesa"}</span></div><div className="request-actions"><button onClick={() => api.approve(item.id).then(refresh)}>Approva</button><button onClick={() => api.reject(item.id).then(refresh)}>No</button></div></article>; }) : null}
-              {dashboardTasks.map((task) => <article className={`request-row ${task.status}`} id={task.error_state === "active" ? "errors" : undefined} key={task.id}><span className={`request-icon ${task.status}`}>{task.status === "failed" ? "△" : "▣"}</span><div className="request-copy"><strong title={task.goal}>{task.goal}</strong><EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} />{task.error ? <span className="request-error">{task.error}</span> : null}</div><div className="request-meta"><span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</time> : null}{task.status === "queued" || task.status === "assigned" ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div></article>)}
+              {dashboardTasks.map((task) => <article className={`request-row ${task.status}`} id={task.error_state === "active" ? "errors" : undefined} key={task.id}><span className={`request-icon ${task.status}`}>{task.status === "failed" ? "△" : "▣"}</span><div className="request-copy"><strong title={task.goal}>{task.goal}</strong><EvidenceStrip ids={task.evidence.map((shot) => shot.id)} onOpen={setLightbox} />{task.error ? <span className="request-error">{task.error}</span> : null}</div><div className="request-meta">{task.assigned_device_id ? <button onClick={() => viewAgent(task.assigned_device_id!)}>Vedi Agent</button> : null}<span className={`request-status ${task.status}`}>{label(TASK_LABEL, task.status)}</span>{task.created_at ? <time>{new Date(task.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</time> : null}{task.status === "queued" || task.status === "assigned" ? <button onClick={() => api.cancelTask(task.id).then(refresh)}>Annulla</button> : null}</div></article>)}
               {!dashboardTasks.length && !pending.length && requestFilter === "all" ? STARTER_REQUESTS.map((item, index) => <button className="request-row starter-row" key={item.title} onClick={() => openComposer(item.prompt)}><span className={`request-icon starter-${index}`}>{item.icon}</span><span className="request-copy"><strong>{item.title}</strong><span className="preview-strip"><i /><i /><i /><i /></span></span><span className="request-meta"><span className="request-status starter">Avvia</span><time>pronto</time></span></button>) : null}
               {!dashboardTasks.length && requestFilter !== "all" && (requestFilter !== "approvals" || !pending.length) ? <div className="request-filter-empty">Nessuna richiesta per questo filtro.</div> : null}
             </div><button className="show-all" onClick={() => setActiveNav("requests")}>Mostra tutte le richieste <span>→</span></button>

@@ -596,3 +596,32 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; scroll-behavior: auto !important; } }
+/* On-demand Agent inspection. Historical evidence must never resemble live control. */
+.director-cockpit.viewing-agent { min-width:0; }
+@media (max-width:1180px) {
+  .viewing-agent .cockpit-header { grid-template-columns:minmax(0,1fr); }
+  .viewing-agent .cockpit-header > :not(:first-child) { display:none; }
+  .viewing-agent .cockpit-body { grid-template-columns:180px minmax(0,1fr); gap:10px; padding-inline:10px; }
+  .viewing-agent .cockpit-footer { gap:8px; overflow:hidden; }
+  .viewing-agent .cockpit-footer > span:not(:last-child) { display:none; }
+}
+@media (max-width:600px) {
+  .viewing-agent .cockpit-body { grid-template-columns:60px minmax(0,1fr); }
+  .viewing-agent .cockpit-sidebar nav button strong, .viewing-agent .cockpit-sidebar nav button b,
+  .viewing-agent .cockpit-sidebar > :not(nav) { display:none; }
+  .viewing-agent .cockpit-sidebar nav button { justify-content:center; padding:8px; }
+}
+.agent-view-toolbar { display:flex; gap:16px; align-items:end; flex-wrap:wrap; margin:20px 0; }
+.agent-view-toolbar label { display:grid; gap:8px; flex:1; min-width:180px; color:#e8eaf2; }
+.agent-view-toolbar select { width:100%; padding:12px; color:#f4f5fa; background:#111b32; border:1px solid #566184; border-radius:10px; }
+.agent-view-notice { margin:20px 0; padding:20px; border:1px solid #8b743c; border-radius:12px; background:#26241d; color:#ffe5a0; }
+.agent-view-notice p { color:#f0eadc; line-height:1.6; margin-bottom:0; }
+.agent-view-page .workspace-row { flex-wrap:wrap; }
+.agent-view-page .workspace-row-copy { min-width:0; overflow-wrap:anywhere; }
+.agent-view-page .request-error { white-space:normal; overflow:visible; }
+@media (max-width:760px) {
+  .agent-view-page .workspace-heading { flex-wrap:wrap; gap:12px; }
+  .agent-view-toolbar { align-items:stretch; flex-direction:column; }
+  .agent-view-page .workspace-row { display:flex; gap:12px; }
+  .agent-view-page .workspace-row-copy { flex-basis:100%; }
+}
