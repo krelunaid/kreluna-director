@@ -597,6 +597,11 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; scroll-behavior: auto !important; } }
 /* On-demand Agent inspection. Historical evidence must never resemble live control. */
+.remote-live { padding:12px; border:1px solid var(--line); border-radius:12px; background:#091126; }
+.remote-live:fullscreen { overflow:auto; padding:24px; }
+.remote-live-image { display:block; width:100%; height:auto; cursor:crosshair; }
+.remote-live form label { display:grid; gap:8px; margin:12px 0; }
+.remote-live input { color:#fff; background:#15213f; border:1px solid #7784aa; border-radius:8px; padding:12px; width:100%; }
 .director-cockpit.viewing-agent { min-width:0; }
 @media (max-width:1180px) {
   .viewing-agent .cockpit-header { grid-template-columns:minmax(0,1fr); }

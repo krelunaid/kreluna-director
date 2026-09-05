@@ -141,7 +141,10 @@ async def agent_socket(ws: WebSocket) -> None:
                         },
                     )
                 continue
-            if msg_type == "heartbeat":
+            if msg_type == "remote_control_reply":
+                from app.services.remote_control import reply
+                reply(device_id, ws, message)
+            elif msg_type == "heartbeat":
                 async with SessionLocal() as session:
                     device = (
                         await session.execute(select(Device).where(Device.id == device_id))

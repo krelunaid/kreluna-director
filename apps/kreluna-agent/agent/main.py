@@ -26,6 +26,7 @@ from kreluna_shared.crypto import (
 from agent.capabilities import CAPABILITY_ALLOWLIST
 from agent.identity import AgentIdentity
 from agent.safety import SafetyState
+from agent.remote_control import RemoteControl
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -52,6 +53,7 @@ class AgentApp:
         self.enroll_code_path = Path(enrollment_path) if enrollment_path else None
         self.enroll_code = env("KRELUNA_ENROLLMENT_CODE") or self._read_enrollment_code()
         self.safety = SafetyState()
+        self.remote_control = RemoteControl(self.safety)
         self.server_pubkey: bytes | None = None
         self.used_nonces: set[str] = set()
         self.task_jobs: dict[str, asyncio.Task] = {}
@@ -184,11 +186,12 @@ class AgentApp:
 
     async def heartbeat(self, ws) -> None:
         while True:
+            self.remote_control.expire()
             await ws.send(
                 json.dumps(
                     {
                         "type": "heartbeat",
-                        "busy": self.safety.active_task_id is not None,
+                        "busy": self.safety.active_task_id is not None or self.safety.remote_active,
                         "active_task_id": self.safety.active_task_id,
                     }
                 )
@@ -199,7 +202,11 @@ class AgentApp:
         async for raw in ws:
             message = json.loads(raw)
             msg_type = message.get("type")
-            if msg_type == "kill":
+            if msg_type == "remote_control":
+                result = await self.remote_control.execute(message)
+                await ws.send(json.dumps({"type": "remote_control_reply", "request_id": message.get("request_id"), "result": result}))
+            elif msg_type == "kill":
+                self.remote_control.close()
                 active_task_id = self.safety.active_task_id
                 self.safety.kill()
                 self._cancel_jobs()
@@ -294,7 +301,13 @@ class AgentApp:
                 return await handler(**call_args)
             # I passi che muovono lo schermo possono durare: girano in un thread,
             # così il battito verso il Director non si ferma e il PC non sembra spento.
-            outcome = await asyncio.to_thread(lambda: handler(**call_args))
+            self.safety.workers += 1
+            def invoke_sync():
+                try:
+                    return handler(**call_args)
+                finally:
+                    self.safety.workers -= 1
+            outcome = await asyncio.to_thread(invoke_sync)
             if inspect.isawaitable(outcome):
                 return await outcome
             return outcome

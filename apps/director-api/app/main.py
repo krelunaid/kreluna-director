@@ -22,6 +22,7 @@ from app.routers.library import router as library_router
 from app.routers.vault import router as vault_router
 from app.routers.work import router as work_router
 from app.routers.ws import router as ws_router
+from app.routers.remote_control import router as remote_control_router
 from app.seed import seed_if_empty
 from app.services.housekeeping import (
     close_expired_approvals,
@@ -90,6 +91,7 @@ app.include_router(work_router)
 app.include_router(agent_io_router)
 app.include_router(billing_router)
 app.include_router(ws_router)
+app.include_router(remote_control_router)
 app.include_router(vault_router)
 app.include_router(gmail_router)
 

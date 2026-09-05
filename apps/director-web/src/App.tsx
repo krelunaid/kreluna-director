@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { RemoteAgent } from "./RemoteAgent";
 import {
   Agent,
   AIProviderOption,
@@ -1174,7 +1175,7 @@ export default function App() {
         <div className="workspace-heading"><div><span>OSSERVAZIONE DEL LAVORO</span><h2 id="workspace-title">VEDI AGENT</h2><p>Stato del PC, attività e schermate salvate. Apri questa sezione solo quando serve.</p></div><button onClick={() => goTo("dashboard")}>Torna alla chat</button></div>
         <div className="agent-view-toolbar"><label>PC da vedere<select value={selected?.device_id || ""} onChange={event => setViewedAgentId(event.target.value)}><option value="" disabled>Seleziona un PC</option>{agents.map(item => <option key={item.device_id} value={item.device_id}>{item.display_name} · {agentOnline(item) ? "Collegato" : "Non collegato"}</option>)}</select></label><button onClick={() => void refresh()}>Aggiorna stato</button></div>
         {selected ? <><div className="workspace-safety"><strong>{selected.display_name}</strong> · {agentOnline(selected) ? "Collegato" : "Non collegato"} · {selected.killed ? "Fermato" : selected.paused ? "Sospeso" : selected.busy ? "Occupato" : "In attesa"}{selected.last_seen_at ? <span> · Ultimo contatto: {new Date(selected.last_seen_at).toLocaleString("it-IT")}</span> : null}</div>
-        <div className="agent-view-notice"><strong>Schermo in diretta e controllo remoto non ancora disponibili</strong><p>Qui puoi consultare le prove salvate dai lavori. Non puoi ancora inserire codici o usare mouse e tastiera sull’altro PC.</p></div>
+        <RemoteAgent key={selected.device_id} deviceId={selected.device_id} />
         {current ? <p role="status">In corso: {current.goal}</p> : <p>Nessun lavoro attivo segnalato per questo PC.</p>}
         <h3>Attività e schermate salvate</h3><p>Apri una miniatura per ingrandirla. Le immagini sono storiche, non in diretta.</p>{taskRows(related, "Questo PC non ha ancora lavori o schermate disponibili.")}</> : <div className="workspace-empty"><strong>PC non disponibile</strong><span>Seleziona un altro PC oppure configura un Agent in PC &amp; Feature.</span></div>}
       </section>;

@@ -9,6 +9,8 @@ class SafetyState:
     def __init__(self) -> None:
         self.killed = False
         self.paused = False
+        self.remote_active = False
+        self.workers = 0
         self.gui_lock = asyncio.Lock()
         self.active_task_id: str | None = None
         self.cancelled_tasks: set[str] = set()
@@ -16,6 +18,8 @@ class SafetyState:
         self._process_lock = threading.Lock()
 
     def assert_not_killed(self) -> None:
+        if self.remote_active:
+            raise PermissionError("Assistenza remota attiva: nessuna automazione consentita")
         if self.killed:
             raise PermissionError("AGENT_KILLED")
         if self.paused:
