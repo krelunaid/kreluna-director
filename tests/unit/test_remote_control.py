@@ -9,6 +9,18 @@ from agent.safety import SafetyState
 from app.services import remote_control as relay
 
 
+
+def test_native_capture_uses_socket_when_available(monkeypatch):
+    from agent import remote_control as module
+    monkeypatch.setenv('KRELUNA_NATIVE_CAPTURE_SOCK', '/tmp/kreluna-capture.sock')
+    monkeypatch.setenv('KRELUNA_NATIVE_CAPTURE', '/Applications/Kreluna Agent.app/Contents/MacOS/Kreluna')
+    run = Mock()
+    monkeypatch.setattr(module.subprocess, 'run', run)
+    monkeypatch.setattr(module, 'capture_via_socket', lambda path: ('jpeg', (1512, 982)))
+    assert module.capture() == ('jpeg', (1512, 982))
+    run.assert_not_called()
+
+
 def test_native_capture_uses_app_and_logical_dimensions(monkeypatch):
     from agent import remote_control as module
     monkeypatch.setenv('KRELUNA_NATIVE_CAPTURE', '/Applications/Kreluna Agent.app/Contents/MacOS/Kreluna')

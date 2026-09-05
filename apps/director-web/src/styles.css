@@ -599,9 +599,17 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 /* On-demand Agent inspection. Historical evidence must never resemble live control. */
 .remote-live { padding:12px; border:1px solid var(--line); border-radius:12px; background:#091126; }
 .remote-live:fullscreen { overflow:auto; padding:24px; }
-.remote-live-image { display:block; width:100%; height:auto; cursor:crosshair; }
+.remote-live-image { display:block; width:100%; height:auto; cursor:crosshair; border-radius:10px; }
 .remote-live form label { display:grid; gap:8px; margin:12px 0; }
 .remote-live input { color:#fff; background:#15213f; border:1px solid #7784aa; border-radius:8px; padding:12px; width:100%; }
+.remote-pip { position:fixed; z-index:28; right:18px; bottom:18px; width:min(280px, 42vw); padding:0; border:1px solid rgba(244, 210, 119, .45); border-radius:14px; overflow:hidden; background:#0b1428; box-shadow:0 18px 50px rgba(0,0,0,.45); cursor:zoom-in; }
+.remote-pip .remote-live-image { cursor:zoom-in; }
+.remote-pip-hint { display:block; padding:7px 10px; color:#f4d277; background:rgba(8,14,28,.92); font-size:11px; font-weight:700; letter-spacing:.02em; }
+.remote-live-stage { display:block; width:100%; padding:0; border:0; background:transparent; }
+.remote-expand { position:fixed; z-index:32; inset:0; display:grid; place-items:center; padding:18px; background:rgba(2,5,12,.86); backdrop-filter:blur(8px); }
+.remote-expand-card { width:min(1100px, 96vw); max-height:94vh; overflow:auto; display:grid; gap:12px; padding:16px; border:1px solid rgba(126,109,255,.38); border-radius:18px; background:linear-gradient(145deg,#111c38,#081226); box-shadow:0 34px 100px #000; color:#eef1ff; }
+.remote-expand-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.remote-expand-heading button { width:36px; height:36px; border-radius:999px; border:1px solid rgba(118,132,189,.34); background:#172342; color:#d8def0; font-size:20px; line-height:1; }
 .director-cockpit.viewing-agent { min-width:0; }
 @media (max-width:1180px) {
   .viewing-agent .cockpit-header { grid-template-columns:minmax(0,1fr); }

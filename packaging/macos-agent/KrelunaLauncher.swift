@@ -1,11 +1,37 @@
 import Cocoa
+import Darwin
 import ScreenCaptureKit
 
-// Invoked only by the authenticated remote-session worker. No listening port,
-// files, or frame logging: the native app returns one frame through stdout.
+// Invoked only by the authenticated remote-session worker. No listening port
+// on the network, files, or frame logging: frames stay on a local UNIX socket
+// owned by the LaunchServices-launched app process (same TCC identity).
+func ensureScreenCaptureAccess() -> Bool {
+    // TCC prompts must run on the main thread; background socket workers otherwise
+    // get a silent denial even when Settings appears enabled.
+    if Thread.isMainThread {
+        return CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
+    }
+    var allowed = false
+    DispatchQueue.main.sync {
+        allowed = CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
+    }
+    return allowed
+}
+
+func openScreenCaptureSettings() {
+    let urls = [
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_ScreenCapture",
+    ]
+    for raw in urls {
+        if let url = URL(string: raw), NSWorkspace.shared.open(url) { return }
+    }
+}
+
 @available(macOS 14.0, *)
 func captureNativeFrame() async throws -> [String: Any] {
-    guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+    guard ensureScreenCaptureAccess() else {
+        openScreenCaptureSettings()
         return ["error": "Autorizza Kreluna Agent in Registrazione schermo, poi riavvia l’Agent."]
     }
     let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
@@ -27,11 +53,131 @@ func captureNativeFrame() async throws -> [String: Any] {
     return ["image": jpeg.base64EncodedString(), "width": bounds.width, "height": bounds.height]
 }
 
+func encodeCapturePayload(_ result: [String: Any]) -> Data {
+    (try? JSONSerialization.data(withJSONObject: result)) ?? Data("{\"error\":\"JSON non disponibile\"}".utf8)
+}
+
+/// Local capture bridge. Spawning `Kreluna --capture-frame` as a CLI child loses
+/// the LaunchServices TCC identity after re-signing; keep ScreenCaptureKit in
+/// the same process that was opened as Kreluna Agent.app.
+final class CaptureSocketServer {
+    private let path: String
+    private var listenFD: Int32 = -1
+    private let queue = DispatchQueue(label: "studio.kreluna.agent.capture")
+
+    init(path: String) {
+        self.path = path
+    }
+
+    func start() {
+        unlink(path)
+        listenFD = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard listenFD >= 0 else { return }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let maxPath = MemoryLayout.size(ofValue: addr.sun_path)
+        let pathBytes = Array(path.utf8)
+        guard pathBytes.count + 1 <= maxPath else {
+            close(listenFD)
+            listenFD = -1
+            return
+        }
+        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+            ptr.withMemoryRebound(to: UInt8.self, capacity: maxPath) { bytes in
+                for i in 0..<pathBytes.count {
+                    bytes[i] = pathBytes[i]
+                }
+                bytes[pathBytes.count] = 0
+            }
+        }
+
+        let bindSize = socklen_t(MemoryLayout<sockaddr_un>.size)
+        let bindResult = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                Darwin.bind(listenFD, sockPtr, bindSize)
+            }
+        }
+        guard bindResult == 0, Darwin.listen(listenFD, 2) == 0 else {
+            close(listenFD)
+            listenFD = -1
+            return
+        }
+        chmod(path, 0o600)
+
+        queue.async { [weak self] in
+            self?.acceptLoop()
+        }
+    }
+
+    func stop() {
+        if listenFD >= 0 {
+            close(listenFD)
+            listenFD = -1
+        }
+        unlink(path)
+    }
+
+    private func acceptLoop() {
+        while listenFD >= 0 {
+            let client = Darwin.accept(listenFD, nil, nil)
+            if client < 0 {
+                if errno == EINTR { continue }
+                break
+            }
+            handleClient(client)
+        }
+    }
+
+    private func handleClient(_ client: Int32) {
+        defer { close(client) }
+        var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let n = read(client, &chunk, chunk.count)
+            if n < 0 {
+                if errno == EINTR { continue }
+                return
+            }
+            if n == 0 { return }
+            buffer.append(contentsOf: chunk[0..<n])
+            if buffer.contains(UInt8(ascii: "\n")) { break }
+            if buffer.count > 64_000 { return }
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var payload = Data("{\"error\":\"Cattura non riuscita\"}".utf8)
+        if #available(macOS 14.0, *) {
+            Task {
+                let result: [String: Any]
+                do { result = try await captureNativeFrame() }
+                catch { result = ["error": "Cattura nativa non disponibile: verifica il permesso Registrazione schermo di Kreluna Agent."] }
+                payload = encodeCapturePayload(result)
+                semaphore.signal()
+            }
+        } else {
+            payload = encodeCapturePayload(["error": "La visualizzazione remota richiede macOS 14 o successivo"])
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 12)
+        var toWrite = payload
+        toWrite.append(UInt8(ascii: "\n"))
+        _ = toWrite.withUnsafeBytes { raw in
+            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+            return write(client, base, toWrite.count)
+        }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var agentProcess: Process?
     private var guideProcess: Process?
+    private var captureServer: CaptureSocketServer?
+    private var captureSocketPath: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        requestScreenPermissionIfNeeded()
+        startCaptureServer()
         startAgent()
     }
 
@@ -51,6 +197,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let process = guideProcess, process.isRunning {
             process.terminate()
         }
+        captureServer?.stop()
+    }
+
+    private func requestScreenPermissionIfNeeded() {
+        // Ask from the LS-launched app itself so System Settings binds the grant
+        // to studio.kreluna.agent / current code signature — not to a CLI child.
+        if ensureScreenCaptureAccess() { return }
+        openScreenCaptureSettings()
+    }
+
+    private func startCaptureServer() {
+        guard
+            let support = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first
+        else { return }
+        let dataRoot = support.appendingPathComponent("KrelunaAgent")
+        try? FileManager.default.createDirectory(
+            at: dataRoot.appendingPathComponent("data"),
+            withIntermediateDirectories: true
+        )
+        let sockURL = dataRoot.appendingPathComponent("capture.sock")
+        captureSocketPath = sockURL.path
+        let server = CaptureSocketServer(path: sockURL.path)
+        server.start()
+        captureServer = server
     }
 
     private func configuredProcess(guideOnly: Bool) -> Process? {
@@ -80,6 +253,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["KRELUNA_AGENT_DATA_DIR"] = dataRoot.appendingPathComponent("data").path
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         environment["KRELUNA_TRUST_SAVED_CONFIG"] = "1"
+        // Prefer the in-app socket. Keep the executable path only as a legacy
+        // fallback; CLI --capture-frame does not inherit TCC after re-sign.
+        if let sock = captureSocketPath {
+            environment["KRELUNA_NATIVE_CAPTURE_SOCK"] = sock
+        }
         environment["KRELUNA_NATIVE_CAPTURE"] = Bundle.main.executableURL?.path
         if guideOnly {
             environment["KRELUNA_GUIDE_ONLY"] = "1"
@@ -141,6 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 if CommandLine.arguments.contains("--capture-frame") {
+    // Legacy CLI entry. Prefer the UNIX socket owned by the LS-launched app.
     Task {
         let result: [String: Any]
         if #available(macOS 14.0, *) {
@@ -149,9 +328,7 @@ if CommandLine.arguments.contains("--capture-frame") {
         } else {
             result = ["error": "La visualizzazione remota richiede macOS 14 o successivo"]
         }
-        if let data = try? JSONSerialization.data(withJSONObject: result) {
-            FileHandle.standardOutput.write(data)
-        }
+        FileHandle.standardOutput.write(encodeCapturePayload(result))
         exit(0)
     }
     RunLoop.main.run()

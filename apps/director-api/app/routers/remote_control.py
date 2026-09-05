@@ -15,7 +15,8 @@ router = APIRouter()
 
 
 class RemoteCommand(BaseModel):
-    action: Literal["start", "frame", "control", "click", "text", "key", "close"]
+    action: Literal["start", "frame", "control", "click", "scroll", "text", "key", "close"]
+    delta_y: int = Field(default=0, ge=-800, le=800)
     session_id: str = Field(default="", max_length=64)
     frame_id: str = Field(default="", max_length=64)
     x: float = Field(default=0, ge=0, lt=1)

@@ -58,17 +58,45 @@ def require_screen_permission(q):
     raise RuntimeError("macOS non ha ancora autorizzato il processo di cattura. Consenti la richiesta mostrata da Kreluna Agent (o dal suo Python), poi riavvia Kreluna Agent. Nessuna immagine acquisita.")
 
 
+def _frame_from_payload(frame: dict):
+    if frame.get('error'):
+        raise RuntimeError(frame['error'])
+    if not frame.get('image') or frame.get('width', 0) <= 0 or frame.get('height', 0) <= 0:
+        raise RuntimeError('Risposta di cattura nativa non valida')
+    return frame['image'], (frame['width'], frame['height'])
+
+
+def capture_via_socket(path: str):
+    """Ask the LS-launched app process for a frame (same TCC identity)."""
+    import socket
+
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(10)
+        sock.connect(path)
+        sock.sendall(b'{"op":"capture"}\n')
+        chunks = []
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            if b'\n' in chunk:
+                break
+    raw = b''.join(chunks).split(b'\n', 1)[0]
+    return _frame_from_payload(json.loads(raw.decode()))
+
+
 def capture():
+    sock = os.environ.get('KRELUNA_NATIVE_CAPTURE_SOCK')
+    if sock:
+        return capture_via_socket(sock)
     native = os.environ.get('KRELUNA_NATIVE_CAPTURE')
     if native:
+        # Legacy CLI path. Prefer KRELUNA_NATIVE_CAPTURE_SOCK: a fresh
+        # `Kreluna --capture-frame` process often loses Screen Recording after re-sign.
         result = subprocess.run([native, '--capture-frame'], check=True,
                                 capture_output=True, timeout=10)
-        frame = json.loads(result.stdout)
-        if frame.get('error'):
-            raise RuntimeError(frame['error'])
-        if not frame.get('image') or frame.get('width', 0) <= 0 or frame.get('height', 0) <= 0:
-            raise RuntimeError('Risposta di cattura nativa non valida')
-        return frame['image'], (frame['width'], frame['height'])
+        return _frame_from_payload(json.loads(result.stdout))
     q = quartz()
     require_screen_permission(q)
     q.CGMainDisplayID.restype = ctypes.c_uint32
@@ -94,14 +122,25 @@ def input_event(body, size):
     q.AXIsProcessTrusted.restype = ctypes.c_bool
     if not q.AXIsProcessTrusted():
         raise RuntimeError("Consenti Accessibilità a Kreluna Agent sul Mac remoto")
-    if body['action'] == 'click':
+    if body['action'] in {'click', 'scroll'}:
         q.CGEventCreateMouseEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint32, Point, ctypes.c_uint32]
         q.CGEventCreateMouseEvent.restype = ctypes.c_void_p
-        events = [(kind, Point(body['x'] * size[0], body['y'] * size[1])) for kind in (5, 1, 2)]
+        kinds = (5,) if body['action'] == 'scroll' else (5, 1, 2)
+        events = [(kind, Point(body['x'] * size[0], body['y'] * size[1])) for kind in kinds]
         for kind, point in events:
             event = q.CGEventCreateMouseEvent(None, kind, point, 0)
             if not event:
                 raise RuntimeError("Evento mouse non disponibile")
+            try:
+                q.CGEventPost(0, event)
+            finally:
+                q.CFRelease(event)
+        if body['action'] == 'scroll':
+            q.CGEventCreateScrollWheelEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
+            q.CGEventCreateScrollWheelEvent.restype = ctypes.c_void_p
+            event = q.CGEventCreateScrollWheelEvent(None, 0, 1, ctypes.c_int32(-body['delta_y']))
+            if not event:
+                raise RuntimeError("Scorrimento non disponibile")
             try:
                 q.CGEventPost(0, event)
             finally:
@@ -186,12 +225,14 @@ class RemoteControl:
             if action == 'frame':
                 data, self.size = await asyncio.to_thread(capture)
                 return self.frame(data)
-            if action not in {'click', 'key', 'text'} or not self.control:
+            if action not in {'click', 'scroll', 'key', 'text'} or not self.control:
                 raise RuntimeError("Premi Intervieni prima di usare mouse o tastiera")
             if body.get('frame_id') != self.frame_id or time.monotonic() - self.frame_at > 5:
                 raise RuntimeError("Immagine non aggiornata: attendi una nuova schermata")
             if not (0 <= body.get('x', 0) < 1 and 0 <= body.get('y', 0) < 1) or len(body.get('text', '')) > 256:
                 raise RuntimeError("Comando non valido")
+            if action == 'scroll' and (type(body.get('delta_y')) is not int or not -800 <= body['delta_y'] <= 800):
+                raise RuntimeError("Scorrimento non valido")
             self.frame_id = ''  # A second action requires a fresh observation.
             await asyncio.to_thread(input_event, body, self.size)
             return {'ok': True}
