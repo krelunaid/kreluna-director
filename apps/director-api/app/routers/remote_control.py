@@ -1,5 +1,4 @@
 from typing import Annotated, Literal
-import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
@@ -42,7 +41,7 @@ async def remote_control(device_id: str, body: RemoteCommand, response: Response
         raise HTTPException(409, "Agent fermato: assistenza remota disabilitata")
     try:
         result = await command(device_id, {**body.model_dump(), "owner": actor.user_id})
-    except (TimeoutError, asyncio.TimeoutError, ConnectionError, RuntimeError):
+    except (TimeoutError, ConnectionError, RuntimeError):
         raise HTTPException(503, "Agent non raggiungibile o da aggiornare") from None
     if not result.get("ok"):
         raise HTTPException(409, result.get("error", "Comando non eseguito"))

@@ -1,8 +1,6 @@
 """Pausa o assistenza remota: il lavoro torna in coda e Riprendi lo rimanda al PC."""
 
 import pytest
-from sqlalchemy import select
-
 from app.database import Base, SessionLocal, engine
 from app.models import Device, Task, utcnow
 from app.seed import DEMO_TENANT_ID, DEMO_USER_ID
@@ -12,6 +10,7 @@ from app.services.orchestrator import (
     resume_device_work,
 )
 from app.services.registry import hub, requeue_device_tasks
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -176,7 +175,7 @@ async def test_closing_remote_does_not_start_work_while_pc_is_paused(session):
 
 @pytest.mark.asyncio
 async def test_stale_remote_italian_error_is_also_requeued(session):
-    device, task = await a_pc_with_invoice(session, "testo-it")
+    _device, task = await a_pc_with_invoice(session, "testo-it")
     task.status = "failed"
     task.assigned_device_id = None
     task.error = "Assistenza remota attiva: nessuna automazione consentita"

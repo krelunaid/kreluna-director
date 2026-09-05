@@ -1,13 +1,11 @@
 import asyncio
 import time
-
-import pytest
 from unittest.mock import Mock
 
+import pytest
 from agent.remote_control import RemoteControl
 from agent.safety import SafetyState
 from app.services import remote_control as relay
-
 
 
 def test_native_capture_uses_socket_when_available(monkeypatch):
