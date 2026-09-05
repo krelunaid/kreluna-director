@@ -424,6 +424,11 @@ def test_invoice_preconditions_stop_before_document_clicks(monkeypatch, account,
     assert result["outcome"] == "blocked"
     assert result["step"] == step
     assert result["filled"] is False
+    if step == "emittente-da-verificare" and account:
+        assert account in result["message"] and page in result["message"]
+        assert "Non serve riconfigurare Gmail" in result["message"]
+    elif not account:
+        assert "Da quale azienda" in result["message"]
 
 
 def test_explicit_invoice_parties_before_amount_are_not_reversed():

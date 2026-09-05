@@ -416,10 +416,23 @@ def _start_webdesk_invoice(
         issuers = re.findall(r"(?im)^\s*Mittente\s*[:\t ]*\n?([^\n]+)", text)
         normalize = lambda value: " ".join(value.casefold().split())
         if not expected or len(issuers) != 1 or normalize(issuers[0]) != normalize(expected):
+            if expected and len(issuers) == 1:
+                message = (
+                    f'Webdesk è aperto per “{issuers[0].strip()}”, ma hai richiesto '
+                    f'una fattura emessa da “{expected}”. '
+                    "Seleziona l’azienda richiesta in Webdesk oppure collega il suo accesso. "
+                    "Non serve riconfigurare Gmail. Nessuna fattura aperta, salvata o inviata."
+                )
+            elif not expected:
+                message = "Da quale azienda deve essere emessa la fattura? Indica il nome dell’emittente."
+            else:
+                message = (
+                    f'Non riesco a leggere un emittente univoco in Webdesk per “{expected}”. '
+                    "Controlla l’azienda selezionata. Nessuna fattura aperta, salvata o inviata."
+                )
             return stop(
                 "emittente-da-verificare",
-                "Non posso confermare che l'azienda attiva corrisponda all'emittente richiesto. "
-                "Mi fermo prima di aprire una fattura: occorre identificare l'azienda corretta.",
+                message,
             )
         if invoice.get("vat_treatment") == "intent_declaration" or any(
             row.get("vat_treatment") == "intent_declaration"
