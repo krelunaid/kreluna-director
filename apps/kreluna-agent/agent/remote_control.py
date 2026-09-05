@@ -38,11 +38,27 @@ def quartz():
     return q
 
 
+_screen_permission_requested = False
+
+
+def require_screen_permission(q):
+    global _screen_permission_requested
+    q.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+    if q.CGPreflightScreenCaptureAccess():
+        return
+    # This path is reached only after the user explicitly opens remote view.
+    # Request from the actual worker, not an unrelated terminal or Finder entry.
+    if not _screen_permission_requested:
+        _screen_permission_requested = True
+        q.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+        if q.CGRequestScreenCaptureAccess():
+            return
+    raise RuntimeError("macOS non ha ancora autorizzato il processo di cattura. Consenti la richiesta mostrata da Kreluna Agent (o dal suo Python), poi riavvia Kreluna Agent. Nessuna immagine acquisita.")
+
+
 def capture():
     q = quartz()
-    q.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
-    if not q.CGPreflightScreenCaptureAccess():
-        raise RuntimeError("Consenti Registrazione schermo a Kreluna Agent sul Mac remoto")
+    require_screen_permission(q)
     q.CGMainDisplayID.restype = ctypes.c_uint32
     q.CGDisplayBounds.argtypes = [ctypes.c_uint32]
     q.CGDisplayBounds.restype = Rect

@@ -2,10 +2,35 @@ import asyncio
 import time
 
 import pytest
+from unittest.mock import Mock
 
 from agent.remote_control import RemoteControl
 from agent.safety import SafetyState
 from app.services import remote_control as relay
+
+
+def test_permission_requested_once_and_rechecked(monkeypatch):
+    from agent import remote_control as module
+    monkeypatch.setattr(module, '_screen_permission_requested', False)
+    q = Mock()
+    q.CGPreflightScreenCaptureAccess.return_value = False
+    q.CGRequestScreenCaptureAccess.return_value = False
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            module.require_screen_permission(q)
+    assert q.CGRequestScreenCaptureAccess.call_count == 1
+    q.CGPreflightScreenCaptureAccess.return_value = True
+    module.require_screen_permission(q)
+    assert q.CGRequestScreenCaptureAccess.call_count == 1
+
+
+def test_permission_granted_by_native_request(monkeypatch):
+    from agent import remote_control as module
+    monkeypatch.setattr(module, '_screen_permission_requested', False)
+    q = Mock()
+    q.CGPreflightScreenCaptureAccess.return_value = False
+    q.CGRequestScreenCaptureAccess.return_value = True
+    module.require_screen_permission(q)
 
 
 @pytest.mark.asyncio
