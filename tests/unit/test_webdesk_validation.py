@@ -20,6 +20,16 @@ def test_browser_errors_never_expose_code():
     assert webdesk_validation.perform(BadRunner(), "Safari", "submit", "test@example.test", "123456") == {"stage": "unknown"}
 
 
+def test_safari_validation_targets_unique_exact_page_not_front_window():
+    for action in ("inspect", "request", "submit", "continue"):
+        script = webdesk_validation.script("Safari", action, "test@example.test", "123456")
+        assert "repeat with candidateTab in tabs of candidateWindow" in script
+        assert "(count of matches) is not 1" in script
+        assert "in validationTab" in script
+        assert "current tab of webWindow" not in script
+        assert ' & "?"' in script and ' & "#"' in script
+
+
 def test_validated_page_continues_without_requesting_another_code(monkeypatch):
     actions = []
     def perform(*args):

@@ -47,6 +47,30 @@ def script(browser, action="inspect", recipient="", code=""):
         js += "field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));"
         js += "if(!visible(confirm))return JSON.stringify({stage:'changed'});confirm.click();"
     js += "return JSON.stringify({stage:stage,recipient:recipient,acted:" + ("false" if action == "inspect" else "true") + "});})()"
+    if browser == "Safari":
+        # Validation opens in another window. Never use the first/front window:
+        # it can be the login form or an unrelated site. Refuse ambiguous tabs.
+        payload = js.replace("\\", "\\\\").replace('"', '\\"')
+        return '''
+tell application "Safari"
+  set matches to {}
+  repeat with candidateWindow in windows
+    if (count of tabs of candidateWindow) > 0 then
+      repeat with candidateTab in tabs of candidateWindow
+        set candidateURL to URL of candidateTab
+        repeat with baseURL in {"https://webdesk.it/Account/AccessNewLocation.aspx", "https://www.webdesk.it/Account/AccessNewLocation.aspx"}
+          if candidateURL is (baseURL as text) or candidateURL starts with ((baseURL as text) & "?") or candidateURL starts with ((baseURL as text) & "#") then
+            set end of matches to contents of candidateTab
+          end if
+        end repeat
+      end repeat
+    end if
+  end repeat
+  if (count of matches) is not 1 then return "{\\"stage\\":\\"unknown\\"}"
+  set validationTab to item 1 of matches
+  return do JavaScript "''' + payload + '''" in validationTab
+end tell
+'''
     return mac_browser._js(browser, js, read_only=action == "inspect")
 
 
