@@ -44,6 +44,7 @@ from app.models import (
 from app.services.audit import write_audit
 from app.services.gmail import GmailError, digest
 from app.services.ledger import create_draft, observed_from_draft, verify_invoice
+from app.services.orchestrator import INTERRUPT_REQUEUE_ERRORS
 from app.services.registry import hub
 from app.services.vault import (
     client_key_for_name,
@@ -472,8 +473,8 @@ async def ingest(body: IngestBody, session: Annotated[AsyncSession, Depends(get_
     elif body.ok and body.result.get("ok", True) is not False:
         task.status = "completed"
         task.error = None
-    elif (body.error or "") in {"AGENT_KILLED", "AGENT_PAUSED"}:
-        # Il PC era fermo, non è un errore del lavoro: resta in coda per dopo il Riprendi.
+    elif (body.error or "") in INTERRUPT_REQUEUE_ERRORS:
+        # PC fermo o assistenza remota: il lavoro resta in coda per Riprendi lavoro.
         task.status = "queued"
         task.assigned_device_id = None
         task.error = None
@@ -602,6 +603,8 @@ def _readable_error(error: str | None, device: Device) -> str:
         return f"{device.display_name or device.agent_id} non è il PC che fa questo lavoro."
     if raw == "NOT_READY":
         return "Quel PC si è appena collegato: riprova."
+    if raw == "AGENT_REMOTE":
+        return "Assistenza remota aperta: il lavoro è rimasto in attesa. Chiudi lo schermo remoto e premi Riprendi lavoro."
     return raw or "Errore senza spiegazione dal PC."
 
 

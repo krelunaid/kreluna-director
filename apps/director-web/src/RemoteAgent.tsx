@@ -3,13 +3,24 @@ import { token } from "./lib/api";
 
 type Frame = { session_id: string; frame_id: string; image: string; control: boolean };
 
-export function RemoteAgent({ deviceId }: { deviceId: string }) {
+export function RemoteAgent({
+  deviceId,
+  resumeBusy,
+  onClosed,
+  onResumeWork,
+}: {
+  deviceId: string;
+  resumeBusy?: boolean;
+  onClosed?: () => void;
+  onResumeWork?: () => void;
+}) {
   const [frame, setFrame] = useState<Frame | null>(null);
   const [control, setControl] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [text, setText] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [freed, setFreed] = useState(false);
   const session = useRef("");
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -36,8 +47,11 @@ export function RemoteAgent({ deviceId }: { deviceId: string }) {
         return;
       }
       setError("");
-      if (action === "close") { session.current = ""; setFrame(null); setControl(false); setText(""); setExpanded(false); }
-      else if (action === "start" || action === "frame") setFrame(result);
+      if (action === "close") {
+        session.current = ""; setFrame(null); setControl(false); setText(""); setExpanded(false); setFreed(true);
+        onClosed?.();
+      }
+      else if (action === "start" || action === "frame") { setFreed(false); setFrame(result); }
       else if (action === "control") setControl(true);
       else { setText(""); setFrame(await send("frame")); }
     } catch (e) {
@@ -48,6 +62,7 @@ export function RemoteAgent({ deviceId }: { deviceId: string }) {
 
   useEffect(() => {
     mounted.current = true;
+    setFreed(false);
     return () => {
       mounted.current = false;
       if (session.current) void send("close").catch(() => undefined);
@@ -81,10 +96,15 @@ export function RemoteAgent({ deviceId }: { deviceId: string }) {
     <div className="agent-view-notice">
       <strong>{frame ? control ? "Controllo manuale · Automazione esclusa" : "Schermo remoto · Sola osservazione" : "Assistenza remota · macOS"}</strong>
       <p>{frame
-        ? "Schermino soft in basso a destra: clicca per ingrandire e usare lo schermo. Nessuna registrazione."
+        ? "Schermino soft in basso a destra: clicca per ingrandire e usare lo schermo. Nessuna registrazione. L’automazione resta ferma finché tieni aperto lo schermo remoto."
         : "Condividi lo schermo principale, incluse eventuali informazioni visibili. Nessuna registrazione. L’apertura richiede che l’Agent non stia eseguendo un lavoro."}</p>
     </div>
     {error ? <p role="alert">{error}</p> : null}
+    {freed && !frame ? <div className="resume-work-panel" role="status">
+      <strong>Assistenza remota chiusa</strong>
+      <p>Il PC può di nuovo lavorare da solo. <strong>Riprendi lavoro</strong> rimanda i lavori in attesa (per esempio una fattura Webdesk) e li fa ripartire da capo. Non continua il modulo del portale dal click esatto: se la pagina è rimasta a metà, è più sicuro ricominciare.</p>
+      {onResumeWork ? <button disabled={resumeBusy} onClick={onResumeWork}>{resumeBusy ? "Ripresa…" : "Riprendi lavoro"}</button> : null}
+    </div> : null}
     {!frame ? <div className="agent-view-toolbar">
       <button disabled={busy} onClick={() => void act("start")}>{busy ? "Collegamento…" : "Apri schermo remoto"}</button>
     </div> : null}
@@ -121,7 +141,7 @@ export function RemoteAgent({ deviceId }: { deviceId: string }) {
             <button disabled={busy || !text}>Inserisci testo</button>
             <div className="agent-view-toolbar">{["Tab", "Backspace", "Escape", "Enter"].map(key => <button type="button" disabled={busy} key={key} onClick={() => { if (key !== "Enter" || window.confirm("Inviare il tasto Invio al PC remoto? Può confermare il modulo selezionato.")) void act("key", { key }); }}>{key === "Enter" ? "Invio…" : key}</button>)}</div>
           </form> : null}
-          <p>Chiudere libera il PC. Non riavvia e non duplica il lavoro interrotto. La ripresa automatica della fattura non è ancora disponibile.</p>
+          <p>Chiudere libera il PC e consente di nuovo l’automazione. Poi usa <strong>Riprendi lavoro</strong> per riavviare i lavori in attesa da capo. Non continua un modulo del portale dal punto esatto in cui ti sei fermato.</p>
         </div>
       </div>
     ) : null}

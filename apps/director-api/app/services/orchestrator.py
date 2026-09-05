@@ -15,9 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Approval, Device, Task, UsedNonce, utcnow
 from app.services.audit import write_audit
-from app.services.registry import hub, mark_offline_stale, score_agent
+from app.services.registry import hub, mark_offline_stale, requeue_device_tasks, score_agent
 
 LIVE_STATUSES = ("queued", "assigned", "running", "waiting_approval")
+# Pause, stop, or remote assistance: the job is intact and must stay queued.
+INTERRUPT_REQUEUE_ERRORS = ("AGENT_KILLED", "AGENT_PAUSED", "AGENT_REMOTE")
+REMOTE_BLOCK_ERRORS = (
+    "AGENT_REMOTE",
+    "Assistenza remota attiva: nessuna automazione consentita",
+)
 
 
 def idempotency_key(tenant_id: str, capability: str, args: dict) -> str:
@@ -120,6 +126,71 @@ async def dispatch_queued(session: AsyncSession) -> list[Task]:
         await dispatch_to_device(session, task, device)
         dispatched.append(task)
     return dispatched
+
+
+async def recover_remote_blocked_tasks(session: AsyncSession, tenant_id: str) -> int:
+    """Un lavoro rifiutato perché era aperta l'assistenza remota torna in coda."""
+
+    rows = (
+        await session.execute(
+            select(Task).where(
+                Task.tenant_id == tenant_id,
+                Task.status == "failed",
+                Task.error.in_(REMOTE_BLOCK_ERRORS),
+            )
+        )
+    ).scalars().all()
+    for task in rows:
+        task.status = "queued"
+        task.assigned_device_id = None
+        task.error = None
+    return len(rows)
+
+
+async def resume_device_work(session: AsyncSession, device: Device, actor: str) -> dict:
+    """Riattiva il PC e rimanda subito i lavori in coda. Non riprende un modulo a metà."""
+
+    device.killed = False
+    device.paused = False
+    if device.id in hub.agents:
+        device.presence = "online"
+        device.last_seen_at = utcnow()
+        await hub.send_agent(device.id, {"type": "resume"})
+    elif device.presence in {"paused", "killed"}:
+        device.presence = "offline"
+    recovered = await recover_remote_blocked_tasks(session, device.tenant_id)
+    dispatched = await dispatch_queued(session)
+    await write_audit(
+        session,
+        tenant_id=device.tenant_id,
+        actor=actor,
+        action="agent.resume_work",
+        result="ok",
+        device_id=device.id,
+        detail=json.dumps({"dispatched_tasks": len(dispatched), "requeued_blocked": recovered}),
+    )
+    return {
+        "ok": True,
+        "dispatched_tasks": len(dispatched),
+        "requeued_blocked": recovered,
+    }
+
+
+async def release_remote_and_nudge(session: AsyncSession, device: Device) -> dict:
+    """Dopo Chiudi: il PC è di nuovo libero. Rimette in coda ciò che era bloccato e lo rimanda."""
+
+    recovered = await recover_remote_blocked_tasks(session, device.tenant_id)
+    requeued = 0
+    if not device.paused and not device.killed:
+        requeued = await requeue_device_tasks(session, device.id)
+        dispatched = await dispatch_queued(session)
+    else:
+        dispatched = []
+    return {
+        "requeued_blocked": recovered,
+        "requeued_tasks": requeued,
+        "dispatched_tasks": len(dispatched),
+    }
 
 
 async def consumed_nonces(session: AsyncSession) -> set[str]:

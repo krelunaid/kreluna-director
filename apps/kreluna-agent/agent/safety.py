@@ -19,7 +19,7 @@ class SafetyState:
 
     def assert_not_killed(self) -> None:
         if self.remote_active:
-            raise PermissionError("Assistenza remota attiva: nessuna automazione consentita")
+            raise PermissionError("AGENT_REMOTE")
         if self.killed:
             raise PermissionError("AGENT_KILLED")
         if self.paused:

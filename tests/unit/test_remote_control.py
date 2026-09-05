@@ -75,7 +75,7 @@ async def test_remote_lease_guards_and_input(monkeypatch):
     remote = RemoteControl(safety)
     frame = await remote.execute({'action': 'start', 'owner': 'a'})
     assert frame['ok'] and safety.remote_active
-    with pytest.raises(PermissionError):
+    with pytest.raises(PermissionError, match="AGENT_REMOTE"):
         safety.assert_not_killed()
     body = {'owner': 'a', 'session_id': frame['session_id'], 'frame_id': frame['frame_id']}
     assert not (await remote.execute({**body, 'action': 'click'}))['ok']

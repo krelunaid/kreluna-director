@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.deps import Actor, get_actor
 from app.models import Device
+from app.services.orchestrator import release_remote_and_nudge
 from app.services.remote_control import command
 
 router = APIRouter()
@@ -45,4 +46,8 @@ async def remote_control(device_id: str, body: RemoteCommand, response: Response
         raise HTTPException(503, "Agent non raggiungibile o da aggiornare") from None
     if not result.get("ok"):
         raise HTTPException(409, result.get("error", "Comando non eseguito"))
+    if body.action == "close":
+        nudged = await release_remote_and_nudge(session, device)
+        await session.commit()
+        return {**result, **nudged}
     return result

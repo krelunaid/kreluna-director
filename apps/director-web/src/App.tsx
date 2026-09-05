@@ -635,7 +635,25 @@ export default function App() {
 
   async function resumeAll() {
     await Promise.all(blocked.map((item) => api.resume(item.device_id).catch(() => undefined)));
-    setChat((items) => [...items, { role: "director", text: "Ho ripreso i PC. Ora possono lavorare." }]); await refresh();
+    setChat((items) => [...items, { role: "director", text: "Ho ripreso i PC. I lavori in attesa ripartono da capo, non dal punto esatto del portale." }]); await refresh();
+  }
+
+  async function resumeWork(agent: Agent) {
+    if (deviceAction) return;
+    setDeviceAction(agent.device_id);
+    try {
+      const result = await api.resume(agent.device_id);
+      const sent = result.dispatched_tasks || 0;
+      setChat((items) => [...items, {
+        role: "director",
+        text: sent
+          ? `Ho rimesso in moto ${sent === 1 ? "il lavoro in attesa" : `${sent} lavori in attesa`} su ${agent.display_name || agent.agent_id}. Riparte da capo: non continua il modulo del portale dal click esatto.`
+          : `${agent.display_name || agent.agent_id} è di nuovo pronto. Se c’è un lavoro in coda, riparte da capo quando il PC è collegato.`,
+      }]);
+      await refresh();
+    } catch (err) {
+      setChat((items) => [...items, { role: "director", text: err instanceof Error ? err.message : "Ripresa non riuscita", deny: true }]);
+    } finally { setDeviceAction(null); }
   }
 
   async function toggleAgent(agent: Agent) {
@@ -1175,7 +1193,12 @@ export default function App() {
         <div className="workspace-heading"><div><span>OSSERVAZIONE DEL LAVORO</span><h2 id="workspace-title">VEDI AGENT</h2><p>Stato del PC, attività e schermate salvate. Apri questa sezione solo quando serve.</p></div><button onClick={() => goTo("dashboard")}>Torna alla chat</button></div>
         <div className="agent-view-toolbar"><label>PC da vedere<select value={selected?.device_id || ""} onChange={event => setViewedAgentId(event.target.value)}><option value="" disabled>Seleziona un PC</option>{agents.map(item => <option key={item.device_id} value={item.device_id}>{item.display_name} · {agentOnline(item) ? "Collegato" : "Non collegato"}</option>)}</select></label><button onClick={() => void refresh()}>Aggiorna stato</button></div>
         {selected ? <><div className="workspace-safety"><strong>{selected.display_name}</strong> · {agentOnline(selected) ? "Collegato" : "Non collegato"} · {selected.killed ? "Fermato" : selected.paused ? "Sospeso" : selected.busy ? "Occupato" : "In attesa"}{selected.last_seen_at ? <span> · Ultimo contatto: {new Date(selected.last_seen_at).toLocaleString("it-IT")}</span> : null}</div>
-        <RemoteAgent key={selected.device_id} deviceId={selected.device_id} />
+        <div className="resume-work-panel">
+          <strong>Riprendi lavoro</strong>
+          <p>Se hai messo in pausa, fermato o aperto lo schermo remoto per sbaglio, questo pulsante rimanda i lavori in attesa a questo PC e li fa ripartire. <strong>Non</strong> continua un modulo Webdesk o Fattura SMART a metà: se la pagina è inconsistente, il lavoro ricomincia da capo. Non salva, emette o invia fatture da solo.</p>
+          <button disabled={deviceAction === selected.device_id || selected.presence === "waiting_install"} onClick={() => void resumeWork(selected)}>{deviceAction === selected.device_id ? "Ripresa…" : "Riprendi lavoro"}</button>
+        </div>
+        <RemoteAgent key={selected.device_id} deviceId={selected.device_id} resumeBusy={deviceAction === selected.device_id} onClosed={() => void refresh()} onResumeWork={() => void resumeWork(selected)} />
         {current ? <p role="status">In corso: {current.goal}</p> : <p>Nessun lavoro attivo segnalato per questo PC.</p>}
         <h3>Attività e schermate salvate</h3><p>Apri una miniatura per ingrandirla. Le immagini sono storiche, non in diretta.</p>{taskRows(related, "Questo PC non ha ancora lavori o schermate disponibili.")}</> : <div className="workspace-empty"><strong>PC non disponibile</strong><span>Seleziona un altro PC oppure configura un Agent in PC &amp; Feature.</span></div>}
       </section>;
@@ -1185,7 +1208,7 @@ export default function App() {
       <div className="workspace-stats"><WorkspaceStat value={agents.filter(agentOnline).length} label="PC collegati" tone="green" /><WorkspaceStat value={agents.filter((item) => item.presence === "waiting_install").length} label="Da installare" tone="gold" /><WorkspaceStat value={blocked.length} label="Sospesi" tone="red" /></div>
       <div className="agent-workspace-grid">{agents.map((agent) => {
         const work = currentWork(agent, tasks); const waiting = agent.presence === "waiting_install"; const online = agentOnline(agent); const enabled = !(agent.killed || agent.paused); const offlineEnabled = !waiting && !online && enabled;
-        return <article className={`agent-workspace-card ${online && enabled ? "online" : ""}`} key={agent.device_id}><div><span className={`status-dot ${waiting ? "waiting" : online && enabled ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong><em>{agent.platform || "Mac/PC"}</em></div><h3>{agent.job}</h3><p>{agentState(agent, work)}</p><small>{agent.hostname || "Computer non ancora associato"}</small><button disabled={deviceAction === agent.device_id || offlineEnabled} onClick={() => void toggleAgent(agent)}>{waiting ? "Installa Agent" : offlineEnabled ? "Apri Kreluna Agent sul PC" : enabled ? "Disattiva" : "Attiva"}</button></article>;
+        return <article className={`agent-workspace-card ${online && enabled ? "online" : ""}`} key={agent.device_id}><div><span className={`status-dot ${waiting ? "waiting" : online && enabled ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong><em>{agent.platform || "Mac/PC"}</em></div><h3>{agent.job}</h3><p>{agentState(agent, work)}</p><small>{agent.hostname || "Computer non ancora associato"}</small><button disabled={deviceAction === agent.device_id || offlineEnabled} onClick={() => void toggleAgent(agent)}>{waiting ? "Installa Agent" : offlineEnabled ? "Apri Kreluna Agent sul PC" : enabled ? "Disattiva" : "Riprendi lavoro"}</button></article>;
       })}</div>
     </section>;
 
@@ -1262,7 +1285,7 @@ export default function App() {
           </button>
         </nav>
         <div className="sidebar-bottom"><div className="assistant-card"><div className={`orb sidebar-orb ${busy ? "think" : orb}`} aria-hidden="true"><span className="orb-core" /></div><div><strong>Kreluna</strong><span>{busy ? "Sta pensando" : "Ti ascolta"}</span></div></div>
-          {blocked.length ? <button className="resume-all" onClick={() => void resumeAll()}>Riprendi {blocked.length} agent</button> : null}
+          {blocked.length ? <button className="resume-all" onClick={() => void resumeAll()}>Riprendi lavoro su {blocked.length} PC</button> : null}
           <button className="new-request" onClick={newRequest}>Nuova richiesta <b>＋</b></button>
           <button className="side-logout" onClick={() => { setToken(null); setReady(false); }}>↪ <span>Chiudi sessione</span></button>
         </div>
@@ -1282,8 +1305,8 @@ export default function App() {
               ? "Genera il codice per installare l’Agent"
               : offlineEnabled
                 ? "Agent spento: apri Kreluna Agent su questo computer"
-                : enabled ? "Disattiva Agent" : "Attiva Agent";
-            const controlAction = waiting ? "Installa" : enabled ? "Disattiva" : "Attiva";
+                : enabled ? "Disattiva Agent" : "Riprendi lavoro";
+            const controlAction = waiting ? "Installa" : enabled ? "Disattiva" : "Riprendi lavoro";
             return <article className={`feature-card ${work && online ? "working" : ""} ${active ? "enabled" : "disabled"}`} key={agent.device_id}>
               <div className="feature-name"><span className={`status-dot ${waiting ? "waiting" : active ? "online" : "off"}`} /><strong>{agent.display_name || agent.agent_id}</strong>
                 <button className={`mini-switch ${active ? "on" : "off"}`} disabled={deviceAction === agent.device_id || offlineEnabled} onClick={() => void toggleAgent(agent)} title={controlTitle} aria-label={`${controlAction} ${agent.display_name || agent.agent_id}`} aria-pressed={active}><i /></button>

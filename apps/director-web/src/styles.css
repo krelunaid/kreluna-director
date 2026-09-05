@@ -629,6 +629,9 @@ button.request-row:hover { border-color: rgba(114, 91, 255, .42); background: li
 .agent-view-toolbar select { width:100%; padding:12px; color:#f4f5fa; background:#111b32; border:1px solid #566184; border-radius:10px; }
 .agent-view-notice { margin:20px 0; padding:20px; border:1px solid #8b743c; border-radius:12px; background:#26241d; color:#ffe5a0; }
 .agent-view-notice p { color:#f0eadc; line-height:1.6; margin-bottom:0; }
+.resume-work-panel { margin:16px 0; padding:18px 20px; border:1px solid rgba(85, 231, 123, .28); border-radius:12px; background:rgba(20, 48, 32, .55); color:#d8f5e2; }
+.resume-work-panel p { color:#cfead8; line-height:1.55; margin:8px 0 14px; }
+.resume-work-panel button { padding:10px 16px; border:0; border-radius:10px; color:#082014; background:linear-gradient(180deg, #7cf0a0, #3ecf6e); font-weight:700; }
 .agent-view-page .workspace-row { flex-wrap:wrap; }
 .agent-view-page .workspace-row-copy { min-width:0; overflow-wrap:anywhere; }
 .agent-view-page .request-error { white-space:normal; overflow:visible; }

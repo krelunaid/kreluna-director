@@ -38,7 +38,7 @@ from app.services.enrollment import (
     issue_enrollment_token,
     valid_enrollment_token,
 )
-from app.services.orchestrator import kill_all
+from app.services.orchestrator import kill_all, resume_device_work
 from app.services.registry import hub, mark_offline_stale, requeue_device_tasks
 from app.services.remote_access import remote_tunnel, validate_public_url, validate_tunnel_token
 from app.services.updates import latest_update_status
@@ -720,13 +720,9 @@ async def resume_agent(
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=404, detail="Device non trovato")
-    device.killed = False
-    device.paused = False
-    if device.id in hub.agents:
-        device.presence = "online"
-        await hub.send_agent(device.id, {"type": "resume"})
+    result = await resume_device_work(session, device, actor.user_id)
     await session.commit()
-    return {"ok": True}
+    return result
 
 
 @router.post("/agents/{device_id}/pause")

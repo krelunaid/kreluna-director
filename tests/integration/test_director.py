@@ -15,6 +15,7 @@ from app.models import (
     AIProviderCredential,
     AuditEvent,
     ClientCredential,
+    Device,
     EnrollmentCode,
     Evidence,
     InvoiceDraft,
@@ -25,7 +26,7 @@ from app.models import (
 )
 from app.routers.agent_io import purge_expired_evidence
 from app.security import read_session
-from app.seed import DEMO_TENANT_ID, OTHER_TENANT_ID, seed_if_empty
+from app.seed import DEMO_TENANT_ID, DEMO_USER_ID, OTHER_TENANT_ID, seed_if_empty
 from app.services.vault import decrypt_credential
 from httpx import ASGITransport, AsyncClient
 from kreluna_shared.crypto import (
@@ -172,6 +173,28 @@ async def issue_agent_code(
     assert linked["enrollment_code"] == payload["enrollment_code"]
     assert linked["director_url"] == payload["director_url"]
     return payload["enrollment_code"]
+
+
+async def isolate_connected_device(device_id: str, keep_task_id: str | None = None) -> None:
+    """I test condividono il DB: gli altri PC non devono rubare il lavoro in coda."""
+
+    async with SessionLocal() as session:
+        others = (await session.execute(select(Device).where(Device.id != device_id))).scalars().all()
+        for other in others:
+            if other.presence in {"online", "busy"}:
+                other.presence = "offline"
+        leftovers = (
+            await session.execute(
+                select(Task).where(
+                    Task.status == "queued",
+                    Task.assigned_device_id.is_(None),
+                )
+            )
+        ).scalars().all()
+        for leftover in leftovers:
+            if leftover.id != keep_task_id:
+                leftover.status = "cancelled"
+        await session.commit()
 
 
 async def enroll_test_agent(
@@ -1291,6 +1314,172 @@ async def test_a_stopped_pc_sends_the_work_back_to_the_queue(client: AsyncClient
 
     overview = await client.get("/overview", headers=auth(token))
     assert overview.json()["errors"] == 0
+
+
+@pytest.mark.asyncio
+async def test_pause_requeues_and_resume_dispatches_to_the_connected_pc(client: AsyncClient):
+    """Dopo pausa il lavoro resta in coda; Riprendi lo rimanda subito al PC collegato."""
+
+    from app.services.registry import hub
+
+    class RecordingSocket:
+        def __init__(self) -> None:
+            self.messages: list[dict] = []
+
+        async def send_json(self, payload: dict) -> None:
+            self.messages.append(payload)
+
+    token = await login(client)
+    _private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-riprendi-{uuid4()}",
+        capabilities=["invoice_prepare_demo"],
+    )
+    async with SessionLocal() as session:
+        device = (await session.execute(select(Device).where(Device.id == device_id))).scalar_one()
+        device.presence = "online"
+        device.last_seen_at = utcnow()
+        task = Task(
+            tenant_id=DEMO_TENANT_ID,
+            requested_by=DEMO_USER_ID,
+            goal="Preparare fattura SMART",
+            capability="invoice_prepare_demo",
+            args_json="{}",
+            risk="medium",
+            status="assigned",
+            idempotency_key=f"http-riprendi-{uuid4()}",
+            assigned_device_id=device_id,
+        )
+        session.add(task)
+        device.busy = True
+        device.active_task_id = task.id
+        await session.commit()
+        task_id = task.id
+    await isolate_connected_device(device_id, task_id)
+
+    socket = RecordingSocket()
+    await hub.register_agent(device_id, DEMO_TENANT_ID, socket)
+    try:
+        paused = await client.post(f"/agents/{device_id}/pause", headers=auth(token))
+        assert paused.status_code == 200
+        assert paused.json()["requeued_tasks"] == 1
+        async with SessionLocal() as session:
+            task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
+            assert task.status == "queued"
+            assert task.assigned_device_id is None
+
+        resumed = await client.post(f"/agents/{device_id}/resume", headers=auth(token))
+        assert resumed.status_code == 200
+        body = resumed.json()
+        assert body["ok"] is True
+        assert body["dispatched_tasks"] >= 1
+        async with SessionLocal() as session:
+            task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
+            assert task.status == "assigned"
+            assert task.assigned_device_id == device_id
+        assert any(item.get("type") == "resume" for item in socket.messages)
+        assert any(item.get("type") == "task" and item.get("task_id") == task_id for item in socket.messages)
+    finally:
+        hub.drop_agent(device_id, socket)
+
+
+@pytest.mark.asyncio
+async def test_remote_block_keeps_the_job_queued_for_resume(client: AsyncClient, planned_by_test_model):
+    token = await login(client)
+    private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-remote-block-{uuid4()}",
+        capabilities=["visure_prepare"],
+    )
+    planned = await client.post(
+        "/chat",
+        headers=auth(token),
+        json={"message": "Prepara la visura per Neri Paolo"},
+    )
+    task_id = planned.json()["tasks"][0]["id"]
+    async with SessionLocal() as session:
+        task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
+        task.assigned_device_id = device_id
+        task.status = "assigned"
+        await session.commit()
+
+    refused = await client.post(
+        "/agent/ingest",
+        json=signed_ingest(
+            private,
+            device_id=device_id,
+            task_id=task_id,
+            ok=False,
+            error="AGENT_REMOTE",
+        ),
+    )
+    assert refused.status_code == 200
+    assert refused.json()["status"] == "queued"
+    async with SessionLocal() as session:
+        task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
+        assert task.status == "queued"
+        assert task.assigned_device_id is None
+        assert task.error is None
+
+
+@pytest.mark.asyncio
+async def test_closing_remote_redispatches_queued_work(client: AsyncClient, monkeypatch):
+    from app.services.registry import hub
+
+    class RecordingSocket:
+        def __init__(self) -> None:
+            self.messages: list[dict] = []
+
+        async def send_json(self, payload: dict) -> None:
+            self.messages.append(payload)
+
+    async def fake_command(device_id: str, body: dict) -> dict:
+        return {"ok": True}
+
+    monkeypatch.setattr("app.routers.remote_control.command", fake_command)
+    token = await login(client)
+    _private, device_id, _code = await enroll_test_agent(
+        client,
+        role=f"pc-chiudi-remoto-{uuid4()}",
+        capabilities=["invoice_prepare_demo"],
+    )
+    async with SessionLocal() as session:
+        device = (await session.execute(select(Device).where(Device.id == device_id))).scalar_one()
+        device.presence = "online"
+        device.last_seen_at = utcnow()
+        device.busy = False
+        task = Task(
+            tenant_id=DEMO_TENANT_ID,
+            requested_by=DEMO_USER_ID,
+            goal="Preparare fattura SMART",
+            capability="invoice_prepare_demo",
+            args_json="{}",
+            risk="medium",
+            status="queued",
+            idempotency_key=f"http-chiudi-{uuid4()}",
+        )
+        session.add(task)
+        await session.commit()
+        task_id = task.id
+    await isolate_connected_device(device_id, task_id)
+
+    socket = RecordingSocket()
+    await hub.register_agent(device_id, DEMO_TENANT_ID, socket)
+    try:
+        closed = await client.post(
+            f"/agents/{device_id}/remote-control",
+            headers=auth(token),
+            json={"action": "close"},
+        )
+        assert closed.status_code == 200
+        assert closed.json()["dispatched_tasks"] >= 1
+        async with SessionLocal() as session:
+            task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
+            assert task.status == "assigned"
+            assert task.assigned_device_id == device_id
+        assert any(item.get("type") == "task" and item.get("task_id") == task_id for item in socket.messages)
+    finally:
+        hub.drop_agent(device_id, socket)
 
 
 @pytest.mark.asyncio
