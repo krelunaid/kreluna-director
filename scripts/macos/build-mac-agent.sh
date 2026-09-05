@@ -24,6 +24,7 @@ cp "$ROOT/packaging/macos-agent/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 xcrun swiftc \
   -framework Cocoa \
+  -framework ScreenCaptureKit \
   "$ROOT/packaging/macos-agent/KrelunaLauncher.swift" \
   -o "$APP/Contents/MacOS/Kreluna"
 

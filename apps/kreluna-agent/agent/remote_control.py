@@ -7,6 +7,8 @@ import asyncio
 import base64
 import ctypes
 import io
+import json
+import os
 import secrets
 import subprocess
 import sys
@@ -57,6 +59,16 @@ def require_screen_permission(q):
 
 
 def capture():
+    native = os.environ.get('KRELUNA_NATIVE_CAPTURE')
+    if native:
+        result = subprocess.run([native, '--capture-frame'], check=True,
+                                capture_output=True, timeout=10)
+        frame = json.loads(result.stdout)
+        if frame.get('error'):
+            raise RuntimeError(frame['error'])
+        if not frame.get('image') or frame.get('width', 0) <= 0 or frame.get('height', 0) <= 0:
+            raise RuntimeError('Risposta di cattura nativa non valida')
+        return frame['image'], (frame['width'], frame['height'])
     q = quartz()
     require_screen_permission(q)
     q.CGMainDisplayID.restype = ctypes.c_uint32

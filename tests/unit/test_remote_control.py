@@ -9,6 +9,27 @@ from agent.safety import SafetyState
 from app.services import remote_control as relay
 
 
+def test_native_capture_uses_app_and_logical_dimensions(monkeypatch):
+    from agent import remote_control as module
+    monkeypatch.setenv('KRELUNA_NATIVE_CAPTURE', '/Applications/Kreluna Agent.app/Contents/MacOS/Kreluna')
+    run = Mock(return_value=Mock(stdout=b'{"image":"jpeg","width":1512,"height":982}'))
+    monkeypatch.setattr(module.subprocess, 'run', run)
+    assert module.capture() == ('jpeg', (1512, 982))
+    assert run.call_args.args[0][-1] == '--capture-frame'
+    assert run.call_args.kwargs['timeout'] == 10
+
+
+def test_native_permission_denial_does_not_fallback(monkeypatch):
+    from agent import remote_control as module
+    monkeypatch.setenv('KRELUNA_NATIVE_CAPTURE', '/native')
+    monkeypatch.setattr(module.subprocess, 'run', Mock(return_value=Mock(stdout=b'{"error":"Permission required"}')))
+    fallback = Mock()
+    monkeypatch.setattr(module, 'quartz', fallback)
+    with pytest.raises(RuntimeError, match='Permission required'):
+        module.capture()
+    fallback.assert_not_called()
+
+
 def test_permission_requested_once_and_rechecked(monkeypatch):
     from agent import remote_control as module
     monkeypatch.setattr(module, '_screen_permission_requested', False)

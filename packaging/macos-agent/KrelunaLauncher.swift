@@ -1,4 +1,31 @@
 import Cocoa
+import ScreenCaptureKit
+
+// Invoked only by the authenticated remote-session worker. No listening port,
+// files, or frame logging: the native app returns one frame through stdout.
+@available(macOS 14.0, *)
+func captureNativeFrame() async throws -> [String: Any] {
+    guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+        return ["error": "Autorizza Kreluna Agent in Registrazione schermo, poi riavvia l’Agent."]
+    }
+    let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
+        return ["error": "Schermo principale non disponibile"]
+    }
+    let bounds = CGDisplayBounds(display.displayID)
+    let scale = min(1.0, min(1440.0 / bounds.width, 1000.0 / bounds.height))
+    let configuration = SCStreamConfiguration()
+    configuration.width = max(1, Int(bounds.width * scale))
+    configuration.height = max(1, Int(bounds.height * scale))
+    configuration.showsCursor = true
+    let filter = SCContentFilter(display: display, excludingWindows: [])
+    let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+    let bitmap = NSBitmapImageRep(cgImage: cgImage)
+    guard let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.65]) else {
+        return ["error": "Immagine non disponibile"]
+    }
+    return ["image": jpeg.base64EncodedString(), "width": bounds.width, "height": bounds.height]
+}
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var agentProcess: Process?
@@ -53,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["KRELUNA_AGENT_DATA_DIR"] = dataRoot.appendingPathComponent("data").path
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         environment["KRELUNA_TRUST_SAVED_CONFIG"] = "1"
+        environment["KRELUNA_NATIVE_CAPTURE"] = Bundle.main.executableURL?.path
         if guideOnly {
             environment["KRELUNA_GUIDE_ONLY"] = "1"
         }
@@ -110,6 +138,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = message
         alert.runModal()
     }
+}
+
+if CommandLine.arguments.contains("--capture-frame") {
+    Task {
+        let result: [String: Any]
+        if #available(macOS 14.0, *) {
+            do { result = try await captureNativeFrame() }
+            catch { result = ["error": "Cattura nativa non disponibile: verifica il permesso Registrazione schermo di Kreluna Agent."] }
+        } else {
+            result = ["error": "La visualizzazione remota richiede macOS 14 o successivo"]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: result) {
+            FileHandle.standardOutput.write(data)
+        }
+        exit(0)
+    }
+    RunLoop.main.run()
+    exit(1)
 }
 
 let app = NSApplication.shared
