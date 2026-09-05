@@ -58,6 +58,7 @@ target-version = "py312"
 # un compito, il Director che parla a una socket morta, il lanciatore sul
 # desktop. Qui si cattura tutto di proposito e si riporta, non si esplode.
 "apps/kreluna-agent/agent/main.py" = ["BLE001"]
+"apps/kreluna-agent/agent/remote_control.py" = ["BLE001"]
 "apps/kreluna-agent/agent/capabilities/notepad.py" = ["BLE001"]
 "apps/kreluna-agent/agent/tools/automation.py" = ["BLE001"]
 "apps/director-api/app/services/registry.py" = ["BLE001", "S112"]

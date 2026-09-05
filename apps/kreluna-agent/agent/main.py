@@ -25,8 +25,8 @@ from kreluna_shared.crypto import (
 
 from agent.capabilities import CAPABILITY_ALLOWLIST
 from agent.identity import AgentIdentity
-from agent.safety import SafetyState
 from agent.remote_control import RemoteControl
+from agent.safety import SafetyState
 
 ROOT = Path(__file__).resolve().parents[3]
 

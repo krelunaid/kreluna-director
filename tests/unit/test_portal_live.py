@@ -922,7 +922,7 @@ def test_webdesk_login_button_moves_then_uses_exact_dom_button():
 
 def test_login_activation_does_not_depend_on_pointer(monkeypatch):
     for center in (None, {"x": 600, "y": 500, "screen_width": 1920, "screen_height": 1080}):
-        monkeypatch.setattr(mac_browser, "field_center", lambda *_args: center)
+        monkeypatch.setattr(mac_browser, "field_center", lambda *_args, current=center: current)
 
         class LoginMac(FakeMac):
             def osascript(self, script):

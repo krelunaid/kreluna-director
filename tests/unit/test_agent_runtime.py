@@ -3,8 +3,8 @@ import time
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
 import httpx
+import pytest
 from agent.main import AgentApp
 from agent.safety import SafetyState
 from kreluna_shared.crypto import generate_device_keypair

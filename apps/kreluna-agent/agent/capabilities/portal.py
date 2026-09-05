@@ -923,12 +923,13 @@ def open_portal(
                     capture=False,
                 )
 
-            if (urlparse(where).hostname or "").lower() != "sme.genya.it":
-                if not _open_webdesk_smart(run, browser, settings, sleep, check):
-                    return stop(
-                        "fattura-smart-non-aperta",
-                        "Accesso riuscito, ma Fattura SMART non si è aperta dal pulsante della Home. Non compilo nulla.",
-                    )
+            if (urlparse(where).hostname or "").lower() != "sme.genya.it" and not _open_webdesk_smart(
+                run, browser, settings, sleep, check
+            ):
+                return stop(
+                    "fattura-smart-non-aperta",
+                    "Accesso riuscito, ma Fattura SMART non si è aperta dal pulsante della Home. Non compilo nulla.",
+                )
 
             if query:
                 return _start_webdesk_invoice(

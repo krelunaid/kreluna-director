@@ -19,10 +19,10 @@ from app.routers.billing import router as billing_router
 from app.routers.core import router as core_router
 from app.routers.gmail import router as gmail_router
 from app.routers.library import router as library_router
+from app.routers.remote_control import router as remote_control_router
 from app.routers.vault import router as vault_router
 from app.routers.work import router as work_router
 from app.routers.ws import router as ws_router
-from app.routers.remote_control import router as remote_control_router
 from app.seed import seed_if_empty
 from app.services.housekeeping import (
     close_expired_approvals,
