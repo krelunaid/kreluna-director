@@ -24,7 +24,8 @@ La sessione riserva il PC e impedisce l’esecuzione delle automazioni.
 - Vietato acquisire il controllo se ci sono task o thread di automazione ancora attivi.
 - Input solo dopo Intervieni, su frame di massimo 5 secondi, monouso per ogni comando.
 - Nessuna immagine o testo digitato salvati nel database, nell’audit o nelle prove dei task.
-  La cattura macOS usa un file temporaneo eliminato dopo la conversione in JPEG.
+  La cattura nativa (macOS 14+) usa ScreenCaptureKit e restituisce un JPEG in memoria.
+  Il percorso Python di sviluppo usa un file temporaneo eliminato dopo la conversione.
 - La condivisione mostra anche informazioni sensibili eventualmente presenti sullo schermo:
   avvio esplicito con avvertenza nell’interfaccia. Su rete usare il collegamento TLS degli Agent.
 
@@ -34,3 +35,13 @@ La sessione riserva il PC e impedisce l’esecuzione delle automazioni.
 scadenza, proprietario, frame monouso, rilascio dopo errore e risposta da socket corretto.
 La pagina locale `tests/fixtures/remote-control.html` serve a verificare mouse e tastiera
 senza usare un gestionale o inviare documenti.
+
+## Firma dell’Agent macOS
+
+Per le build installate impostare `KRELUNA_CODESIGN_IDENTITY` con un’identità Apple
+valida presente nel Portachiavi e mantenere la stessa identità negli aggiornamenti.
+Senza la variabile il build script produce una firma ad-hoc per sviluppo.
+La firma Apple non concede i permessi: il passaggio da ad-hoc a firma Apple può
+richiedere un nuovo consenso esplicito di Registrazione schermo. Non modificare TCC.
+La prova dopo il cambio firma del 5 settembre restituisce ancora un rifiuto del
+permesso; immagine e input remoti non sono ancora verificati end-to-end.

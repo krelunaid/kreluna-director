@@ -52,7 +52,9 @@ ln -sfn /Applications "$BUILD_OUT/Applicazioni"
 
 xattr -cr "$APP" >/dev/null 2>&1 || true
 echo "Firmo Kreluna Agent…"
-/usr/bin/codesign --force --deep --sign - --timestamp=none "$APP"
+# Use the same Apple identity across installed updates to keep the designated
+# requirement stable. Ad-hoc builds are only for development/testing.
+/usr/bin/codesign --force --deep --sign "${KRELUNA_CODESIGN_IDENTITY:--}" --timestamp=none "$APP"
 /usr/bin/codesign --verify --deep "$APP"
 
 (
